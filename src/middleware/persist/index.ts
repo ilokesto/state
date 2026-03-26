@@ -16,12 +16,18 @@ const applyPersist = <T, P extends Array<MigrationFn>>(
     : (store.getState() as T);
 
   baseSetState(initialValue);
+  let prevPersistedState = initialValue;
 
   const setState = (nextState: NextState<T>, actionName?: string) => {
     baseSetState(nextState, actionName);
 
     if (optionObj.storageType) {
-      setStorage({ ...optionObj, value: store.getState() });
+      const currentState = store.getState() as T;
+
+      if (!Object.is(prevPersistedState, currentState)) {
+        setStorage({ ...optionObj, value: currentState });
+        prevPersistedState = currentState;
+      }
     }
   };
 
