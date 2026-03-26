@@ -1,0 +1,55 @@
+{
+  "name": "@ilokesto/state",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "rm -rf dist && tsc"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ilokesto/state"
+  },
+  "homepage": "https://ilokesto.ayden94.com/state",
+  "sideEffects": false,
+  "types": "dist/index.d.ts",
+  "module": "dist/index.js",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./middleware": {
+      "import": "./dist/middleware.js",
+      "types": "./dist/middleware.d.ts"
+    },
+    "./utils": {
+      "import": "./dist/utils.js",
+      "types": "./dist/utils.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "keywords": [],
+  "publishConfig": {
+    "access": "public"
+  },
+  "author": "Jeong Jinho <wpfekdml@me.com>",
+  "license": "MIT",
+  "dependencies": {
+    "@ilokesto/store": "^1.0.1"
+  },
+  "peerDependencies": {
+    "react": "18.2.0",
+    "immer": "^9.0.12"
+  },
+  "peerDependenciesMeta": {
+    "immer": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.1",
+    "@types/react": "^19.1.6",
+    "typescript": "^6.0.2"
+  }
+}
