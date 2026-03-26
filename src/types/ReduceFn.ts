@@ -1,0 +1,1 @@
+export type ReduceFn<T, Action extends object> = (state: T, action: Action) => T;  
