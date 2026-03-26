@@ -8,7 +8,7 @@
     "type": "git",
     "url": "git+https://github.com/ilokesto/state"
   },
-  "homepage": "https://ilokesto.ayden94.com/state",
+  "homepage": "https://ilokesto.ayden94.com/en/state",
   "sideEffects": false,
   "types": "dist/index.d.ts",
   "module": "dist/index.js",
@@ -29,7 +29,13 @@
   "files": [
     "dist"
   ],
-  "keywords": [],
+  "keywords": [
+    "state management",
+    "react",
+    "store",
+    "hooks",
+    "state"
+  ],
   "publishConfig": {
     "access": "public"
   },
