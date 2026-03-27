@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@ilokesto/store':
-        specifier: ^1.0.1
-        version: 1.0.1
+        specifier: 1.1.1
+        version: 1.1.1
       immer:
         specifier: ^9.0.12
         version: 9.0.21
@@ -30,8 +30,8 @@ importers:
 
 packages:
 
-  '@ilokesto/store@1.0.1':
-    resolution: {integrity: sha512-uC88/Dr5Ck3hL5eKjVFrDbGEruuoRmSo6ggqcYtjuo9BqMYCM3VnQDx71H0T1b7nSKo6htF2vDEolL0wkW5xUw==}
+  '@ilokesto/store@1.1.1':
+    resolution: {integrity: sha512-fcotz5vU2TLzAywMsNRu7P6hmdVy6aBdhfrvx6NBjWKPIYwaLhaLANj7lLaxJEzujTB1zMPoDAp14t8E0frHfg==}
 
   '@types/node@22.19.15':
     resolution: {integrity: sha512-F0R/h2+dsy5wJAUe3tAU6oqa2qbWY5TpNfL/RGmo1y38hiyO1w3x2jPtt76wmuaJI4DQnOBu21cNXQ2STIUUWg==}
@@ -66,7 +66,7 @@ packages:
 
 snapshots:
 
-  '@ilokesto/store@1.0.1': {}
+  '@ilokesto/store@1.1.1': {}
 
   '@types/node@22.19.15':
     dependencies:

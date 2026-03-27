@@ -1,6 +1,6 @@
 import { Store } from '@ilokesto/store';
-import { getStore } from '../lib/getStoreFromProps';
-import type { ActionStore, NextState, StoreInput } from './shared';
+import { SetStateAction } from 'react';
+import { getStore } from '../lib/getStore';
 
 type StandardSchemaIssue = {
   readonly message: string;
@@ -33,20 +33,21 @@ const isPromiseLike = <T>(value: T | Promise<T>): value is Promise<T> => {
   return typeof value === 'object' && value !== null && 'then' in value;
 };
 
-const applyValidate = <T>(initialState: StoreInput<T>, schema: StandardSchemaV1<T, T>): Store<T> => {
-  const store = getStore(initialState) as ActionStore<T>;
-  const baseSetState = store.setState.bind(store);
+const applyValidate = <T>(initialState: T | Store<T>, schema: StandardSchemaV1<T, T>): Store<T> => {
+  const store = getStore(initialState);
 
-  const setState = (nextState: NextState<T>, actionName?: string) => {
-    const newState =
+  store.pushMiddleware((nextState: SetStateAction<T>, next) => {
+    const resolvedState =
       typeof nextState === 'function'
-        ? (nextState as (prev: Readonly<T>) => T)(store.getState())
+        ? (nextState as (prev: Readonly<T>) => T)(store.getState() as T)
         : nextState;
 
-    const result = schema['~standard'].validate(newState);
+    const result = schema['~standard'].validate(resolvedState);
 
     if (isPromiseLike(result)) {
-      console.error('[Validation Error] Async Standard Schema is not supported in validate middleware.');
+      console.error(
+        '[Validation Error] Async Standard Schema is not supported in validate middleware.',
+      );
       return;
     }
 
@@ -55,22 +56,25 @@ const applyValidate = <T>(initialState: StoreInput<T>, schema: StandardSchemaV1<
       return;
     }
 
-    baseSetState(result.value, actionName);
-  };
-
-  store.setState = setState;
+    next(result.value);
+  });
 
   return store;
 };
 
-export function validate<T>(initialState: StoreInput<T>, schema: StandardSchemaV1<T, T>): Store<T>;
-export function validate<T>(schema: StandardSchemaV1<T, T>): (initialState: StoreInput<T>) => Store<T>;
-export function validate<T>(first: StoreInput<T> | StandardSchemaV1<T, T>, second?: StandardSchemaV1<T, T>) {
+export function validate<T>(initialState: T | Store<T>, schema: StandardSchemaV1<T, T>): Store<T>;
+export function validate<T>(
+  schema: StandardSchemaV1<T, T>,
+): (initialState: T | Store<T>) => Store<T>;
+export function validate<T>(
+  first: T | Store<T> | StandardSchemaV1<T, T>,
+  second?: StandardSchemaV1<T, T>,
+) {
   if (arguments.length === 1) {
     const schema = first as StandardSchemaV1<T, T>;
 
-    return (initialState: StoreInput<T>) => applyValidate(initialState, schema);
+    return (initialState: T | Store<T>) => applyValidate(initialState, schema);
   }
 
-  return applyValidate(first as StoreInput<T>, second as StandardSchemaV1<T, T>);
+  return applyValidate(first as T | Store<T>, second as StandardSchemaV1<T, T>);
 }

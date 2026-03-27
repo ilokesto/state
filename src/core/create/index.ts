@@ -1,20 +1,18 @@
 import { Store } from '@ilokesto/store';
-import { getStore } from '../../lib/getStoreFromProps';
+import { getStore } from '../../lib/getStore';
 import type { ReduceFn } from '../../types/ReduceFn';
 import type { UseReducer, UseState } from '../../types/UseStore';
 import { createUseState } from '../createUseState';
 import { getInitialState } from './getInitialState';
 
-type InitialState<T> = T | Store<T>;
-
 // useReducer
 export function create<T, Action extends { type: string; [x: PropertyKey]: any }>(
   reduceFn: ReduceFn<T, Action>,
-  initialState: InitialState<T>,
+  initialState: T | Store<T>,
 ): UseReducer<T, Action>;
 
 // useState
-export function create<T>(initialState: InitialState<T>): UseState<T>;
+export function create<T>(initialState: T | Store<T>): UseState<T>;
 
 // implementation
 export function create<T, Action extends { type: string; [x: PropertyKey]: any }>(

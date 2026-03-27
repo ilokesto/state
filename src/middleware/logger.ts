@@ -1,6 +1,6 @@
 import { Store } from '@ilokesto/store';
-import { getStore } from '../lib/getStoreFromProps';
-import type { ActionStore, NextState, StoreInput } from './shared';
+import { SetStateAction } from 'react';
+import { getStore } from '../lib/getStore';
 
 type LoggerOptions = {
   collapsed?: boolean;
@@ -19,22 +19,22 @@ const getValueForKey = (value: unknown, key: string) => {
 };
 
 const applyLogger = <T>(
-  initialState: StoreInput<T>,
+  initialState: T | Store<T>,
   options: LoggerOptions = DEFAULT_LOGGER_OPTIONS,
 ) => {
-  const store = getStore(initialState) as ActionStore<T>;
-  const baseSetState = store.setState.bind(store);
+  const store = getStore(initialState);
   const isProduction = typeof process !== 'undefined' && process.env.NODE_ENV === 'production';
 
-  const setState = (nextState: NextState<T>, actionName: string = 'setStateAction') => {
+  store.pushMiddleware((nextState: SetStateAction<T>, next) => {
     if (isProduction) {
-      baseSetState(nextState, actionName);
+      next(nextState);
       return;
     }
 
     const prevState = store.getState();
     const time = new Date().toLocaleTimeString();
-    const logTitle = `State update: ${actionName}`;
+    // @ts-ignore
+    const logTitle = `State update: ${store.actionName ?? 'anonymous action'} @ ${time}`;
 
     if (options.collapsed) {
       console.groupCollapsed(logTitle);
@@ -48,7 +48,7 @@ const applyLogger = <T>(
 
     console.log('Previous state:', prevState);
 
-    baseSetState(nextState, actionName);
+    next(nextState);
     const newState = store.getState();
 
     console.log('Next state:', newState);
@@ -76,26 +76,21 @@ const applyLogger = <T>(
     }
 
     console.groupEnd();
-  };
-
-  store.setState = setState;
+  });
 
   return store;
 };
 
-export function logger<T>(
-  initialState: StoreInput<T>,
-  options: LoggerOptions | undefined,
-): Store<T>;
-export function logger(options?: LoggerOptions): <T>(initialState: StoreInput<T>) => Store<T>;
-export function logger<T>(first?: StoreInput<T> | LoggerOptions, second?: LoggerOptions) {
+export function logger<T>(initialState: T | Store<T>, options: LoggerOptions | undefined): Store<T>;
+export function logger(options?: LoggerOptions): <T>(initialState: T | Store<T>) => Store<T>;
+export function logger<T>(first?: T | Store<T> | LoggerOptions, second?: LoggerOptions) {
   if (arguments.length <= 1) {
     const options = first as LoggerOptions | undefined;
 
-    return <State>(initialState: StoreInput<State>) => applyLogger(initialState, options);
+    return (initialState: T | Store<T>) => applyLogger(initialState, options);
   }
 
-  return applyLogger(first as StoreInput<T>, second);
+  return applyLogger(first as T | Store<T>, second);
 }
 
 function getObjectDiff(prev: unknown, next: unknown) {

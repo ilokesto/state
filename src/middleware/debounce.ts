@@ -1,16 +1,19 @@
 import { Store } from '@ilokesto/store';
-import { getStore } from '../lib/getStoreFromProps';
-import type { ActionStore, NextState, StoreInput } from './shared';
+import { SetStateAction } from 'react';
+import { getStore } from '../lib/getStore';
 
-const applyDebounce = <T>(initialState: StoreInput<T>, wait = 300): Store<T> => {
-  const store = getStore(initialState) as ActionStore<T>;
-  const baseSetState = store.setState.bind(store);
+type Dispatch<A> = (value: A) => void;
+
+const applyDebounce = <T>(initialState: T | Store<T>, wait = 300): Store<T> => {
+  const store = getStore(initialState);
 
   let timeout: NodeJS.Timeout | null = null;
-  let updates: Array<NextState<T>> = [];
+  let updates: Array<SetStateAction<T>> = [];
+  let savedNext: Dispatch<SetStateAction<T>> | null = null;
 
-  const setState = (nextState: NextState<T>, actionName?: string) => {
+  store.pushMiddleware((nextState: SetStateAction<T>, next) => {
     updates.push(nextState);
+    savedNext = next;
 
     if (timeout) {
       return;
@@ -27,25 +30,28 @@ const applyDebounce = <T>(initialState: StoreInput<T>, wait = 300): Store<T> => 
         }
       });
 
-      baseSetState(currentState, actionName);
+      const pendingNext = savedNext;
       updates = [];
       timeout = null;
-    }, wait);
-  };
+      savedNext = null;
 
-  store.setState = setState;
+      if (pendingNext) {
+        pendingNext(currentState);
+      }
+    }, wait);
+  });
 
   return store;
 };
 
-export function debounce<T>(initialState: StoreInput<T>, wait: number | undefined): Store<T>;
-export function debounce(wait?: number): <T>(initialState: StoreInput<T>) => Store<T>;
-export function debounce<T>(first?: StoreInput<T> | number, second?: number) {
+export function debounce<T>(initialState: T | Store<T>, wait: number | undefined): Store<T>;
+export function debounce(wait?: number): <T>(initialState: T | Store<T>) => Store<T>;
+export function debounce<T>(first?: T | Store<T> | number, second?: number) {
   if (arguments.length <= 1) {
     const wait = typeof first === 'number' ? first : undefined;
 
-    return <State>(initialState: StoreInput<State>) => applyDebounce(initialState, wait);
+    return (initialState: T | Store<T>) => applyDebounce(initialState, wait);
   }
 
-  return applyDebounce(first as StoreInput<T>, second);
+  return applyDebounce(first as T | Store<T>, second);
 }

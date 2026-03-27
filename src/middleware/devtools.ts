@@ -1,6 +1,6 @@
 import { Store } from '@ilokesto/store';
-import { getStore } from '../lib/getStoreFromProps';
-import type { ActionStore, NextState, StoreInput } from './shared';
+import { SetStateAction } from 'react';
+import { getStore } from '../lib/getStore';
 
 type DevtoolsMessage = {
   type: string;
@@ -29,18 +29,19 @@ const getDevtoolsExtension = () => {
     .__REDUX_DEVTOOLS_EXTENSION__;
 };
 
-const hasInitialState = <T>(value: StoreInput<T>): value is Store<T> => {
+const hasInitialState = <T>(value: T | Store<T>): value is Store<T> => {
   return typeof value === 'object' && value !== null && 'getInitialState' in value;
 };
 
-const applyDevtools = <T>(initialState: StoreInput<T>, name: string) => {
-  const store = getStore(initialState) as ActionStore<T>;
-  const baseSetState = store.setState.bind(store);
+const applyDevtools = <T>(initialState: T | Store<T>, name: string) => {
+  const store = getStore(initialState);
   const isProduction = typeof process !== 'undefined' && process.env.NODE_ENV === 'production';
   const devTools = !isProduction && getDevtoolsExtension()?.connect<T>({ name });
 
+  let isDispatchAction = false;
+
   if (devTools) {
-    devTools.init(store.getState());
+    devTools.init(store.getState() as T);
 
     devTools.subscribe((message) => {
       if (message.type !== 'DISPATCH') {
@@ -49,15 +50,23 @@ const applyDevtools = <T>(initialState: StoreInput<T>, name: string) => {
 
       switch (message.payload?.type) {
         case 'RESET':
-          baseSetState(hasInitialState(initialState) ? (initialState.getInitialState() as T) : initialState);
-          devTools.init(store.getState());
+          isDispatchAction = true;
+          store.setState(
+            hasInitialState(initialState)
+              ? (initialState.getInitialState() as T)
+              : (initialState as T),
+          );
+          isDispatchAction = false;
+          devTools.init(store.getState() as T);
           break;
         case 'COMMIT':
-          devTools.init(store.getState());
+          devTools.init(store.getState() as T);
           break;
         case 'ROLLBACK':
           if (typeof message.state === 'string') {
-            baseSetState(JSON.parse(message.state) as T);
+            isDispatchAction = true;
+            store.setState(JSON.parse(message.state) as T);
+            isDispatchAction = false;
           }
           break;
         default:
@@ -66,31 +75,30 @@ const applyDevtools = <T>(initialState: StoreInput<T>, name: string) => {
     });
   }
 
-  const setState = (nextState: NextState<T>, actionName: string = 'setStateAction') => {
-    baseSetState(nextState, actionName);
+  store.pushMiddleware((nextState: SetStateAction<T>, next) => {
+    next(nextState);
 
-    if (!isProduction && devTools) {
+    if (!isProduction && devTools && !isDispatchAction) {
       try {
-        devTools.send(`${name}:${actionName}`, store.getState());
+        // @ts-ignore
+        devTools.send(`${name}:${store.actionName ?? 'anonymous action'}`, store.getState() as T);
       } catch (error) {
         console.error('Error sending state to devtools', error);
       }
     }
-  };
-
-  store.setState = setState;
+  });
 
   return store;
 };
 
-export function devtools<T>(initialState: StoreInput<T>, name: string): Store<T>;
-export function devtools(name: string): <T>(initialState: StoreInput<T>) => Store<T>;
-export function devtools<T>(first: StoreInput<T> | string, second?: string) {
+export function devtools<T>(initialState: T | Store<T>, name: string): Store<T>;
+export function devtools(name: string): <T>(initialState: T | Store<T>) => Store<T>;
+export function devtools<T>(first: T | Store<T> | string, second?: string) {
   if (arguments.length === 1) {
     const name = first as string;
 
-    return <State>(initialState: StoreInput<State>) => applyDevtools(initialState, name);
+    return (initialState: T | Store<T>) => applyDevtools(initialState, name);
   }
 
-  return applyDevtools(first as StoreInput<T>, second as string);
+  return applyDevtools(first as T | Store<T>, second as string);
 }
