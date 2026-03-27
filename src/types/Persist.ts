@@ -68,5 +68,5 @@ export type PersistUtils = {
     props: PersistUtils['common'] & {
       migrate?: Migrate<T, P>;
     },
-  ) => void;
+  ) => { state: unknown; version: number } | null;
 };

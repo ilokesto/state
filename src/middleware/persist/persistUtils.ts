@@ -3,8 +3,50 @@ import { MigrationFn, PersistConfig, PersistUtils } from '../../types/Persist';
 type PersistedPayload<T> = { state: T; version: number };
 const storageWriteCache = new Map<string, string>();
 
-const getStorageCacheKey = (storageType: PersistUtils['common']['storageType'], storageKey: string) =>
-  `${storageType ?? 'none'}:${storageKey}`;
+const getStorageCacheKey = (
+  storageType: PersistUtils['common']['storageType'],
+  storageKey: string,
+) => `${storageType ?? 'none'}:${storageKey}`;
+
+const readStorageValue = (
+  storageType: PersistUtils['common']['storageType'],
+  storageKey: string,
+): string | null => {
+  if (storageType === 'local') {
+    return localStorage.getItem(storageKey);
+  }
+
+  if (storageType === 'session') {
+    return sessionStorage.getItem(storageKey);
+  }
+
+  if (storageType === 'cookie') {
+    return getCookie(storageKey);
+  }
+
+  return null;
+};
+
+const cacheStoredValue = (
+  storageType: PersistUtils['common']['storageType'],
+  storageKey: string,
+  storedValue: string | null,
+) => {
+  if (storedValue !== null && storageType) {
+    storageWriteCache.set(getStorageCacheKey(storageType, storageKey), storedValue);
+  }
+};
+
+const readPersistedPayload = <T>(
+  storageType: PersistUtils['common']['storageType'],
+  storageKey: string,
+): PersistedPayload<T> | null => {
+  const storedValue = readStorageValue(storageType, storageKey);
+
+  cacheStoredValue(storageType, storageKey, storedValue);
+
+  return parsePersistedPayload<T>(storedValue);
+};
 
 const parsePersistedPayload = <T>(storedValue: string | null): PersistedPayload<T> | null => {
   if (storedValue === null) return null;
@@ -28,17 +70,17 @@ export const execMigrate: PersistUtils['execMigration'] = ({
   storageType,
   migrate,
 }) => {
-  if (!migrate || migrate.length === 0) return;
-  if (storageType !== 'local' && storageType !== 'cookie') return;
+  if (!migrate || migrate.length === 0) return null;
+  if (storageType !== 'local' && storageType !== 'cookie') return null;
 
-  const rawValue =
-    storageType === 'local' ? localStorage.getItem(storageKey) : getCookie(storageKey);
-  const storedPayload = parsePersistedPayload<unknown>(rawValue);
+  const storedPayload = readPersistedPayload<unknown>(storageType, storageKey);
 
-  if (!storedPayload) return;
+  if (!storedPayload) return null;
 
   const initialVersion =
-    Number.isInteger(storedPayload.version) && storedPayload.version >= 0 ? storedPayload.version : 0;
+    Number.isInteger(storedPayload.version) && storedPayload.version >= 0
+      ? storedPayload.version
+      : 0;
   let version = initialVersion;
   let state: unknown = storedPayload.state;
   const migrations = migrate as ReadonlyArray<MigrationFn>;
@@ -48,7 +90,9 @@ export const execMigrate: PersistUtils['execMigration'] = ({
     version += 1;
   }
 
-  if (version === initialVersion) return;
+  if (version === initialVersion) {
+    return { state: state as typeof storedPayload.state, version };
+  }
 
   const encodedState = JSON.stringify({ state, version });
   if (storageType === 'local') {
@@ -58,6 +102,8 @@ export const execMigrate: PersistUtils['execMigration'] = ({
   }
 
   storageWriteCache.set(getStorageCacheKey(storageType, storageKey), encodedState);
+
+  return { state: state as typeof storedPayload.state, version };
 };
 
 export const getStorage: PersistUtils['getStorage'] = ({
@@ -67,23 +113,23 @@ export const getStorage: PersistUtils['getStorage'] = ({
   initState,
 }) => {
   try {
-    let storedValue: string | null = null;
+    const shouldUseMigratePath =
+      !!migrate && migrate.length > 0 && (storageType === 'local' || storageType === 'cookie');
 
-    migrate && storageType && execMigrate({ storageKey, storageType, migrate });
+    if (shouldUseMigratePath) {
+      const migratedPayload = execMigrate({ storageKey, storageType, migrate });
 
-    if (storageType === 'local') {
-      storedValue = localStorage.getItem(storageKey);
-    } else if (storageType === 'session') {
-      storedValue = sessionStorage.getItem(storageKey);
-    } else if (storageType === 'cookie') {
-      storedValue = getCookie(storageKey);
+      if (migratedPayload) {
+        return {
+          state: migratedPayload.state as typeof initState,
+          version: migratedPayload.version,
+        };
+      }
+
+      return { state: initState, version: 0 };
     }
 
-    if (storedValue !== null && storageType) {
-      storageWriteCache.set(getStorageCacheKey(storageType, storageKey), storedValue);
-    }
-
-    const storedPayload = parsePersistedPayload<unknown>(storedValue);
+    const storedPayload = readPersistedPayload<unknown>(storageType, storageKey);
 
     if (storedPayload) {
       return { state: storedPayload.state as typeof initState, version: storedPayload.version };
