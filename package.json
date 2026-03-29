@@ -42,7 +42,7 @@
   "author": "Jeong Jinho <wpfekdml@me.com>",
   "license": "MIT",
   "dependencies": {
-    "@ilokesto/store": "^1.1.1"
+    "@ilokesto/store": "1.1.1"
   },
   "peerDependencies": {
     "immer": "^9.0.12",
