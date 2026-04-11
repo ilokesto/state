@@ -2,7 +2,8 @@
   "name": "@ilokesto/state",
   "version": "1.0.3",
   "scripts": {
-    "build": "rm -rf dist && tsc"
+    "build": "rm -rf dist && tsc",
+    "typecheck": "tsc --noEmit"
   },
   "repository": {
     "type": "git",
@@ -10,20 +11,34 @@
   },
   "homepage": "https://ilokesto.ayden94.com/en/state",
   "sideEffects": false,
-  "types": "dist/index.d.ts",
-  "module": "dist/index.js",
   "exports": {
-    ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+    "./react": {
+      "import": "./dist/core/React/index.js",
+      "types": "./dist/core/React/index.d.ts"
+    },
+    "./vue": {
+      "import": "./dist/core/Vue/index.js",
+      "types": "./dist/core/Vue/index.d.ts"
+    },
+    "./angular": {
+      "import": "./dist/core/Angular/index.js",
+      "types": "./dist/core/Angular/index.d.ts"
+    },
+    "./svelte": {
+      "import": "./dist/core/Svelte/index.js",
+      "types": "./dist/core/Svelte/index.d.ts"
+    },
+    "./solid": {
+      "import": "./dist/core/Solid/index.js",
+      "types": "./dist/core/Solid/index.d.ts"
     },
     "./middleware": {
-      "import": "./dist/middleware.js",
-      "types": "./dist/middleware.d.ts"
+      "import": "./dist/middleware/index.js",
+      "types": "./dist/middleware/index.d.ts"
     },
     "./utils": {
-      "import": "./dist/utils.js",
-      "types": "./dist/utils.d.ts"
+      "import": "./dist/utils/index.js",
+      "types": "./dist/utils/index.d.ts"
     }
   },
   "files": [
@@ -32,6 +47,10 @@
   "keywords": [
     "state management",
     "react",
+    "vue",
+    "angular",
+    "svelte",
+    "solid",
     "store",
     "hooks",
     "state"
@@ -45,17 +64,40 @@
     "@ilokesto/store": "1.1.1"
   },
   "peerDependencies": {
+    "@angular/core": "^17.0.0 || ^18.0.0 || ^19.0.0 || ^20.0.0 || ^21.0.0",
     "immer": "^9.0.12",
-    "react": "^18.0.0 || ^19.0.0"
+    "react": "^18.0.0 || ^19.0.0",
+    "solid-js": "^1.7.0 || ^2.0.0",
+    "svelte": "^4.0.0 || ^5.0.0",
+    "vue": "^3.0.0"
   },
   "peerDependenciesMeta": {
+    "@angular/core": {
+      "optional": true
+    },
     "immer": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "solid-js": {
+      "optional": true
+    },
+    "svelte": {
+      "optional": true
+    },
+    "vue": {
       "optional": true
     }
   },
   "devDependencies": {
+    "@angular/core": "^21.2.8",
     "@types/node": "^22.19.1",
     "@types/react": "^19.1.6",
-    "typescript": "^6.0.2"
+    "solid-js": "^1.9.12",
+    "svelte": "^5.55.3",
+    "typescript": "^6.0.2",
+    "vue": "^3.5.32"
   }
 }
