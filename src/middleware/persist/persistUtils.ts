@@ -1,4 +1,4 @@
-import { MigrationFn, PersistConfig, PersistUtils } from '../../types/Persist';
+import { MigrationFn, PersistConfig, PersistUtils } from './Persist';
 
 type PersistedPayload<T> = { state: T; version: number };
 const storageWriteCache = new Map<string, string>();

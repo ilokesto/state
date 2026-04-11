@@ -1,6 +1,6 @@
 import { Store } from '@ilokesto/store';
 import { getStore } from '../../lib/getStore';
-import { MigrationFn, PersistConfig } from '../../types/Persist';
+import { MigrationFn, PersistConfig } from './Persist';
 import { getStorage, parseOptions, setStorage } from './persistUtils';
 
 const applyPersist = <T, P extends Array<MigrationFn>>(
