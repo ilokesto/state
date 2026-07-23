@@ -158,7 +158,9 @@ unsubscribe();
 
 `readOnly`는 현재 runtime의 current store value를 읽습니다. React adapter는 `useSyncExternalStore`의 server snapshot으로 store initial state를 사용합니다. Hydration surprise를 피하려면 server와 client에서 같은 initial state로 store를 만들거나, subscribed UI를 render하기 전에 명시적으로 hydrate하세요.
 
-Persisted state는 browser storage가 browser에서만 가능하다는 점을 기억하세요. Storage access가 예상되는 곳에는 persistence middleware를 사용하고, server rendering path는 initial state만으로도 동작하게 유지하세요.
+Persisted state에서 `persist`는 서버에서 평가해도 안전합니다 — `window`가 없는 환경에서 storage 읽기는 `null`을 반환하므로 store는 initial state를 유지합니다. 하지만 기본 eager hydration은 클라이언트 store 생성 시점에 영속값을 적용하므로, Next.js App Router 같은 SSR 환경에서 React hydration mismatch가 발생합니다.
+
+`skipHydration: true`를 사용하고 client effect에서 `store.persist.rehydrate()`를 호출해 초기 클라이언트 렌더 이후로 hydration을 지연시키세요. 전체 SSR 패턴은 [persist 미들웨어 문서](/ko/state/middleware/persist)를 참고하세요.
 
 ## Testing pattern
 

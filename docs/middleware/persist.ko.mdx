@@ -54,3 +54,54 @@ const settings = persist(
 - migration은 `local`과 `cookie`에서 실행되고 `session`에서는 실행되지 않습니다.
 - storage read/write 실패는 browser에서 catch 후 log됩니다.
 - cookie write는 단순한 `document.cookie = key=value` assignment입니다. 고급 cookie attribute가 필요하면 helper 밖에서 설정하세요.
+
+## SSR과 hydration
+
+`persist`는 서버에서 평가해도 안전합니다. `window`나 `document`가 없는 환경에서 storage 읽기는 `null`을 반환하므로 store는 initial state를 유지합니다.
+
+기본적으로 `persist`는 eager hydration을 사용합니다 — store 생성 시점에 storage를 읽고 영속값을 적용합니다. client-only SPA에서는 문제가 없지만, Next.js App Router 같은 SSR 환경에서는 eager hydration이 React hydration mismatch를 발생시킵니다. 서버는 initial state로 렌더하지만 클라이언트는 영속값으로 렌더하기 때문입니다.
+
+### `skipHydration`과 수동 `rehydrate()`
+
+`skipHydration: true`를 전달해 hydration을 지연시킵니다. `store.persist.rehydrate()`을 명시적으로 호출하기 전까지 store는 서버와 클라이언트 모두에서 initial state를 유지합니다.
+
+```ts lineNumbers
+import { persist } from '@ilokesto/state/middleware';
+import { pipe } from '@ilokesto/state/utils';
+
+const counterStore = pipe
+  .use(persist({ local: 'counter', decode: decodeCounter, skipHydration: true }))
+  .create({ count: 0 });
+
+// React client component에서:
+useEffect(() => {
+  counterStore.persist.rehydrate();
+}, []);
+```
+
+### `hasHydrated()`
+
+`store.persist.hasHydrated()`로 hydration 완료 후에만 렌더해야 하는 UI를 게이트할 수 있습니다.
+
+```ts lineNumbers
+const hydrated = counterStore.persist.hasHydrated();
+```
+
+### `onRehydrateStorage`
+
+`onRehydrateStorage`를 전달해 rehydration 완료 후 호출될 callback을 받을 수 있습니다. factory는 현재 state(또는 rehydration이 건너뛰어진 경우 `undefined`)를 받고, rehydrated state와 error를 받는 함수를 반환합니다.
+
+```ts lineNumbers
+persist({
+  local: 'theme',
+  decode: decodeTheme,
+  skipHydration: true,
+  onRehydrateStorage: (state) => (rehydratedState, error) => {
+    if (error) {
+      console.error('Rehydration failed', error);
+      return;
+    }
+    console.log('Rehydrated from', state, 'to', rehydratedState);
+  },
+});
+```

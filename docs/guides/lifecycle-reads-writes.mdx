@@ -156,9 +156,11 @@ If you subscribe manually, you own `unsubscribe`. Do not hide long-lived subscri
 
 ## SSR and initial state
 
-`readOnly` reads the current store value in the current runtime. React’s adapter uses the store initial state as the server snapshot for `useSyncExternalStore`. To avoid hydration surprises, create stores with the same initial state on server and client, or hydrate explicitly before rendering subscribed UI.
+`readOnly` reads the current store value in the current runtime. React's adapter uses the store initial state as the server snapshot for `useSyncExternalStore`. To avoid hydration surprises, create stores with the same initial state on server and client, or hydrate explicitly before rendering subscribed UI.
 
-For persisted state, remember that browser storage is only available in the browser. Use persistence middleware where storage access is expected, and keep server rendering paths able to work with the initial state.
+For persisted state, `persist` is safe to evaluate on the server — storage reads return `null` when `window` is unavailable, so the store stays at its initial state. However, eager hydration (the default) applies the persisted value at store creation on the client, which causes a React hydration mismatch in SSR frameworks like Next.js App Router.
+
+Use `skipHydration: true` and call `store.persist.rehydrate()` in a client effect to defer hydration until after the initial client render. See the [persist middleware docs](/en/state/middleware/persist) for the full SSR pattern.
 
 ## Testing pattern
 

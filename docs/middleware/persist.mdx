@@ -54,3 +54,54 @@ const settings = persist(
 - Migrations run for `local` and `cookie`, not `session`.
 - Storage read/write failures are caught and logged in the browser.
 - Cookie writing uses a simple `document.cookie = key=value` assignment; configure advanced cookie attributes outside this helper if needed.
+
+## SSR and hydration
+
+`persist` is safe to evaluate on the server. Storage reads return `null` when `window` or `document` is unavailable, so the store stays at its initial state during server rendering.
+
+By default, `persist` hydrates eagerly — it reads storage and applies the persisted value at store creation time. In a client-only SPA this is fine, but in SSR frameworks like Next.js App Router, eager hydration causes a React hydration mismatch: the server renders the initial state while the client renders the persisted state.
+
+### `skipHydration` and manual `rehydrate()`
+
+Pass `skipHydration: true` to defer hydration. The store keeps the initial state on both server and client until you call `store.persist.rehydrate()` explicitly.
+
+```ts lineNumbers
+import { persist } from '@ilokesto/state/middleware';
+import { pipe } from '@ilokesto/state/utils';
+
+const counterStore = pipe
+  .use(persist({ local: 'counter', decode: decodeCounter, skipHydration: true }))
+  .create({ count: 0 });
+
+// In a React client component:
+useEffect(() => {
+  counterStore.persist.rehydrate();
+}, []);
+```
+
+### `hasHydrated()`
+
+Check `store.persist.hasHydrated()` to gate UI that should only render after hydration.
+
+```ts lineNumbers
+const hydrated = counterStore.persist.hasHydrated();
+```
+
+### `onRehydrateStorage`
+
+Pass `onRehydrateStorage` to receive a callback after rehydration completes. The factory receives the current state (or `undefined` if rehydration was skipped) and returns a function called with the rehydrated state and any error.
+
+```ts lineNumbers
+persist({
+  local: 'theme',
+  decode: decodeTheme,
+  skipHydration: true,
+  onRehydrateStorage: (state) => (rehydratedState, error) => {
+    if (error) {
+      console.error('Rehydration failed', error);
+      return;
+    }
+    console.log('Rehydrated from', state, 'to', rehydratedState);
+  },
+});
+```
