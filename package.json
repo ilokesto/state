@@ -5,17 +5,14 @@
     "build": "rm -rf dist && tsc",
     "test": "bun test",
     "test:typecheck": "pnpm build && tsc --noEmit -p test/tsconfig.json",
-    "typecheck": "tsc --noEmit",
-    "changeset": "changeset",
-    "version": "changeset version",
-    "release": "changeset publish"
+    "typecheck": "tsc --noEmit"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ilokesto/state"
+    "url": "git+https://github.com/ilokesto/metarepo.git",
+    "directory": "packages/state"
   },
   "homepage": "https://ilokesto.ayden94.com/en/state",
-  "packageManager": "pnpm@10.17.1",
   "type": "module",
   "sideEffects": false,
   "main": "dist/index.js",
@@ -84,7 +81,7 @@
   "author": "Jeong Jinho <wpfekdml@me.com>",
   "license": "MIT",
   "dependencies": {
-    "@ilokesto/store": "^1.1.2"
+    "@ilokesto/store": "workspace:^1.1.2"
   },
   "peerDependencies": {
     "@angular/core": "^17.0.0 || ^18.0.0 || ^19.0.0 || ^20.0.0 || ^21.0.0",
@@ -123,7 +120,6 @@
     "solid-js": "^1.9.12",
     "svelte": "^5.55.3",
     "typescript": "^6.0.2",
-    "vue": "^3.5.32",
-    "@changesets/cli": "^2.28.0"
+    "vue": "^3.5.32"
   }
 }
