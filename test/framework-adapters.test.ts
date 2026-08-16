@@ -185,6 +185,27 @@ describe('framework create() lifecycle-free contracts', () => {
         expect(store.getState()).toEqual({ count: 8, label: 'external' });
         expect(adapter.readOnly()).toBe(store.getState());
       });
+
+      test('Given one Store and reducer identity, When two adapters reuse them and one dispatches, Then both observe one reducer result', () => {
+        // Given
+        const store = new Store<CounterState>(initialState);
+        let reducerCalls = 0;
+        const reducer = (state: CounterState, action: CounterAction): CounterState => {
+          reducerCalls += 1;
+          return counterReducer(state, action);
+        };
+        const firstAdapter = framework.createReducer(reducer, store);
+        const secondAdapter = framework.createReducer(reducer, store);
+
+        // When
+        secondAdapter.writeOnly()({ type: 'increment' });
+
+        // Then
+        expect(reducerCalls).toBe(1);
+        expect(store.getState()).toEqual({ count: 2, label: 'initial' });
+        expect(firstAdapter.readOnly()).toBe(store.getState());
+        expect(secondAdapter.readOnly()).toBe(store.getState());
+      });
     });
   }
 });
