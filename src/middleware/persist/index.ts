@@ -69,37 +69,60 @@ const applyPersist = <T>(
   const store = getStore(initialState);
   const baseSetState = store.setState.bind(store);
   const optionObj = parseOptions(options);
-  const currentState = store.getState() as T;
   const skipHydration = options.skipHydration === true;
-  const onRehydrateStorage = options.onRehydrateStorage as OnRehydrateStorage<T> | undefined;
+  const onRehydrateStorage: OnRehydrateStorage<T> | undefined = options.onRehydrateStorage;
 
   let hydrated = false;
+  let prevPersistedState = store.getState() as T;
 
-  const runRehydration = (): { readonly value: T; readonly didHydrate: boolean } => {
+  const runRehydration = (fallbackState: T) => {
     if (!optionObj.storageType) {
-      return { value: currentState, didHydrate: false };
+      return { kind: 'empty', state: fallbackState, version: optionObj.storageVersion } as const;
     }
 
-    const result = getSafeStorage({
+    return getSafeStorage({
       ...optionObj,
       decode: options.decode,
-      initState: currentState,
+      initState: fallbackState,
     });
-
-    return { value: result.state, didHydrate: true };
   };
 
-  const initialHydration = skipHydration
-    ? { value: currentState, didHydrate: false }
-    : runRehydration();
+  const rehydrate = (): void => {
+    if (hydrated) return;
 
-  if (initialHydration.didHydrate) {
-    baseSetState(initialHydration.value);
+    const preState = store.getState() as T;
+    const callback = onRehydrateStorage?.(preState);
+    const result = runRehydration(preState);
+
+    switch (result.kind) {
+      case 'hydrated':
+        baseSetState(result.state);
+        prevPersistedState = result.state;
+        hydrated = true;
+        callback?.(store.getState() as T, undefined);
+        break;
+      case 'empty':
+        prevPersistedState = preState;
+        hydrated = true;
+        callback?.(preState, undefined);
+        break;
+      case 'failed':
+        hydrated = true;
+        callback?.(undefined, result.error);
+        break;
+    }
+  };
+
+  const controls: PersistControls<T> = {
+    hasHydrated: () => hydrated,
+    rehydrate,
+  };
+
+  const persistedStore = definePersistControls(store, controls);
+
+  if (!skipHydration) {
+    rehydrate();
   }
-
-  hydrated = !skipHydration;
-
-  let prevPersistedState = initialHydration.value;
 
   if (optionObj.storageType) {
     store.pushMiddleware((nextState, next) => {
@@ -114,35 +137,7 @@ const applyPersist = <T>(
     });
   }
 
-  const rehydrate = () => {
-    if (hydrated) return;
-
-    const result = runRehydration();
-
-    if (result.didHydrate) {
-      baseSetState(result.value);
-      prevPersistedState = result.value;
-    }
-
-    hydrated = true;
-
-    if (onRehydrateStorage) {
-      const callback = onRehydrateStorage(store.getState() as T);
-      try {
-        callback(store.getState() as T, undefined);
-      } catch (error) {
-        callback(undefined, error);
-      }
-    }
-  };
-
-  const controls: PersistControls<T> = {
-    hasHydrated: () => hydrated,
-    rehydrate,
-  };
-
-  definePersistControls(store, controls);
-  return store as PersistStore<T>;
+  return persistedStore;
 };
 
 export function persist<DecodedState, const Steps extends readonly MigrationFn[]>(

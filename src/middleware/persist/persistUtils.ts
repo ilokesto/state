@@ -1,6 +1,10 @@
 import type { MigrationFn, PersistDecoder, PersistUtils } from './Persist.js';
 
 type PersistedPayload<T> = { state: T; version: number };
+type SafeStorageResult<State> =
+  | { readonly kind: 'empty'; readonly state: State; readonly version: number }
+  | { readonly kind: 'failed'; readonly error: unknown; readonly state: State; readonly version: number }
+  | { readonly kind: 'hydrated'; readonly state: State; readonly version: number };
 type SafeStorageOptions<State> = PersistUtils['common'] & {
   readonly decode: PersistDecoder<State>;
   readonly initState: State;
@@ -13,6 +17,13 @@ type PersistOptions<Steps extends readonly MigrationFn[]> = {
   readonly session?: string;
 };
 const storageWriteCache = new Map<string, string>();
+
+class PersistHydrationError extends TypeError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PersistHydrationError';
+  }
+}
 
 const getStorageCacheKey = (
   storageType: PersistUtils['common']['storageType'],
@@ -55,16 +66,20 @@ const hasOwn = <Key extends PropertyKey>(
   key: Key,
 ): value is Record<Key, unknown> => Object.hasOwn(value, key);
 
-const parseSafePersistedPayload = (parsed: unknown): PersistedPayload<unknown> | null => {
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;
-  if (!hasOwn(parsed, 'state') || !hasOwn(parsed, 'version')) return null;
+const parseSafePersistedPayload = (parsed: unknown): PersistedPayload<unknown> => {
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new PersistHydrationError('Persisted value must be an object');
+  }
+  if (!hasOwn(parsed, 'state') || !hasOwn(parsed, 'version')) {
+    throw new PersistHydrationError('Persisted value must contain state and version');
+  }
   if (
     typeof parsed.version !== 'number' ||
     !Number.isFinite(parsed.version) ||
     !Number.isInteger(parsed.version) ||
     parsed.version < 0
   ) {
-    return null;
+    throw new PersistHydrationError('Persisted version must be a non-negative integer');
   }
 
   return { state: parsed.state, version: parsed.version };
@@ -78,25 +93,26 @@ const readSafePersistedPayload = (
   cacheStoredValue(storageType, storageKey, storedValue);
   if (storedValue === null) return null;
 
-  try {
-    return parseSafePersistedPayload(JSON.parse(storedValue));
-  } catch (error) {
-    if (error instanceof SyntaxError) return null;
-    throw error;
-  }
+  return parseSafePersistedPayload(JSON.parse(storedValue));
 };
 
 const migrateSafeCandidate = (
   payload: PersistedPayload<unknown>,
   migrations: readonly MigrationFn[],
-): { readonly candidate: unknown; readonly migrated: boolean } | null => {
-  if (payload.version > migrations.length) return null;
+): { readonly candidate: unknown; readonly migrated: boolean } => {
+  if (payload.version > migrations.length) {
+    throw new PersistHydrationError('Persisted version is newer than the configured migrations');
+  }
 
   const requiredMigrations: MigrationFn[] = [];
   for (let index = payload.version; index < migrations.length; index += 1) {
-    if (!Object.hasOwn(migrations, index)) return null;
+    if (!Object.hasOwn(migrations, index)) {
+      throw new PersistHydrationError('Persist migration chain contains a missing step');
+    }
     const migration = migrations[index];
-    if (typeof migration !== 'function') return null;
+    if (typeof migration !== 'function') {
+      throw new PersistHydrationError('Persist migration chain contains a non-function step');
+    }
     requiredMigrations.push(migration);
   }
 
@@ -121,26 +137,27 @@ export const getSafeStorage = <State>({
   migrate = [],
   decode,
   initState,
-}: SafeStorageOptions<State>): { readonly state: State; readonly version: number } => {
+}: SafeStorageOptions<State>): SafeStorageResult<State> => {
   const fallback = { state: initState, version: migrate.length };
 
   try {
     const payload = readSafePersistedPayload(storageType, storageKey);
-    if (payload === null) return fallback;
+    if (payload === null) return { ...fallback, kind: 'empty' };
 
     const migrated = migrateSafeCandidate(payload, migrate);
-    if (migrated === null) return fallback;
 
     const decoded = decode(migrated.candidate);
-    if (decoded === null) return fallback;
+    if (decoded === null) {
+      throw new PersistHydrationError('Persist decoder rejected the stored state');
+    }
 
     if (migrated.migrated) {
       setStorage({ storageKey, storageType, storageVersion: migrate.length, value: decoded });
     }
 
-    return { state: decoded, version: migrate.length };
-  } catch {
-    return fallback;
+    return { kind: 'hydrated', state: decoded, version: migrate.length };
+  } catch (error) {
+    return { ...fallback, error, kind: 'failed' };
   }
 };
 
