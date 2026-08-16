@@ -189,6 +189,12 @@ const counter = create<CounterState, CounterAction>(
 
 React returns tuples, Vue returns `{ state, dispatch }`, Angular returns `{ state, dispatch }`, Svelte returns a readable store with `dispatch`, and Solid returns `{ state, dispatch }`.
 
+### Reusing an Existing Store
+
+Pass an existing `Store` as the second argument to share one state snapshot across framework adapters and direct Store writes. Reusing that Store with the exact same reducer function reference is idempotent: `@ilokesto/state` installs reducer middleware once, and every adapter observes the result of one reducer call per dispatch.
+
+A Store can have only one reducer identity. Registering a different reducer function on the same Store throws synchronously with `TypeError: Cannot register a different reducer for the same Store.` before middleware or state is changed. Direct `store.setState(...)` writes remain plain Store updates and do not invoke the reducer.
+
 ## Read and Write Outside Framework Lifecycles
 
 ```ts

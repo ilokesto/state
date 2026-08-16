@@ -187,6 +187,12 @@ const counter = create<CounterState, CounterAction>(
 
 React는 튜플을 반환하고, Vue는 `{ state, dispatch }`, Angular는 `{ state, dispatch }`, Svelte는 `dispatch`가 포함된 readable store를 반환하며, Solid는 `{ state, dispatch }`를 반환합니다.
 
+### 기존 Store 재사용
+
+두 번째 인자로 기존 `Store`를 전달하면 프레임워크 어댑터와 직접 Store 쓰기가 하나의 상태 스냅샷을 공유합니다. 같은 Store를 정확히 동일한 reducer 함수 참조와 함께 다시 사용해도 안전합니다. `@ilokesto/state`는 reducer middleware를 한 번만 설치하며, dispatch마다 reducer를 한 번 호출한 결과를 모든 어댑터가 관찰합니다.
+
+하나의 Store에는 하나의 reducer 식별자만 등록할 수 있습니다. 같은 Store에 다른 reducer 함수를 등록하면 middleware나 상태를 변경하기 전에 `TypeError: Cannot register a different reducer for the same Store.`를 동기적으로 throw합니다. 직접 호출한 `store.setState(...)`는 기존과 동일하게 일반 Store 업데이트로 동작하며 reducer를 호출하지 않습니다.
+
 ## 프레임워크 생명주기 밖에서 읽기 및 쓰기
 
 ```ts
