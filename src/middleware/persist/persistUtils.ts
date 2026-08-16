@@ -23,6 +23,8 @@ const readStorageValue = (
   storageType: PersistUtils['common']['storageType'],
   storageKey: string,
 ): string | null => {
+  if (typeof window === 'undefined') return null;
+
   if (storageType === 'local') {
     return localStorage.getItem(storageKey);
   }
@@ -107,6 +109,7 @@ const migrateSafeCandidate = (
 };
 
 export function getCookie(name: string) {
+  if (typeof document === 'undefined') return null;
   const cookies = document.cookie.split('; ');
   const cookie = cookies.find((c) => c.startsWith(`${name}=`));
   return cookie ? cookie.split('=')[1] : null;

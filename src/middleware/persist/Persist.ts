@@ -1,3 +1,5 @@
+import type { Store } from '@ilokesto/store';
+
 import type { PersistDecoderStateDiagnostic as PipePersistDecoderStateDiagnostic } from '../../utils/pipe/types.js';
 
 export type PersistMigration<Input = unknown, Output = unknown> = (state: Input) => Output;
@@ -18,6 +20,15 @@ export type PersistDecoderStateValidation<DecodedState, StoreState> = [StoreStat
 export type MigrationFn = {
   bivarianceHack(state: unknown): unknown;
 }['bivarianceHack'];
+
+export type OnRehydrateStorageCallback<State> = (
+  state: State | undefined,
+  error: unknown,
+) => void;
+
+export type OnRehydrateStorage<State> = (
+  state: State | undefined,
+) => OnRehydrateStorageCallback<State>;
 
 type MigrationTupleValidation<
   Steps extends readonly MigrationFn[],
@@ -40,6 +51,15 @@ type MigrationTupleValidation<
 type ValidMigrationTuple<Steps extends readonly MigrationFn[]> = Steps &
   MigrationTupleValidation<Steps>;
 
+export type PersistControls<State> = {
+  readonly hasHydrated: () => boolean;
+  readonly rehydrate: () => void;
+};
+
+export type PersistStore<State> = Store<State> & {
+  readonly persist: PersistControls<State>;
+};
+
 export type SafePersistLocalConfig<
   State,
   Steps extends readonly MigrationFn[],
@@ -47,6 +67,8 @@ export type SafePersistLocalConfig<
   readonly local: string;
   readonly decode: PersistDecoder<State>;
   readonly migrate?: ValidMigrationTuple<Steps>;
+  readonly skipHydration?: boolean;
+  readonly onRehydrateStorage?: OnRehydrateStorage<State>;
 };
 
 export type SafePersistCookieConfig<
@@ -56,12 +78,16 @@ export type SafePersistCookieConfig<
   readonly cookie: string;
   readonly decode: PersistDecoder<State>;
   readonly migrate?: ValidMigrationTuple<Steps>;
+  readonly skipHydration?: boolean;
+  readonly onRehydrateStorage?: OnRehydrateStorage<State>;
 };
 
 export type SafePersistSessionConfig<State> = {
   readonly session: string;
   readonly decode: PersistDecoder<State>;
   readonly migrate?: never;
+  readonly skipHydration?: boolean;
+  readonly onRehydrateStorage?: OnRehydrateStorage<State>;
 };
 
 export type SafePersistConfig<
