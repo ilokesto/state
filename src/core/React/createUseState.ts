@@ -13,18 +13,16 @@ const identity = <Value>(value: Value): Value => value;
 function createShallowSelector<T, S>(
   selector: (state: T) => S,
 ): (state: T) => S {
-  let prev: S | undefined;
-  let hasPrev = false;
+  let previous: Readonly<{ value: S }> | undefined;
 
   return (state: T): S => {
     const next = selector(state);
 
-    if (hasPrev && shallow(prev as S, next)) {
-      return prev as S;
+    if (previous && shallow(previous.value, next)) {
+      return previous.value;
     }
 
-    hasPrev = true;
-    prev = next;
+    previous = { value: next };
     return next;
   };
 }
@@ -34,7 +32,11 @@ export function useStoreState<T, S, Writer>(
   selector: (state: T) => S,
   write: Writer,
 ) {
-  const subscribe = useMemo(() => store.subscribe.bind(store), [store]);
+  const subscribe = useMemo(
+    () => (listener: () => void) =>
+      store.subscribeSelector(selector, listener, shallow),
+    [store, selector],
+  );
 
   const getSnapshot = useMemo(() => {
     const shallowSelector = createShallowSelector(selector);

@@ -9,7 +9,7 @@
 ## 주요 기능
 
 - 일반 상태나 Reducer로부터 프레임워크 친화적인 상태 어댑터 생성
-- 프레임워크가 자연스럽게 지원하는 방식의 Selector 기반 상태 구독
+- 모든 프레임워크에서 하나의 공통 shallow 동등성 계약으로 Selector 기반 상태 구독
 - `readOnly()`를 사용해 프레임워크 생명주기 밖에서 상태 조회
 - `writeOnly()`를 사용해 프레임워크 생명주기 밖에서 상태 업데이트
 - `logger`, `debounce`, `persist`, `devtools` 등의 미들웨어로 스토어 구성
@@ -22,6 +22,19 @@ pnpm add @ilokesto/state
 ```
 
 `immer`는 선택적 피어 의존성(peer dependency)이며, `adaptor()`를 사용할 때만 필요합니다.
+
+## Selector 구독 계약
+
+React, Vue, Angular, Svelte, Solid는 일반 상태와 Reducer 상태 모두에서 동일한 Selector 구독 동작을 사용합니다.
+
+- 원시값 선택은 `Object.is` 의미론을 사용합니다.
+- 객체, 배열, `Map`, `Set`, `Date` 선택은 패키지의 1단계 `shallow` 비교를 사용합니다.
+- Store가 변경되어도 선택 결과가 shallow 비교에서 같으면 프레임워크 consumer에 알리지 않습니다.
+- 선택 결과와 관련된 업데이트는 consumer에 정확히 한 번 알립니다.
+- React unmount, Vue scope dispose, Angular `DestroyRef`, Solid owner cleanup, Svelte unsubscribe 시 구독을 해제합니다.
+- React server snapshot은 Store의 초기 상태에서 값을 선택하므로 현재 상태가 이미 변경되었어도 hydration 의미론을 유지합니다.
+
+이 계약은 `Store.subscribeSelector`를 기반으로 하며, 어댑터는 프레임워크별 동등성 옵션을 노출하지 않습니다. `create(initialState)`와 `create(reducer, initialState)`에 동일하게 적용됩니다.
 
 ## React
 
@@ -355,11 +368,11 @@ counterStore.getState().count;
 - `@ilokesto/state/middleware` → 미들웨어 헬퍼
 - `@ilokesto/state/utils` → `adaptor`, `pipe`, `definePipeableMiddleware`, pipe 타입
 
-## 마이그레이션: deep compare → shallow (v2.0.0)
+## 마이그레이션: 통합 shallow Selector 구독
 
 ### 변경 사항
 
-React 어댑터는 이전에 **깊은 비교** (`deepCompare`)를 사용하여 selector 결과가 리렌더를 트리거해야 하는지 판단했습니다. v2.0.0부터는 **shallow 비교**를 사용합니다 — zustand가 사용하는 패턴과 동일합니다. 이는 breaking change입니다.
+React 어댑터는 이전에 **깊은 비교** (`deepCompare`)를 사용하여 selector 결과가 리렌더를 트리거해야 하는지 판단했습니다. 이후 zustand가 사용하는 패턴과 같은 **shallow 비교**로 전환했습니다. 이제 React, Vue, Angular, Svelte, Solid의 일반 상태와 Reducer 상태가 모두 같은 shallow Selector 구독 계약을 사용합니다.
 
 ### 이유
 

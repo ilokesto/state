@@ -9,7 +9,7 @@ This package keeps the store core framework-agnostic and exposes thin adapters f
 ## Features
 
 - Create framework-friendly state adapters from plain state or a reducer
-- Subscribe to slices with selectors where the framework supports it naturally
+- Subscribe to slices with selectors using one shared shallow-equality contract
 - Read state outside framework lifecycles with `readOnly()`
 - Update state outside framework lifecycles with `writeOnly()`
 - Compose stores with middleware like `logger`, `debounce`, `persist`, and `devtools`
@@ -24,6 +24,19 @@ pnpm add @ilokesto/state
 ```
 
 `immer` is an optional peer dependency and is only needed when you use `adaptor()`.
+
+## Selector Subscription Contract
+
+React, Vue, Angular, Svelte, and Solid use the same selector subscription behavior for both plain and reducer state:
+
+- Primitive selections use `Object.is` semantics.
+- Object, array, `Map`, `Set`, and `Date` selections use the package's one-level `shallow` comparison.
+- An update that changes the store but leaves the selected value shallow-equal does not notify the framework consumer.
+- A relevant update notifies the consumer exactly once.
+- Subscriptions are removed by the framework lifecycle: React unmount, Vue scope disposal, Angular `DestroyRef`, Solid owner cleanup, or Svelte unsubscribe.
+- React's server snapshot selects from the store's initial state, preserving hydration semantics even if the current state has already changed.
+
+This contract is built on `Store.subscribeSelector`; adapters do not expose framework-specific equality options. It applies equally to `create(initialState)` and `create(reducer, initialState)`.
 
 ## React
 
@@ -357,11 +370,11 @@ This is a breaking change. Callable and variadic pipe syntax has been removed. R
 - `@ilokesto/state/middleware` → middleware helpers
 - `@ilokesto/state/utils` → `adaptor`, `pipe`, `definePipeableMiddleware`, and pipe types
 
-## Migration: deep compare → shallow (v2.0.0)
+## Migration: unified shallow selector subscriptions
 
 ### What changed
 
-The React adapter previously used **deep comparison** (`deepCompare`) to determine whether a selector result should trigger a re-render. Starting from v2.0.0, it uses **shallow comparison** instead — matching the pattern used by zustand. This is a breaking change.
+The React adapter previously used **deep comparison** (`deepCompare`) to determine whether a selector result should trigger a re-render. It switched to **shallow comparison**, matching the pattern used by zustand. React, Vue, Angular, Svelte, and Solid now all use that same shallow selector subscription contract for plain and reducer state.
 
 ### Why
 

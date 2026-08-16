@@ -1,8 +1,9 @@
 import type { Store } from '@ilokesto/store';
-import { createMemo, from, getOwner } from 'solid-js';
+import { createSignal, getOwner, onCleanup } from 'solid-js';
 
 import { dispatchStoreAction } from '../../lib/actionMetadata.js';
 import type { ReducerAction } from '../../types/ReduceFn.js';
+import { shallow } from '../shared/shallow.js';
 import type { ActionWriter, Selector, StateWriter } from './types.js';
 
 const identity = <Value>(value: Value): Value => value;
@@ -20,16 +21,20 @@ function createSelection<T, S>(store: Store<T>, selector: Selector<T, S>) {
     );
   }
 
-  const snapshot = from<T>(
-    (set) => {
-      return store.subscribe(() => {
-        set(() => store.getState() as T);
-      });
-    },
-    store.getState() as T,
+  const [selection, setSelection] = createSignal(
+    selector(store.getState() as T),
+    { equals: Object.is },
   );
+  const unsubscribe = store.subscribeSelector(
+    selector,
+    (nextSelection) => {
+      setSelection(() => nextSelection);
+    },
+    shallow,
+  );
+  onCleanup(unsubscribe);
 
-  return createMemo(() => selector(snapshot() as T));
+  return selection;
 }
 
 export function createUseAccessor<T, Action extends ReducerAction>(store: Store<T>, isReduce: boolean) {

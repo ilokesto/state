@@ -3,6 +3,7 @@ import { computed, getCurrentScope, onScopeDispose, shallowRef } from 'vue';
 
 import { dispatchStoreAction } from '../../lib/actionMetadata.js';
 import type { ReducerAction } from '../../types/ReduceFn.js';
+import { shallow } from '../shared/shallow.js';
 import type { ActionWriter, Selector, StateWriter } from './types.js';
 
 const identity = <Value>(value: Value): Value => value;
@@ -20,15 +21,19 @@ function createSelection<T, S>(store: Store<T>, selector: Selector<T, S>) {
     );
   }
 
-  const snapshot = shallowRef(store.getState());
+  const snapshot = shallowRef(selector(store.getState() as T));
 
-  const unsubscribe = store.subscribe(() => {
-    snapshot.value = store.getState();
-  });
+  const unsubscribe = store.subscribeSelector(
+    selector,
+    (nextSelection) => {
+      snapshot.value = nextSelection as typeof snapshot.value;
+    },
+    shallow,
+  );
 
   onScopeDispose(unsubscribe);
 
-  return computed(() => selector(snapshot.value as T));
+  return computed(() => snapshot.value as S);
 }
 
 export function createUseComposable<T, Action extends ReducerAction>(store: Store<T>, isReduce: boolean) {

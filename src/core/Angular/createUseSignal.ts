@@ -1,8 +1,9 @@
 import type { Store } from '@ilokesto/store';
-import { DestroyRef, computed, inject, signal } from '@angular/core';
+import { DestroyRef, inject, signal } from '@angular/core';
 
 import { dispatchStoreAction } from '../../lib/actionMetadata.js';
 import type { ReducerAction } from '../../types/ReduceFn.js';
+import { shallow } from '../shared/shallow.js';
 import type {
   ActionWriter,
   AngularOptions,
@@ -33,14 +34,19 @@ function resolveDestroyRef(options?: AngularOptions): DestroyRef {
 }
 
 function createSelection<T, S>(store: Store<T>, selector: Selector<T, S>, options?: AngularOptions) {
-  const snapshot = signal(store.getState() as T);
-  const unsubscribe = store.subscribe(() => {
-    snapshot.set(store.getState() as T);
-  });
+  const destroyRef = resolveDestroyRef(options);
+  const selection = signal(selector(store.getState() as T));
+  const unsubscribe = store.subscribeSelector(
+    selector,
+    (nextSelection) => {
+      selection.set(nextSelection);
+    },
+    shallow,
+  );
 
-  resolveDestroyRef(options).onDestroy(unsubscribe);
+  destroyRef.onDestroy(unsubscribe);
 
-  return computed(() => selector(snapshot()));
+  return selection.asReadonly();
 }
 
 export function createUseSignal<T, Action extends ReducerAction>(store: Store<T>, isReduce: boolean) {
