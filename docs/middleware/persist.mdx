@@ -52,7 +52,7 @@ const settings = persist(
 - Values are stored as `{ state, version }` JSON.
 - `version` is based on migration array length.
 - Migrations run for `local` and `cookie`, not `session`.
-- Storage read/write failures are caught and logged in the browser.
+- Storage read failures keep the live state and are passed to `onRehydrateStorage`; write failures are caught and logged in the browser.
 - Cookie writing uses a simple `document.cookie = key=value` assignment; configure advanced cookie attributes outside this helper if needed.
 
 ## SSR and hydration
@@ -89,7 +89,9 @@ const hydrated = counterStore.persist.hasHydrated();
 
 ### `onRehydrateStorage`
 
-Pass `onRehydrateStorage` to receive a callback after rehydration completes. The factory receives the current state (or `undefined` if rehydration was skipped) and returns a function called with the rehydrated state and any error.
+Pass `onRehydrateStorage` to observe eager or manual hydration. The factory runs before storage is read and receives the live pre-hydration state. Its returned callback runs exactly once after the attempt completes.
+
+On success, the callback receives the hydrated state and `undefined`. Empty storage is also successful and preserves the live pre-hydration state. Storage, parsing, migration, and decoding failures preserve that live state and call the callback with `undefined` and the original error. `store.persist.hasHydrated()` is already `true` inside the post callback. If the post callback throws, that exception propagates and is not passed back into the same callback.
 
 ```ts lineNumbers
 persist({

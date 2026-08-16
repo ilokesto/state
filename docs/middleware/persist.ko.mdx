@@ -52,7 +52,7 @@ const settings = persist(
 - 값은 `{ state, version }` JSON으로 저장됩니다.
 - `version`은 migration array 길이를 기준으로 합니다.
 - migration은 `local`과 `cookie`에서 실행되고 `session`에서는 실행되지 않습니다.
-- storage read/write 실패는 browser에서 catch 후 log됩니다.
+- storage read 실패는 현재 live state를 유지하고 `onRehydrateStorage`에 전달됩니다. write 실패는 browser에서 catch 후 log됩니다.
 - cookie write는 단순한 `document.cookie = key=value` assignment입니다. 고급 cookie attribute가 필요하면 helper 밖에서 설정하세요.
 
 ## SSR과 hydration
@@ -89,7 +89,9 @@ const hydrated = counterStore.persist.hasHydrated();
 
 ### `onRehydrateStorage`
 
-`onRehydrateStorage`를 전달해 rehydration 완료 후 호출될 callback을 받을 수 있습니다. factory는 현재 state(또는 rehydration이 건너뛰어진 경우 `undefined`)를 받고, rehydrated state와 error를 받는 함수를 반환합니다.
+`onRehydrateStorage`를 전달해 eager 또는 manual hydration을 관찰할 수 있습니다. factory는 storage를 읽기 전에 실행되며 hydration 직전의 live state를 받습니다. factory가 반환한 callback은 hydration 시도가 끝난 뒤 정확히 한 번 실행됩니다.
+
+성공 시 callback은 hydrated state와 `undefined`를 받습니다. storage가 비어 있는 경우도 성공이며 hydration 직전의 live state를 유지합니다. storage read, parsing, migration, decoding 실패 시에도 live state를 유지하고 callback에는 `undefined`와 원래 error가 전달됩니다. post callback 안에서는 `store.persist.hasHydrated()`가 이미 `true`입니다. post callback 자체가 throw하면 그 exception은 그대로 전파되며 같은 callback의 error 인자로 다시 전달되지 않습니다.
 
 ```ts lineNumbers
 persist({
