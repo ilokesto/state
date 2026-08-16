@@ -4,6 +4,7 @@ import { logger, persist, validate } from '../../../../src/middleware';
 import type {
   PersistDecoder,
   PersistMigration,
+  PersistStore,
   SafePersistConfig,
 } from '../../../../src/middleware';
 import { definePipeableMiddleware } from '../../../../src/utils/pipe/metadata';
@@ -31,6 +32,12 @@ const safeLocalConfig = {
   decode: decodeCounter,
   local: 'safe-local-variable',
   migrate: [toV1, toCounter],
+  skipHydration: true,
+  onRehydrateStorage: (state: CounterState | undefined) => (s, error) => {
+    void s;
+    void error;
+    void state;
+  },
 } as const satisfies SafePersistConfig<CounterState, readonly [typeof toV1, typeof toCounter]>;
 const counterSchema = {
   '~standard': {
@@ -44,41 +51,41 @@ const taggedCounterMiddleware = definePipeableMiddleware(counterMiddleware, {
   id: '@fixture/counter',
 } as const);
 
-const directLocal: Store<CounterState> = pipe.use(persist(safeLocalConfig)).create({ count: 0 });
-const directCookie: Store<CounterState> = pipe
+const directLocal: PersistStore<CounterState> = pipe.use(persist(safeLocalConfig)).create({ count: 0 });
+const directCookie: PersistStore<CounterState> = pipe
   .use(persist({ cookie: 'safe-cookie', decode: decodeCounter }))
   .create({ count: 0 });
-const directSession: Store<CounterState> = pipe
+const directSession: PersistStore<CounterState> = pipe
   .use(persist({ decode: decodeCounter, session: 'safe-session' }))
   .create({ count: 0 });
-const curriedLocal: Store<CounterState> = pipe.use(persist(safeLocalConfig)).create({ count: 0 });
-const curriedCookie: Store<CounterState> = pipe
+const curriedLocal: PersistStore<CounterState> = pipe.use(persist(safeLocalConfig)).create({ count: 0 });
+const curriedCookie: PersistStore<CounterState> = pipe
   .use(persist({ cookie: 'safe-cookie-pipe', decode: decodeCounter }))
   .create({ count: 0 });
-const curriedSession: Store<CounterState> = pipe
+const curriedSession: PersistStore<CounterState> = pipe
   .use(persist({ decode: decodeCounter, session: 'safe-session-pipe' }))
   .create({ count: 0 });
-const persistBeforeValidate: Store<CounterState> = pipe
+const persistBeforeValidate: PersistStore<CounterState> = pipe
   .use(persist({ decode: decodeCounter, local: 'before-validate' }))
   .use(validate(counterSchema))
   .create({ count: 0 });
-const persistAfterValidate: Store<CounterState> = pipe
+const persistAfterValidate: PersistStore<CounterState> = pipe
   .use(validate(counterSchema))
   .use(persist({ decode: decodeCounter, local: 'after-validate' }))
   .create({ count: 0 });
-const persistBeforeCustom: Store<CounterState> = pipe
+const persistBeforeCustom: PersistStore<CounterState> = pipe
   .use(persist({ decode: decodeCounter, local: 'before-custom' }))
   .use(taggedCounterMiddleware)
   .create({ count: 0 });
-const persistAfterCustom: Store<CounterState> = pipe
+const persistAfterCustom: PersistStore<CounterState> = pipe
   .use(taggedCounterMiddleware)
   .use(persist({ decode: decodeCounter, local: 'after-custom' }))
   .create({ count: 0 });
-const persistBeforeLogger: Store<CounterState> = pipe
+const persistBeforeLogger: PersistStore<CounterState> = pipe
   .use(persist({ decode: decodeCounter, local: 'before-logger' }))
   .use(logger())
   .create({ count: 0 });
-const persistAfterLogger: Store<CounterState> = pipe
+const persistAfterLogger: PersistStore<CounterState> = pipe
   .use(logger())
   .use(persist({ decode: decodeCounter, local: 'after-logger' }))
   .create({ count: 0 });
@@ -95,3 +102,12 @@ persistBeforeCustom.getState().count;
 persistAfterCustom.getState().count;
 persistBeforeLogger.getState().count;
 persistAfterLogger.getState().count;
+
+directLocal.persist.hasHydrated();
+directLocal.persist.rehydrate();
+directCookie.persist.hasHydrated();
+directCookie.persist.rehydrate();
+directSession.persist.hasHydrated();
+directSession.persist.rehydrate();
+
+void Store;
