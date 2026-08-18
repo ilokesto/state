@@ -10,8 +10,7 @@ description: "Connect state updates to the Redux DevTools extension in developme
 ## Signature
 
 ```ts lineNumbers
-devtools<T>(initialState: T | Store<T>, name: string): Store<T>
-devtools(name: string): <T>(initialState: T | Store<T>) => Store<T>
+devtools(name: string): PipeAnyMiddleware
 ```
 
 ## Example
@@ -20,7 +19,10 @@ devtools(name: string): <T>(initialState: T | Store<T>) => Store<T>
 import { devtools, logger } from '@ilokesto/state/middleware';
 import { pipe } from '@ilokesto/state/utils';
 
-const store = pipe({ count: 0 }, devtools('counter'), logger());
+const store = pipe
+  .use(devtools('counter'))
+  .use(logger())
+  .create({ count: 0 });
 ```
 
 ## Supported DevTools actions

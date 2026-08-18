@@ -10,41 +10,86 @@ description: "store state를 localStorage, sessionStorage, cookie에 저장합�
 ## Signature
 
 ```ts lineNumbers
-persist<T, P extends Array<MigrationFn>>(
-  initialState: T | Store<T>,
-  options: PersistConfig<T, P>,
-): Store<T>
-persist(options): <T>(initialState: T | Store<T>) => Store<T>
+persist<DecodedState, const Steps extends readonly MigrationFn[]>(
+  options: SafePersistConfig<DecodedState, Steps>,
+): PipeMiddleware<DecodedState>
 ```
+
+`persist(options)`는 `pipe.use(...)`에 등록할 middleware를 반환합니다. 등록한 뒤 `.create(initialState)`로 store를 만드세요. Storage에서 읽은 값을 live state로 사용하기 전에 검증하도록 `decode`가 필수입니다.
 
 ## Local storage 예제
 
 ```ts lineNumbers
 import { persist } from '@ilokesto/state/middleware';
+import { pipe } from '@ilokesto/state/utils';
 
-const store = persist({ theme: 'light' as 'light' | 'dark' }, { local: 'theme' });
+type ThemeState = { theme: 'light' | 'dark' };
+
+const decodeTheme = (value: unknown): ThemeState | null => {
+  if (typeof value !== 'object' || value === null) return null;
+  if (!('theme' in value) || (value.theme !== 'light' && value.theme !== 'dark')) return null;
+  return { theme: value.theme };
+};
+
+const store = pipe
+  .use(persist({ local: 'theme', decode: decodeTheme }))
+  .create<ThemeState>({ theme: 'light' });
 ```
 
 ## Session과 cookie storage
 
 ```ts lineNumbers
-const sessionStore = persist({ token: null as string | null }, { session: 'session' });
-const cookieStore = persist({ accepted: false }, { cookie: 'cookie-consent' });
+type SessionState = { token: string | null };
+type ConsentState = { accepted: boolean };
+
+const decodeSession = (value: unknown): SessionState | null => {
+  if (typeof value !== 'object' || value === null || !('token' in value)) return null;
+  return typeof value.token === 'string' || value.token === null ? { token: value.token } : null;
+};
+
+const decodeConsent = (value: unknown): ConsentState | null => {
+  if (typeof value !== 'object' || value === null || !('accepted' in value)) return null;
+  return typeof value.accepted === 'boolean' ? { accepted: value.accepted } : null;
+};
+
+const sessionStore = pipe
+  .use(persist({ session: 'session', decode: decodeSession }))
+  .create<SessionState>({ token: null });
+
+const cookieStore = pipe
+  .use(persist({ cookie: 'cookie-consent', decode: decodeConsent }))
+  .create<ConsentState>({ accepted: false });
 ```
 
 ## Migration 예제
 
 ```ts lineNumbers
-const settings = persist(
-  { theme: 'light', count: 0 },
-  {
+import type { PersistMigration } from '@ilokesto/state/middleware';
+
+type SettingsV1 = { theme: string };
+type SettingsState = { theme: string; count: number };
+
+const toV1: PersistMigration<unknown, SettingsV1> = (old) => ({
+  theme: typeof old === 'string' ? old : 'light',
+});
+const toCurrent: PersistMigration<SettingsV1, SettingsState> = (old) => ({
+  ...old,
+  count: 0,
+});
+const decodeSettings = (value: unknown): SettingsState | null => {
+  if (typeof value !== 'object' || value === null) return null;
+  if (!('theme' in value) || typeof value.theme !== 'string') return null;
+  if (!('count' in value) || typeof value.count !== 'number') return null;
+  return { theme: value.theme, count: value.count };
+};
+
+const settings = pipe
+  .use(persist({
     local: 'settings',
-    migrate: [
-      (old) => ({ theme: String(old), count: 0 }),
-      (old) => ({ ...old, count: Number(old.count ?? 0) }),
-    ],
-  },
-);
+    migrate: [toV1, toCurrent],
+    decode: decodeSettings,
+  }))
+  .create<SettingsState>({ theme: 'light', count: 0 });
 ```
 
 ## Storage format과 주의점
@@ -69,9 +114,17 @@ const settings = persist(
 import { persist } from '@ilokesto/state/middleware';
 import { pipe } from '@ilokesto/state/utils';
 
+type CounterState = { count: number };
+
+const decodeCounter = (value: unknown): CounterState | null => {
+  if (typeof value !== 'object' || value === null) return null;
+  if (!('count' in value) || typeof value.count !== 'number') return null;
+  return { count: value.count };
+};
+
 const counterStore = pipe
   .use(persist({ local: 'counter', decode: decodeCounter, skipHydration: true }))
-  .create({ count: 0 });
+  .create<CounterState>({ count: 0 });
 
 // React client component에서:
 useEffect(() => {
@@ -94,16 +147,18 @@ const hydrated = counterStore.persist.hasHydrated();
 성공 시 callback은 hydrated state와 `undefined`를 받습니다. storage가 비어 있는 경우도 성공이며 hydration 직전의 live state를 유지합니다. storage read, parsing, migration, decoding 실패 시에도 live state를 유지하고 callback에는 `undefined`와 원래 error가 전달됩니다. post callback 안에서는 `store.persist.hasHydrated()`가 이미 `true`입니다. post callback 자체가 throw하면 그 exception은 그대로 전파되며 같은 callback의 error 인자로 다시 전달되지 않습니다.
 
 ```ts lineNumbers
-persist({
-  local: 'theme',
-  decode: decodeTheme,
-  skipHydration: true,
-  onRehydrateStorage: (state) => (rehydratedState, error) => {
-    if (error) {
-      console.error('Rehydration failed', error);
-      return;
-    }
-    console.log('Rehydrated from', state, 'to', rehydratedState);
-  },
-});
+const themeStore = pipe
+  .use(persist({
+    local: 'theme',
+    decode: decodeTheme,
+    skipHydration: true,
+    onRehydrateStorage: (state) => (rehydratedState, error) => {
+      if (error) {
+        console.error('Rehydration failed', error);
+        return;
+      }
+      console.log('Rehydrated from', state, 'to', rehydratedState);
+    },
+  }))
+  .create<ThemeState>({ theme: 'light' });
 ```

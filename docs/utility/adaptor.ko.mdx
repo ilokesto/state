@@ -113,11 +113,10 @@ Adapter는 여전히 일반 store update pipeline을 통해 subscriber에게 알
 import { logger, validate } from '@ilokesto/state/middleware';
 import { adaptor, pipe } from '@ilokesto/state/utils';
 
-const store = pipe(
-  { tags: [] as string[] },
-  validate(tagsSchema),
-  logger({ diff: true }),
-);
+const store = pipe
+  .use(validate(tagsSchema))
+  .use(logger({ diff: true }))
+  .create({ tags: [] as string[] });
 
 const useTags = create(store);
 const writeTags = useTags.writeOnly();

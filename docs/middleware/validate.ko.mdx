@@ -10,14 +10,14 @@ description: "Standard Schema로 invalid synchronous state update를 막습니�
 ## Signature
 
 ```ts lineNumbers
-validate<T>(initialState: T | Store<T>, schema: StandardSchemaV1<T, T>): Store<T>
-validate<T>(schema: StandardSchemaV1<T, T>): (initialState: T | Store<T>) => Store<T>
+validate<T>(schema: StandardSchemaV1<T, T>): PipeMiddleware<T>
 ```
 
 ## 예제
 
 ```ts lineNumbers
 import { validate } from '@ilokesto/state/middleware';
+import { pipe } from '@ilokesto/state/utils';
 
 type CounterState = { count: number };
 
@@ -34,7 +34,9 @@ const schema = {
   },
 } as const;
 
-const store = validate({ count: 0 }, schema);
+const store = pipe
+  .use(validate(schema))
+  .create<CounterState>({ count: 0 });
 ```
 
 ## 실패하면 어떻게 되나

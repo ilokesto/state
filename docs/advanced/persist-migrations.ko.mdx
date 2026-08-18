@@ -18,13 +18,34 @@ description: "persist의 storage type, versioning, migration caveat입니다."
 migration function은 stored version index부터 최신 migration까지 실행됩니다. 결과는 새 version과 함께 다시 저장됩니다.
 
 ```ts lineNumbers
-persist({ theme: 'light', count: 0 }, {
-  local: 'settings',
-  migrate: [
-    (old) => ({ theme: String(old), count: 0 }),
-    (old) => ({ ...old, count: Number(old.count ?? 0) }),
-  ],
+import { persist } from '@ilokesto/state/middleware';
+import type { PersistMigration } from '@ilokesto/state/middleware';
+import { pipe } from '@ilokesto/state/utils';
+
+type SettingsV1 = { theme: string };
+type SettingsState = { theme: string; count: number };
+
+const toV1: PersistMigration<unknown, SettingsV1> = (old) => ({
+  theme: typeof old === 'string' ? old : 'light',
 });
+const toCurrent: PersistMigration<SettingsV1, SettingsState> = (old) => ({
+  ...old,
+  count: 0,
+});
+const decodeSettings = (value: unknown): SettingsState | null => {
+  if (typeof value !== 'object' || value === null) return null;
+  if (!('theme' in value) || typeof value.theme !== 'string') return null;
+  if (!('count' in value) || typeof value.count !== 'number') return null;
+  return { theme: value.theme, count: value.count };
+};
+
+const settingsStore = pipe
+  .use(persist({
+    local: 'settings',
+    migrate: [toV1, toCurrent],
+    decode: decodeSettings,
+  }))
+  .create<SettingsState>({ theme: 'light', count: 0 });
 ```
 
 ## 주의할 점

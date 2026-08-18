@@ -5,13 +5,15 @@ description: "Create a Store and apply middleware left-to-right before connectin
 
 # pipe
 
-`pipe` is a small composition helper from `@ilokesto/state/utils`.
+`pipe` is a builder-only composition helper from `@ilokesto/state/utils`.
 
 ```ts lineNumbers
-pipe<T>(initialState: T, ...middlewares: Array<(store: Store<T>) => Store<T>>): Store<T>
+pipe.use(middleware): PipeBuilder
+PipeBuilder.use(middleware): PipeBuilder
+PipeBuilder.create<T>(initialState: T): Store<T>
 ```
 
-It creates a new `Store<T>` from `initialState`, then applies each middleware function from left to right. The result is a prepared store that can be passed to a framework adapter.
+The root `pipe` object exposes only `.use()`. Each `.use()` returns a builder that can register another middleware or call `.create(initialState)`. `.create()` creates a new `Store<T>`, applies the registered middleware in declaration order, and returns the prepared store for a framework adapter.
 
 ## Basic usage
 
@@ -20,51 +22,49 @@ import { create } from '@ilokesto/state/react';
 import { logger, persist } from '@ilokesto/state/middleware';
 import { pipe } from '@ilokesto/state/utils';
 
-const counterStore = pipe(
-  { count: 0 },
-  persist({ local: 'counter' }),
-  logger({ collapsed: true, diff: true }),
-);
+type CounterState = { count: number };
+
+const decodeCounter = (value: unknown): CounterState | null => {
+  if (typeof value !== 'object' || value === null) return null;
+  if (!('count' in value) || typeof value.count !== 'number') return null;
+  return { count: value.count };
+};
+
+const counterStore = pipe
+  .use(persist({ local: 'counter', decode: decodeCounter }))
+  .use(logger({ collapsed: true, diff: true }))
+  .create<CounterState>({ count: 0 });
 
 export const useCounter = create(counterStore);
 ```
 
-The middleware order above means persistence prepares the initial value, then logger observes later updates. Middleware order matters because each middleware receives and returns the store.
+Middleware setup runs from the first `.use()` to the last. During updates, the first registered middleware is outermost. Order matters, and `pipe` validates the declared order without rearranging it.
 
-## Why not just call middleware manually?
+## Why builder syntax?
 
-You can always compose middleware by hand:
-
-```ts lineNumbers
-const store = logger({ collapsed: true })(persist({ local: 'counter' })({ count: 0 }));
-```
-
-`pipe` makes the same flow easier to scan and keeps the order visually aligned with runtime order.
+`pipe` is not callable and does not accept a variadic middleware list. Register one middleware per `.use()`, then create the store from plain initial state.
 
 ```ts lineNumbers
-const store = pipe(
-  { count: 0 },
-  persist({ local: 'counter' }),
-  logger({ collapsed: true }),
-);
+const store = pipe
+  .use(validate(counterSchema))
+  .use(logger({ collapsed: true }))
+  .create({ count: 0 });
 ```
 
-Read the list from top to bottom: create state, apply persistence, apply logging.
+Read the chain from top to bottom: register validation, register logging, then create state.
 
 ## Use with validation
 
 Validation is often best placed before middleware that performs side effects, so invalid states do not get persisted or sent to tooling.
 
 ```ts lineNumbers
-import { devtools, persist, validate } from '@ilokesto/state/middleware';
+import { devtools, validate } from '@ilokesto/state/middleware';
 import { pipe } from '@ilokesto/state/utils';
 
-const settingsStore = pipe(
-  { theme: 'system' as 'system' | 'light' | 'dark' },
-  validate(settingsSchema),
-  persist({ local: 'settings' }),
-  devtools('settings'),
-);
+const settingsStore = pipe
+  .use(validate(settingsSchema))
+  .use(devtools('settings'))
+  .create({ theme: 'system' as 'system' | 'light' | 'dark' });
 ```
 
 If validation rejects an update, later middleware in the chain should not see the invalid state.
@@ -78,10 +78,9 @@ import { create } from '@ilokesto/state/react';
 import { logger } from '@ilokesto/state/middleware';
 import { pipe } from '@ilokesto/state/utils';
 
-const todoStore = pipe(
-  { items: [] as string[] },
-  logger({ diff: true }),
-);
+const todoStore = pipe
+  .use(logger({ diff: true }))
+  .create({ items: [] as string[] });
 
 export const useTodos = create(reduceTodos, todoStore);
 ```
@@ -90,27 +89,26 @@ Reducer actions are converted to next state, then the store middleware pipeline 
 
 ## Existing Store instances
 
-`pipe` always creates a new `Store<T>` from the initial state. If you already own a specific `Store<T>` instance and need to preserve that exact instance, pass the store to middleware helpers directly instead of using `pipe`.
+`pipe` always creates a new `Store<T>` from plain initial state. `.create()` rejects an existing `Store`. If another module already owns the exact store instance, pass that store directly to the framework adapter and do not use `pipe` for its construction.
 
 ```ts lineNumbers
 import { Store } from '@ilokesto/store';
-import { logger } from '@ilokesto/state/middleware';
+import { create } from '@ilokesto/state/react';
 
 const existingStore = new Store({ count: 0 });
-const storeWithLogger = logger({ collapsed: true })(existingStore);
+const useCounter = create(existingStore);
 ```
 
-Use this style when another module already subscribes to the store or when the store is created by infrastructure outside the utility layer.
+Use this style when another module already subscribes to the store or when infrastructure outside the utility layer created it.
 
 ## Testing a piped store
 
 Because `pipe` returns a plain `Store<T>`, it can be tested before any framework adapter is involved.
 
 ```ts lineNumbers
-const store = pipe(
-  { count: 0 },
-  validate(counterSchema),
-);
+const store = pipe
+  .use(validate(counterSchema))
+  .create({ count: 0 });
 
 store.setState({ count: 1 });
 expect(store.getState()).toEqual({ count: 1 });
@@ -120,7 +118,8 @@ For persistence or browser-only middleware, run tests in an environment that pro
 
 ## Common mistakes
 
-- **Assuming `pipe` mutates an existing store.** It creates a new `Store<T>` from `initialState`.
-- **Ignoring order.** Middleware is applied left-to-right, and side-effect middleware should usually come after validation.
+- **Calling `pipe(initialState, ...middleware)`.** `pipe` is an object; start with `pipe.use(...)` and finish with `.create(initialState)`.
+- **Passing an existing store to `.create()`.** The builder accepts plain initial state only and creates a new `Store<T>`.
+- **Ignoring order.** Middleware is registered in declaration order, and side-effect middleware should usually come after validation.
 - **Putting framework adapter calls inside `pipe`.** `pipe` composes store middleware, not React/Vue/Svelte/Solid/Angular adapter calls.
 - **Using `pipe` for one-off direct updates.** Use `setState`, `dispatch`, or [`adaptor`](/en/state/utility/adaptor) for updates after the store exists.

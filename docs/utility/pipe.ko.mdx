@@ -5,13 +5,15 @@ description: "Adapter에 연결하기 전에 Store를 만들고 middleware를 �
 
 # pipe
 
-`pipe`는 `@ilokesto/state/utils`의 작은 composition helper입니다.
+`pipe`는 `@ilokesto/state/utils`의 builder-only composition helper입니다.
 
 ```ts lineNumbers
-pipe<T>(initialState: T, ...middlewares: Array<(store: Store<T>) => Store<T>>): Store<T>
+pipe.use(middleware): PipeBuilder
+PipeBuilder.use(middleware): PipeBuilder
+PipeBuilder.create<T>(initialState: T): Store<T>
 ```
 
-`initialState`로 새 `Store<T>`를 만들고, 각 middleware function을 왼쪽에서 오른쪽으로 적용합니다. 결과는 framework adapter에 넘길 수 있는 준비된 store입니다.
+Root `pipe` object는 `.use()`만 제공합니다. 각 `.use()`는 다른 middleware를 등록하거나 `.create(initialState)`를 호출할 수 있는 builder를 반환합니다. `.create()`는 새 `Store<T>`를 만들고 등록된 middleware를 선언 순서대로 적용한 뒤 framework adapter에 넘길 store를 반환합니다.
 
 ## 기본 사용법
 
@@ -20,51 +22,49 @@ import { create } from '@ilokesto/state/react';
 import { logger, persist } from '@ilokesto/state/middleware';
 import { pipe } from '@ilokesto/state/utils';
 
-const counterStore = pipe(
-  { count: 0 },
-  persist({ local: 'counter' }),
-  logger({ collapsed: true, diff: true }),
-);
+type CounterState = { count: number };
+
+const decodeCounter = (value: unknown): CounterState | null => {
+  if (typeof value !== 'object' || value === null) return null;
+  if (!('count' in value) || typeof value.count !== 'number') return null;
+  return { count: value.count };
+};
+
+const counterStore = pipe
+  .use(persist({ local: 'counter', decode: decodeCounter }))
+  .use(logger({ collapsed: true, diff: true }))
+  .create<CounterState>({ count: 0 });
 
 export const useCounter = create(counterStore);
 ```
 
-위 순서는 persistence가 initial value를 준비하고, 그 다음 logger가 이후 update를 관찰한다는 뜻입니다. 각 middleware가 store를 받아 다시 반환하므로 순서가 중요합니다.
+Middleware setup은 첫 번째 `.use()`부터 마지막 `.use()`까지 실행됩니다. Update에서는 처음 등록한 middleware가 가장 바깥쪽입니다. 순서가 중요하며 `pipe`는 선언 순서를 바꾸지 않고 검증합니다.
 
-## Middleware를 직접 호출하면 안 되나?
+## Builder syntax를 쓰는 이유
 
-직접 조합할 수도 있습니다.
-
-```ts lineNumbers
-const store = logger({ collapsed: true })(persist({ local: 'counter' })({ count: 0 }));
-```
-
-`pipe`는 같은 흐름을 더 읽기 쉽게 만들고, 코드에 보이는 순서와 runtime 순서를 맞춰줍니다.
+`pipe`는 호출할 수 없고 variadic middleware list도 받지 않습니다. `.use()`마다 middleware 하나를 등록한 뒤 plain initial state로 store를 만드세요.
 
 ```ts lineNumbers
-const store = pipe(
-  { count: 0 },
-  persist({ local: 'counter' }),
-  logger({ collapsed: true }),
-);
+const store = pipe
+  .use(validate(counterSchema))
+  .use(logger({ collapsed: true }))
+  .create({ count: 0 });
 ```
 
-위에서 아래로 읽으면 됩니다: state 생성, persistence 적용, logging 적용.
+위에서 아래로 읽으면 됩니다: validation 등록, logging 등록, state 생성.
 
 ## Validation과 함께 쓰기
 
 Validation은 side effect를 수행하는 middleware보다 앞에 두는 경우가 많습니다. 그래야 invalid state가 persist되거나 tooling으로 전달되지 않습니다.
 
 ```ts lineNumbers
-import { devtools, persist, validate } from '@ilokesto/state/middleware';
+import { devtools, validate } from '@ilokesto/state/middleware';
 import { pipe } from '@ilokesto/state/utils';
 
-const settingsStore = pipe(
-  { theme: 'system' as 'system' | 'light' | 'dark' },
-  validate(settingsSchema),
-  persist({ local: 'settings' }),
-  devtools('settings'),
-);
+const settingsStore = pipe
+  .use(validate(settingsSchema))
+  .use(devtools('settings'))
+  .create({ theme: 'system' as 'system' | 'light' | 'dark' });
 ```
 
 Validation이 update를 거부하면 뒤쪽 middleware는 invalid state를 보지 않아야 합니다.
@@ -78,10 +78,9 @@ import { create } from '@ilokesto/state/react';
 import { logger } from '@ilokesto/state/middleware';
 import { pipe } from '@ilokesto/state/utils';
 
-const todoStore = pipe(
-  { items: [] as string[] },
-  logger({ diff: true }),
-);
+const todoStore = pipe
+  .use(logger({ diff: true }))
+  .create({ items: [] as string[] });
 
 export const useTodos = create(reduceTodos, todoStore);
 ```
@@ -90,27 +89,26 @@ Reducer action은 next state로 변환되고, 그 결과 update가 store middlew
 
 ## 기존 Store instance
 
-`pipe`는 항상 initial state에서 새 `Store<T>`를 만듭니다. 이미 특정 `Store<T>` instance를 소유하고 있고 그 instance를 보존해야 한다면 `pipe` 대신 middleware helper에 store를 직접 넘기세요.
+`pipe`는 항상 plain initial state에서 새 `Store<T>`를 만듭니다. `.create()`는 기존 `Store`를 거부합니다. 다른 module이 정확한 store instance를 이미 소유한다면 그 store를 framework adapter에 직접 넘기고, 생성에는 `pipe`를 사용하지 마세요.
 
 ```ts lineNumbers
 import { Store } from '@ilokesto/store';
-import { logger } from '@ilokesto/state/middleware';
+import { create } from '@ilokesto/state/react';
 
 const existingStore = new Store({ count: 0 });
-const storeWithLogger = logger({ collapsed: true })(existingStore);
+const useCounter = create(existingStore);
 ```
 
-다른 module이 이미 store를 subscribe하고 있거나, utility layer 밖 infrastructure가 store를 만든 경우 이 방식을 사용하세요.
+다른 module이 이미 store를 subscribe하고 있거나 utility layer 밖 infrastructure가 store를 만든 경우 이 방식을 사용하세요.
 
 ## Piped store 테스트하기
 
 `pipe`는 plain `Store<T>`를 반환하므로 framework adapter 없이 먼저 test할 수 있습니다.
 
 ```ts lineNumbers
-const store = pipe(
-  { count: 0 },
-  validate(counterSchema),
-);
+const store = pipe
+  .use(validate(counterSchema))
+  .create({ count: 0 });
 
 store.setState({ count: 1 });
 expect(store.getState()).toEqual({ count: 1 });
@@ -120,7 +118,8 @@ Persistence나 browser-only middleware는 필요한 storage API를 제공하는 
 
 ## 자주 하는 실수
 
-- **`pipe`가 기존 store를 mutate한다고 생각하기.** `pipe`는 `initialState`에서 새 `Store<T>`를 만듭니다.
-- **순서 무시하기.** Middleware는 왼쪽에서 오른쪽으로 적용되고, side-effect middleware는 보통 validation 뒤에 둡니다.
+- **`pipe(initialState, ...middleware)` 호출하기.** `pipe`는 object입니다. `pipe.use(...)`로 시작하고 `.create(initialState)`로 끝내세요.
+- **기존 store를 `.create()`에 넘기기.** Builder는 plain initial state만 받고 새 `Store<T>`를 만듭니다.
+- **순서 무시하기.** Middleware는 선언 순서대로 등록되며 side-effect middleware는 보통 validation 뒤에 둡니다.
 - **framework adapter call을 `pipe` 안에 넣기.** `pipe`는 store middleware를 조합하지 React/Vue/Svelte/Solid/Angular adapter call을 조합하지 않습니다.
 - **store 생성 후 update에 `pipe`를 사용하기.** Store가 이미 있으면 `setState`, `dispatch`, 또는 [`adaptor`](/ko/state/utility/adaptor)를 사용하세요.

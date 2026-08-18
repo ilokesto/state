@@ -131,11 +131,19 @@ import { create } from '@ilokesto/state/react';
 import { logger, persist } from '@ilokesto/state/middleware';
 import { pipe } from '@ilokesto/state/utils';
 
-const searchStore = pipe(
-  initialSearchState,
-  persist({ local: 'search-state' }),
-  logger({ collapsed: true }),
-);
+const decodeSearch = (value: unknown): SearchState | null => {
+  if (typeof value !== 'object' || value === null) return null;
+  if (!('query' in value) || typeof value.query !== 'string') return null;
+  if (!('page' in value) || typeof value.page !== 'number') return null;
+  if (!('pageSize' in value) || typeof value.pageSize !== 'number') return null;
+  if (!('sort' in value) || (value.sort !== 'relevance' && value.sort !== 'newest')) return null;
+  return { query: value.query, page: value.page, pageSize: value.pageSize, sort: value.sort };
+};
+
+const searchStore = pipe
+  .use(persist({ local: 'search-state', decode: decodeSearch }))
+  .use(logger({ collapsed: true }))
+  .create<SearchState>(initialSearchState);
 
 export const useSearch = create<SearchState>(searchStore);
 ```

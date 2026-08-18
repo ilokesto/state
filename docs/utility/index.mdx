@@ -21,11 +21,19 @@ import { create } from '@ilokesto/state/react';
 import { logger, persist } from '@ilokesto/state/middleware';
 import { pipe } from '@ilokesto/state/utils';
 
-const preferencesStore = pipe(
-  { theme: 'system' as 'system' | 'light' | 'dark' },
-  persist({ local: 'preferences' }),
-  logger({ collapsed: true }),
-);
+type PreferencesState = { theme: 'system' | 'light' | 'dark' };
+
+const decodePreferences = (value: unknown): PreferencesState | null => {
+  if (typeof value !== 'object' || value === null || !('theme' in value)) return null;
+  return value.theme === 'system' || value.theme === 'light' || value.theme === 'dark'
+    ? { theme: value.theme }
+    : null;
+};
+
+const preferencesStore = pipe
+  .use(persist({ local: 'preferences', decode: decodePreferences }))
+  .use(logger({ collapsed: true }))
+  .create<PreferencesState>({ theme: 'system' });
 
 export const usePreferences = create(preferencesStore);
 ```
@@ -61,10 +69,9 @@ import { create } from '@ilokesto/state/react';
 import { validate } from '@ilokesto/state/middleware';
 import { adaptor, pipe } from '@ilokesto/state/utils';
 
-const profileStore = pipe(
-  { name: '', tags: [] as string[] },
-  validate(profileSchema),
-);
+const profileStore = pipe
+  .use(validate(profileSchema))
+  .create({ name: '', tags: [] as string[] });
 
 const useProfile = create(profileStore);
 

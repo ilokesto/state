@@ -10,41 +10,86 @@ description: "Persist store state to localStorage, sessionStorage, or cookies."
 ## Signature
 
 ```ts lineNumbers
-persist<T, P extends Array<MigrationFn>>(
-  initialState: T | Store<T>,
-  options: PersistConfig<T, P>,
-): Store<T>
-persist(options): <T>(initialState: T | Store<T>) => Store<T>
+persist<DecodedState, const Steps extends readonly MigrationFn[]>(
+  options: SafePersistConfig<DecodedState, Steps>,
+): PipeMiddleware<DecodedState>
 ```
+
+`persist(options)` returns registered middleware for `pipe.use(...)`. Create the store with `.create(initialState)` after registering it. `decode` is required so values read from storage are validated before they become live state.
 
 ## Local storage example
 
 ```ts lineNumbers
 import { persist } from '@ilokesto/state/middleware';
+import { pipe } from '@ilokesto/state/utils';
 
-const store = persist({ theme: 'light' as 'light' | 'dark' }, { local: 'theme' });
+type ThemeState = { theme: 'light' | 'dark' };
+
+const decodeTheme = (value: unknown): ThemeState | null => {
+  if (typeof value !== 'object' || value === null) return null;
+  if (!('theme' in value) || (value.theme !== 'light' && value.theme !== 'dark')) return null;
+  return { theme: value.theme };
+};
+
+const store = pipe
+  .use(persist({ local: 'theme', decode: decodeTheme }))
+  .create<ThemeState>({ theme: 'light' });
 ```
 
 ## Session and cookie storage
 
 ```ts lineNumbers
-const sessionStore = persist({ token: null as string | null }, { session: 'session' });
-const cookieStore = persist({ accepted: false }, { cookie: 'cookie-consent' });
+type SessionState = { token: string | null };
+type ConsentState = { accepted: boolean };
+
+const decodeSession = (value: unknown): SessionState | null => {
+  if (typeof value !== 'object' || value === null || !('token' in value)) return null;
+  return typeof value.token === 'string' || value.token === null ? { token: value.token } : null;
+};
+
+const decodeConsent = (value: unknown): ConsentState | null => {
+  if (typeof value !== 'object' || value === null || !('accepted' in value)) return null;
+  return typeof value.accepted === 'boolean' ? { accepted: value.accepted } : null;
+};
+
+const sessionStore = pipe
+  .use(persist({ session: 'session', decode: decodeSession }))
+  .create<SessionState>({ token: null });
+
+const cookieStore = pipe
+  .use(persist({ cookie: 'cookie-consent', decode: decodeConsent }))
+  .create<ConsentState>({ accepted: false });
 ```
 
 ## Migration example
 
 ```ts lineNumbers
-const settings = persist(
-  { theme: 'light', count: 0 },
-  {
+import type { PersistMigration } from '@ilokesto/state/middleware';
+
+type SettingsV1 = { theme: string };
+type SettingsState = { theme: string; count: number };
+
+const toV1: PersistMigration<unknown, SettingsV1> = (old) => ({
+  theme: typeof old === 'string' ? old : 'light',
+});
+const toCurrent: PersistMigration<SettingsV1, SettingsState> = (old) => ({
+  ...old,
+  count: 0,
+});
+const decodeSettings = (value: unknown): SettingsState | null => {
+  if (typeof value !== 'object' || value === null) return null;
+  if (!('theme' in value) || typeof value.theme !== 'string') return null;
+  if (!('count' in value) || typeof value.count !== 'number') return null;
+  return { theme: value.theme, count: value.count };
+};
+
+const settings = pipe
+  .use(persist({
     local: 'settings',
-    migrate: [
-      (old) => ({ theme: String(old), count: 0 }),
-      (old) => ({ ...old, count: Number(old.count ?? 0) }),
-    ],
-  },
-);
+    migrate: [toV1, toCurrent],
+    decode: decodeSettings,
+  }))
+  .create<SettingsState>({ theme: 'light', count: 0 });
 ```
 
 ## Storage format and caveats
@@ -69,9 +114,17 @@ Pass `skipHydration: true` to defer hydration. The store keeps the initial state
 import { persist } from '@ilokesto/state/middleware';
 import { pipe } from '@ilokesto/state/utils';
 
+type CounterState = { count: number };
+
+const decodeCounter = (value: unknown): CounterState | null => {
+  if (typeof value !== 'object' || value === null) return null;
+  if (!('count' in value) || typeof value.count !== 'number') return null;
+  return { count: value.count };
+};
+
 const counterStore = pipe
   .use(persist({ local: 'counter', decode: decodeCounter, skipHydration: true }))
-  .create({ count: 0 });
+  .create<CounterState>({ count: 0 });
 
 // In a React client component:
 useEffect(() => {
@@ -94,16 +147,18 @@ Pass `onRehydrateStorage` to observe eager or manual hydration. The factory runs
 On success, the callback receives the hydrated state and `undefined`. Empty storage is also successful and preserves the live pre-hydration state. Storage, parsing, migration, and decoding failures preserve that live state and call the callback with `undefined` and the original error. `store.persist.hasHydrated()` is already `true` inside the post callback. If the post callback throws, that exception propagates and is not passed back into the same callback.
 
 ```ts lineNumbers
-persist({
-  local: 'theme',
-  decode: decodeTheme,
-  skipHydration: true,
-  onRehydrateStorage: (state) => (rehydratedState, error) => {
-    if (error) {
-      console.error('Rehydration failed', error);
-      return;
-    }
-    console.log('Rehydrated from', state, 'to', rehydratedState);
-  },
-});
+const themeStore = pipe
+  .use(persist({
+    local: 'theme',
+    decode: decodeTheme,
+    skipHydration: true,
+    onRehydrateStorage: (state) => (rehydratedState, error) => {
+      if (error) {
+        console.error('Rehydration failed', error);
+        return;
+      }
+      console.log('Rehydrated from', state, 'to', rehydratedState);
+    },
+  }))
+  .create<ThemeState>({ theme: 'light' });
 ```

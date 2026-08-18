@@ -10,8 +10,7 @@ description: "개발 환경에서 state update를 Redux DevTools extension에 �
 ## Signature
 
 ```ts lineNumbers
-devtools<T>(initialState: T | Store<T>, name: string): Store<T>
-devtools(name: string): <T>(initialState: T | Store<T>) => Store<T>
+devtools(name: string): PipeAnyMiddleware
 ```
 
 ## 예제
@@ -20,7 +19,10 @@ devtools(name: string): <T>(initialState: T | Store<T>) => Store<T>
 import { devtools, logger } from '@ilokesto/state/middleware';
 import { pipe } from '@ilokesto/state/utils';
 
-const store = pipe({ count: 0 }, devtools('counter'), logger());
+const store = pipe
+  .use(devtools('counter'))
+  .use(logger())
+  .create({ count: 0 });
 ```
 
 ## 지원하는 DevTools action

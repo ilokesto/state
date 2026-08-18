@@ -10,16 +10,18 @@ description: "Delay rapid updates and apply the latest accumulated state."
 ## Signature
 
 ```ts lineNumbers
-debounce<T>(initialState: T | Store<T>, wait: number | undefined): Store<T>
-debounce(wait?: number): <T>(initialState: T | Store<T>) => Store<T>
+debounce(wait?: number): PipeAnyMiddleware
 ```
 
 ## Example
 
 ```ts lineNumbers
 import { debounce } from '@ilokesto/state/middleware';
+import { pipe } from '@ilokesto/state/utils';
 
-const store = debounce({ query: '' }, 250);
+const store = pipe
+  .use(debounce(250))
+  .create({ query: '' });
 
 store.setState({ query: 'i' });
 store.setState({ query: 'il' });

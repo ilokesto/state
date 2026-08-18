@@ -10,8 +10,7 @@ description: "Log state updates during development."
 ## Signature
 
 ```ts lineNumbers
-logger<T>(initialState: T | Store<T>, options?: LoggerOptions): Store<T>
-logger(options?: LoggerOptions): <T>(initialState: T | Store<T>) => Store<T>
+logger(options?: LoggerOptions): PipeAnyMiddleware
 
 type LoggerOptions = {
   collapsed?: boolean;
@@ -24,8 +23,11 @@ type LoggerOptions = {
 
 ```ts lineNumbers
 import { logger } from '@ilokesto/state/middleware';
+import { pipe } from '@ilokesto/state/utils';
 
-const store = logger({ count: 0 }, { collapsed: true, diff: true, timestamp: true });
+const store = pipe
+  .use(logger({ collapsed: true, diff: true, timestamp: true }))
+  .create({ count: 0 });
 
 store.setState((state) => ({ count: state.count + 1 }));
 ```

@@ -5,10 +5,9 @@ description: "How @ilokesto/state middleware is composed and when each helper fi
 
 # Middleware introduction
 
-`@ilokesto/state/middleware` provides small wrappers around `@ilokesto/store` middleware. Each helper can be used in two styles:
+`@ilokesto/state/middleware` provides small wrappers around `@ilokesto/store` middleware. Each helper returns registered pipe middleware. Pass that value to `pipe.use(...)`, add more middleware with additional `.use()` calls, then create a store from plain state with `.create(initialState)`.
 
-- immediate style: pass `initialState` or an existing `Store<T>` first and get a `Store<T>` back,
-- curried style: pass options first and get a function that can be composed with `pipe`.
+The public composition API is builder-only. `pipe` is not callable, and middleware helpers do not expose an immediate `initialState` or existing-`Store<T>` construction mode.
 
 ## When middleware runs
 
@@ -32,12 +31,16 @@ const schema = {
   },
 } as const;
 
-const store = pipe(
-  { count: 0 },
-  validate(schema),
-  logger({ collapsed: true, diff: true }),
-  persist({ local: 'counter' }),
-);
+const decodeCounter = (value: unknown): { count: number } | null => {
+  const result = schema['~standard'].validate(value);
+  return 'value' in result ? result.value : null;
+};
+
+const store = pipe
+  .use(validate(schema))
+  .use(logger({ collapsed: true, diff: true }))
+  .use(persist({ local: 'counter', decode: decodeCounter }))
+  .create({ count: 0 });
 ```
 
 ## Available middleware

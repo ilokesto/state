@@ -5,10 +5,9 @@ description: "@ilokesto/state middleware를 조합하는 방식과 각 helper를
 
 # 미들웨어 소개
 
-`@ilokesto/state/middleware`는 `@ilokesto/store` middleware를 더 쉽게 붙이기 위한 작은 helper 모음입니다. 각 helper는 두 방식으로 사용할 수 있습니다.
+`@ilokesto/state/middleware`는 `@ilokesto/store` middleware를 더 쉽게 붙이기 위한 작은 helper 모음입니다. 각 helper는 등록된 pipe middleware를 반환합니다. 반환값을 `pipe.use(...)`에 넘기고, middleware가 더 있으면 `.use()`를 이어 붙인 뒤 `.create(initialState)`로 plain state에서 store를 만드세요.
 
-- 즉시 적용: `initialState` 또는 기존 `Store<T>`를 먼저 넘기고 `Store<T>`를 받습니다.
-- curried 방식: option을 먼저 넘기고 `pipe`에서 조합할 수 있는 함수를 받습니다.
+Public composition API는 builder-only입니다. `pipe`는 호출할 수 없으며 middleware helper는 `initialState`나 기존 `Store<T>`를 즉시 받는 생성 mode를 제공하지 않습니다.
 
 ## 미들웨어가 실행되는 시점
 
@@ -32,12 +31,16 @@ const schema = {
   },
 } as const;
 
-const store = pipe(
-  { count: 0 },
-  validate(schema),
-  logger({ collapsed: true, diff: true }),
-  persist({ local: 'counter' }),
-);
+const decodeCounter = (value: unknown): { count: number } | null => {
+  const result = schema['~standard'].validate(value);
+  return 'value' in result ? result.value : null;
+};
+
+const store = pipe
+  .use(validate(schema))
+  .use(logger({ collapsed: true, diff: true }))
+  .use(persist({ local: 'counter', decode: decodeCounter }))
+  .create({ count: 0 });
 ```
 
 ## 제공되는 미들웨어

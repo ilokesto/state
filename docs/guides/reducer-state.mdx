@@ -150,12 +150,24 @@ import { create } from '@ilokesto/state/react';
 import { devtools, logger, persist } from '@ilokesto/state/middleware';
 import { pipe } from '@ilokesto/state/utils';
 
-const cartStore = pipe(
-  initialCartState,
-  persist({ local: 'cart' }),
-  logger({ collapsed: true, diff: true }),
-  devtools('cart'),
-);
+const isCartItem = (value: unknown): value is CartItem => {
+  return typeof value === 'object' && value !== null
+    && 'id' in value && typeof value.id === 'string'
+    && 'quantity' in value && typeof value.quantity === 'number';
+};
+
+const decodeCart = (value: unknown): CartState | null => {
+  if (typeof value !== 'object' || value === null) return null;
+  if (!('items' in value) || !Array.isArray(value.items) || !value.items.every(isCartItem)) return null;
+  if (!('coupon' in value) || (value.coupon !== null && typeof value.coupon !== 'string')) return null;
+  return { items: value.items, coupon: value.coupon };
+};
+
+const cartStore = pipe
+  .use(persist({ local: 'cart', decode: decodeCart }))
+  .use(logger({ collapsed: true, diff: true }))
+  .use(devtools('cart'))
+  .create<CartState>(initialCartState);
 
 export const useCart = create<CartState, CartAction>(reduceCart, cartStore);
 ```
