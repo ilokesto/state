@@ -128,7 +128,18 @@ export function getCookie(name: string) {
   if (typeof document === 'undefined') return null;
   const cookies = document.cookie.split('; ');
   const cookie = cookies.find((c) => c.startsWith(`${name}=`));
-  return cookie ? cookie.split('=')[1] : null;
+  if (!cookie) return null;
+
+  const separatorIndex = cookie.indexOf('=');
+  const rawValue = cookie.slice(separatorIndex + 1);
+
+  try {
+    const decodedValue = decodeURIComponent(rawValue);
+    return encodeURIComponent(decodedValue) === rawValue ? decodedValue : rawValue;
+  } catch (error) {
+    if (error instanceof URIError) return rawValue;
+    throw error;
+  }
 }
 
 export const getSafeStorage = <State>({
@@ -195,7 +206,7 @@ export const setStorage: PersistUtils['setStorage'] = ({
     } else if (storageType === 'session') {
       sessionStorage.setItem(storageKey, encodedState);
     } else if (storageType === 'cookie') {
-      document.cookie = `${storageKey}=${encodedState}`;
+      document.cookie = `${storageKey}=${encodeURIComponent(encodedState)}`;
     }
 
     storageWriteCache.set(cacheKey, encodedState);
