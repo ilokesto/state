@@ -16,5 +16,8 @@ export function create<T, Action extends ReducerAction>(
   firstArg: Store<T> | T | ReduceFn<T, Action>,
   secondArg?: T | Store<T>,
 ) {
-  return createFrameworkAdapter(createUseState<T, Action>, firstArg, secondArg);
+  return createFrameworkAdapter(
+    createUseState<T, Action>,
+    { firstArg, secondArg, isReduce: arguments.length === 2 },
+  );
 }
