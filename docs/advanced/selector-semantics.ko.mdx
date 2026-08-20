@@ -7,13 +7,29 @@ description: "adapter별 selector와 snapshot 동작입니다."
 
 selector는 adapter-level projection function입니다. underlying store state를 바꾸지 않고 reactive reader가 받을 값을 결정합니다.
 
+## 공통 shallow 비교
+
+모든 adapter(React, Vue, Solid, Svelte, Angular)는 selector 결과가 notification을 발생시킬지 결정하기 위해 동일한 1-level `shallow` 비교를 사용합니다. zustand v5 패턴과 같습니다.
+
+| 값 타입 | 비교 방식 |
+|---|---|
+| 원시값 | `Object.is` |
+| plain object | shallow — 1st-level key/value를 `Object.is`로 비교 |
+| 배열 | shallow — 요소별 `Object.is` 비교 |
+| `Map` / `Set` | entries/values를 `Object.is`로 비교 |
+| `Date` | `getTime()` 동등성 |
+| `RegExp` | `source`와 `flags` 동등성 |
+| 기타 빌트인 (Error, Promise, enumerable own property가 없는 class instance) | 참조 동등성 (`Object.is`) |
+
+store가 변경되어도 selected value가 shallow-equal이면 framework consumer에 notify하지 않습니다. 관련 있는 update는 정확히 한 번만 notify합니다.
+
 ## React snapshots
 
-React는 `useSyncExternalStore`를 사용합니다. snapshot getter는 selector를 적용하고, 전체 store snapshot이 내부 `deepCompare` helper 기준으로 깊게 같으면 이전 selection을 재사용합니다.
+React는 `useSyncExternalStore`를 사용합니다. snapshot getter는 selector를 적용하고 결과가 shallow-equal이면 이전 selection을 재사용합니다. server snapshot은 store의 initial state에서 선택하여 hydration 의미를 보존합니다.
 
 ## Vue, Solid, Angular
 
-Vue는 최신 state를 shallow ref에 보관하고 `ComputedRef`를 노출합니다. Solid는 `from`과 `createMemo`로 `Accessor`를 노출합니다. Angular는 signal snapshot을 저장하고 computed `Signal`을 반환합니다.
+Vue는 최신 state를 shallow ref에 보관하고 `ComputedRef`를 노출합니다. Solid는 `createSignal`로 `Accessor`를 노출합니다. Angular는 signal snapshot을 저장하고 computed `Signal`을 반환합니다.
 
 ## Svelte
 
@@ -21,4 +37,4 @@ Svelte `select`는 subscription update마다 selector를 실행하는 readable s
 
 ## 주의할 점
 
-selector는 cheap and pure하게 유지하세요. selector가 매번 새 object를 만들면 semantic value가 같아 보여도 일부 adapter에서 notify 또는 recompute가 일어날 수 있습니다.
+selector는 cheap and pure하게 유지하세요. selector가 매번 새 object를 만들면 semantic value가 같아 보여도 일부 adapter에서 notify 또는 recompute가 일어날 수 있습니다. selector identity를 안정적으로 유지하려면 module scope에 정의하거나 `useCallback`으로 감싸세요.

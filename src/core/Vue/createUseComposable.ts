@@ -1,18 +1,11 @@
 import type { Store } from '@ilokesto/store';
 import { computed, getCurrentScope, onScopeDispose, shallowRef } from 'vue';
 
-import { dispatchStoreAction } from '../../lib/actionMetadata.js';
 import type { ReducerAction } from '../../types/ReduceFn.js';
+import { createDispatch } from '../shared/createDispatch.js';
+import { identity } from '../shared/identity.js';
 import { shallow } from '../shared/shallow.js';
 import type { ActionWriter, Selector, StateWriter } from './types.js';
-
-const identity = <Value>(value: Value): Value => value;
-
-function createDispatch<T, Action extends ReducerAction>(store: Store<T>): ActionWriter<Action> {
-  return (action) => {
-    dispatchStoreAction(store, action);
-  };
-}
 
 function createSelection<T, S>(store: Store<T>, selector: Selector<T, S>) {
   if (!getCurrentScope()) {

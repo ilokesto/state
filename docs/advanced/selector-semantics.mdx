@@ -7,13 +7,29 @@ description: "How selectors and snapshots behave across adapters."
 
 Selectors are adapter-level projection functions. They do not change the underlying store state; they decide what a reactive reader receives.
 
+## Shared shallow comparison
+
+All adapters (React, Vue, Solid, Svelte, Angular) use the same one-level `shallow` comparison to decide whether a selector result should trigger a notification. This mirrors the zustand v5 pattern.
+
+| Value type | Comparison |
+|---|---|
+| Primitives | `Object.is` |
+| Plain objects | Shallow — first-level keys/values compared via `Object.is` |
+| Arrays | Shallow — element-by-element via `Object.is` |
+| `Map` / `Set` | Entries/values compared via `Object.is` |
+| `Date` | `getTime()` equality |
+| `RegExp` | `source` and `flags` equality |
+| Other built-ins (Error, Promise, class instances without enumerable own properties) | Reference equality (`Object.is`) |
+
+An update that changes the store but leaves the selected value shallow-equal does not notify the framework consumer. A relevant update notifies the consumer exactly once.
+
 ## React snapshots
 
-React uses `useSyncExternalStore`. Its snapshot getter applies the selector and reuses the previous selection when the full store snapshot is deeply equal according to the internal `deepCompare` helper.
+React uses `useSyncExternalStore`. Its snapshot getter applies the selector and reuses the previous selection when the result is shallow-equal. The server snapshot selects from the store's initial state, preserving hydration semantics.
 
 ## Vue, Solid, and Angular
 
-Vue stores the latest state in a shallow ref and exposes a `ComputedRef`. Solid uses `from` plus `createMemo` to expose an `Accessor`. Angular stores a signal snapshot and returns a computed `Signal`.
+Vue stores the latest state in a shallow ref and exposes a `ComputedRef`. Solid uses `createSignal` to expose an `Accessor`. Angular stores a signal snapshot and returns a computed `Signal`.
 
 ## Svelte
 
@@ -21,4 +37,4 @@ Svelte `select` creates a readable store that runs the selector for each subscri
 
 ## Caveat
 
-Selectors should be cheap and pure. If a selector allocates a new object every time, some adapters may still notify or recompute even when the semantic value feels unchanged.
+Selectors should be cheap and pure. If a selector allocates a new object every time, some adapters may still notify or recompute even when the semantic value feels unchanged. Define selectors at module scope or wrap them in `useCallback` to keep their identity stable.

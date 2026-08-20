@@ -8,15 +8,27 @@ import type {
   PipeMiddlewareMetadata,
 } from '../utils/pipe/types.js';
 
+/**
+ * Options for the {@link history} middleware.
+ */
 export type HistoryOptions = {
+  /** Maximum number of undo entries to retain. Must be a non-negative integer. Defaults to `300`. */
   readonly limit?: number;
 };
 
+/**
+ * Undo/redo controls added to a store by the {@link history} middleware.
+ */
 export type HistoryControls = {
+  /** Revert to the previous recorded state. */
   readonly undo: () => void;
+  /** Re-apply the last undone state. */
   readonly redo: () => void;
+  /** Returns `true` when at least one state can be undone. */
   readonly canUndo: () => boolean;
+  /** Returns `true` when at least one state can be redone. */
   readonly canRedo: () => boolean;
+  /** Remove all recorded history without changing the current state. */
   readonly clearHistory: () => void;
 };
 
@@ -189,6 +201,31 @@ function applyHistory<State>(
   return store;
 }
 
+/**
+ * Create a pipe middleware that records state changes for undo/redo.
+ *
+ * Adds `undo()`, `redo()`, `canUndo()`, `canRedo()`, and `clearHistory()`
+ * to the store. Only successful synchronous state changes are recorded;
+ * replayed states (undo/redo) are not re-recorded.
+ *
+ * Cannot share a pipe chain with `debounce()` or `throttle()` — delayed
+ * updates lack the synchronous commit boundary history requires.
+ *
+ * @param options - Configuration.
+ * @param options.limit - Maximum history entries. Defaults to `300`.
+ * @returns Pipe middleware registered with `@ilokesto/state/history` metadata.
+ *
+ * @example
+ * ```ts
+ * import { history } from '@ilokesto/state/middleware';
+ * import { pipe } from '@ilokesto/state/utils';
+ *
+ * const store = pipe.use(history({ limit: 50 })).create({ count: 0 });
+ * store.setState({ count: 1 });
+ * store.undo(); // count: 0
+ * store.redo(); // count: 1
+ * ```
+ */
 export function history(options?: HistoryOptions): HistoryPipeMiddleware {
   const limit = resolveHistoryLimit(options);
   const middleware: PipeAnyMiddleware<readonly [], readonly [HistoryCapability]> = (store) =>

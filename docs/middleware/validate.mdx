@@ -5,12 +5,15 @@ description: "Block invalid synchronous state updates with Standard Schema."
 
 # validate
 
-`validate` runs a Standard Schema v1 validator before the store accepts the next state. If validation fails, the update is stopped and an error is logged.
+`validate` runs a Standard Schema v1 validator before the store accepts the next state. If validation fails, the update is stopped and `onError` is called.
 
 ## Signature
 
 ```ts lineNumbers
-validate<T>(schema: StandardSchemaV1<T, T>): PipeMiddleware<T>
+validate<Schema>(
+  schema: StandardSchemaV1<T, T>,
+  options?: { onError?: (issues: ReadonlyArray<StandardSchemaIssue>) => void },
+): PipeMiddleware<T>
 ```
 
 ## Example
@@ -41,8 +44,20 @@ const store = pipe
 
 ## What happens on failure
 
-When the schema returns `issues`, `validate` logs `[Validation Error] Invalid state:` and does not call the next middleware. The store keeps its previous state.
+When the schema returns `issues`, `validate` calls `onError` (defaults to `console.error`) and does not call the next middleware. The store keeps its previous state.
+
+### Custom error handling
+
+Pass `onError` to control failure behavior. Throw inside the callback to propagate the error to the caller of `setState`:
+
+```ts lineNumbers
+const store = pipe
+  .use(validate(schema, {
+    onError: (issues) => { throw new Error(issues[0]?.message ?? 'Validation failed'); },
+  }))
+  .create<CounterState>({ count: 0 });
+```
 
 ## Async caveat
 
-Async Standard Schema validation is not supported. If `validate()` returns a Promise-like result, the middleware logs an async validation error and stops the update. Run async checks before calling `setState`.
+Async Standard Schema validation is not supported. If `validate()` returns a Promise-like result, the middleware calls `onError` with a synthetic issue and stops the update. Run async checks before calling `setState`.

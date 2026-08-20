@@ -51,8 +51,13 @@ type MigrationTupleValidation<
 type ValidMigrationTuple<Steps extends readonly MigrationFn[]> = Steps &
   MigrationTupleValidation<Steps>;
 
+/**
+ * Persist lifecycle controls added to a store by the `persist` middleware.
+ */
 export type PersistControls<State> = {
+  /** Returns `true` after the initial or manual rehydration attempt has completed. */
   readonly hasHydrated: () => boolean;
+  /** Manually trigger rehydration when `skipHydration` was set. */
   readonly rehydrate: () => void;
 };
 

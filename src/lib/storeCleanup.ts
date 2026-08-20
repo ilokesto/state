@@ -7,14 +7,13 @@ type CleanupEntry = {
   readonly cleanup: Cleanup;
 };
 
-const cleanupsByStore = new WeakMap<Store<unknown>, Set<CleanupEntry>>();
-const cleanupEntriesByStore: WeakMap<object, Set<CleanupEntry>> = cleanupsByStore;
+const cleanupsByStore = new WeakMap<object, Set<CleanupEntry>>();
 
 export function registerStoreCleanup<T>(store: Store<T>, cleanup: Cleanup): () => void {
   const entry: CleanupEntry = { active: true, cleanup };
-  const entries = cleanupEntriesByStore.get(store) ?? new Set<CleanupEntry>();
+  const entries = cleanupsByStore.get(store) ?? new Set<CleanupEntry>();
   entries.add(entry);
-  cleanupEntriesByStore.set(store, entries);
+  cleanupsByStore.set(store, entries);
 
   return () => {
     if (!entry.active) {
@@ -26,14 +25,24 @@ export function registerStoreCleanup<T>(store: Store<T>, cleanup: Cleanup): () =
   };
 }
 
+/**
+ * Dispose a store by running all registered cleanup functions.
+ *
+ * Cancels pending timers (debounce, throttle) and releases middleware-owned
+ * resources. Disposal is scoped to the given store and is safe to call
+ * multiple times.
+ *
+ * @param store - The store to dispose.
+ * @throws {AggregateError} When one or more cleanup functions throw.
+ */
 export function dispose<T>(store: Store<T>): void {
-  const entries = cleanupEntriesByStore.get(store);
+  const entries = cleanupsByStore.get(store);
   if (!entries) {
     return;
   }
 
   const snapshot = [...entries];
-  cleanupEntriesByStore.delete(store);
+  cleanupsByStore.delete(store);
   const errors: unknown[] = [];
 
   for (const entry of snapshot) {

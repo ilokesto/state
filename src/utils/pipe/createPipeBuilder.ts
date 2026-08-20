@@ -100,4 +100,21 @@ function createRootUse(): unknown {
   };
 }
 
+/**
+ * Create a pipe builder for composing middleware into a store.
+ *
+ * Start with `pipe.use(...)`, chain more `.use(...)` calls in outer-to-inner
+ * order, then call `.create(initialState)` to materialize the store.
+ *
+ * @example
+ * ```ts
+ * import { logger, persist } from '@ilokesto/state/middleware';
+ * import { pipe } from '@ilokesto/state/utils';
+ *
+ * const store = pipe
+ *   .use(logger())
+ *   .use(persist({ local: 'key', decode: (v) => v as State | null }))
+ *   .create({ count: 0 });
+ * ```
+ */
 export const pipe: Pipe = Object.freeze({ use: createRootUse() });

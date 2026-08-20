@@ -74,6 +74,7 @@ const applyPersist = <T>(
 
   let hydrated = false;
   let prevPersistedState = store.getState() as T;
+  let lastEncodedValue: string | undefined;
 
   const runRehydration = (fallbackState: T) => {
     if (!optionObj.storageType) {
@@ -96,6 +97,9 @@ const applyPersist = <T>(
 
     switch (result.kind) {
       case 'hydrated':
+        if (optionObj.storageType) {
+          lastEncodedValue = JSON.stringify({ state: result.state, version: optionObj.storageVersion });
+        }
         baseSetState(result.state);
         prevPersistedState = result.state;
         hydrated = true;
@@ -131,7 +135,13 @@ const applyPersist = <T>(
       const currentAfterUpdate = store.getState() as T;
 
       if (!Object.is(prevPersistedState, currentAfterUpdate)) {
-        setStorage({ ...optionObj, value: currentAfterUpdate });
+        const encodedState = JSON.stringify({ state: currentAfterUpdate, version: optionObj.storageVersion });
+
+        if (encodedState !== lastEncodedValue) {
+          setStorage({ ...optionObj, value: currentAfterUpdate });
+        }
+
+        lastEncodedValue = encodedState;
         prevPersistedState = currentAfterUpdate;
       }
     });
@@ -143,6 +153,23 @@ const applyPersist = <T>(
 export function persist<DecodedState, const Steps extends readonly MigrationFn[]>(
   options: SafePersistConfig<DecodedState, Steps>,
 ): SafeCurriedPersist<DecodedState>;
+
+/**
+ * Create a pipe middleware that persists store state to browser storage.
+ *
+ * Reads the initial value from storage on creation (unless `skipHydration`
+ * is set), writes changed state back as JSON, and optionally runs migrations.
+ * A `decode` function is required to validate stored values before they
+ * become live state.
+ *
+ * Supports `localStorage`, `sessionStorage`, and cookies. Cookie writes
+ * include `path=/` so they are visible across all routes.
+ *
+ * @param options - Persistence configuration. Must include a storage key,
+ *   a `decode` function, and optionally `migrate`, `skipHydration`, and
+ *   `onRehydrateStorage`.
+ * @returns Pipe middleware registered with `@ilokesto/state/persist` metadata.
+ */
 export function persist<DecodedState, const Steps extends readonly MigrationFn[]>(
   options: SafePersistConfig<DecodedState, Steps>,
 ): object {

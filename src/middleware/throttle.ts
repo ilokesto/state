@@ -50,6 +50,24 @@ function applyThrottle<T>(initialState: T | Store<T>, wait = 300): Store<T> {
   return store;
 }
 
+/**
+ * Create a pipe middleware that throttles state updates with leading-edge
+ * behavior.
+ *
+ * The first update passes through immediately; subsequent updates are dropped
+ * until the wait period elapses. Dropped updates are not retried.
+ *
+ * @param wait - Throttle window in milliseconds. Defaults to `300`.
+ * @returns Pipe middleware registered with `@ilokesto/state/throttle` metadata.
+ *
+ * @example
+ * ```ts
+ * import { throttle } from '@ilokesto/state/middleware';
+ * import { pipe } from '@ilokesto/state/utils';
+ *
+ * const store = pipe.use(throttle(250)).create({ count: 0 });
+ * ```
+ */
 export function throttle(wait?: number): ThrottlePipeMiddleware {
   validateWait(wait);
   const middleware: PipeAnyMiddleware = (initialState) => applyThrottle(initialState, wait);

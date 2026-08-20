@@ -2,8 +2,9 @@ import type { Store } from '@ilokesto/store';
 
 import type { Readable, Subscriber, Unsubscriber, Updater } from 'svelte/store';
 
-import { dispatchStoreAction } from '../../lib/actionMetadata.js';
 import type { ReducerAction } from '../../types/ReduceFn.js';
+import { createDispatch } from '../shared/createDispatch.js';
+import { identity } from '../shared/identity.js';
 import { shallow } from '../shared/shallow.js';
 import type {
   ActionWriter,
@@ -11,14 +12,6 @@ import type {
   UseReducer,
   UseState,
 } from './types.js';
-
-const identity = <Value>(value: Value): Value => value;
-
-function createDispatch<T, Action extends ReducerAction>(store: Store<T>): ActionWriter<Action> {
-  return (action) => {
-    dispatchStoreAction(store, action);
-  };
-}
 
 function createReadable<T, S>(store: Store<T>, selector: Selector<T, S>): Readable<S> {
   return {

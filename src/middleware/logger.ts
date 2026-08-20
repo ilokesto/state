@@ -91,6 +91,26 @@ const applyLogger = <T>(
   return store;
 };
 
+/**
+ * Create a pipe middleware that logs state updates to the console.
+ *
+ * Logs the action type, previous state, and next state on each update.
+ * Automatically disabled in production (`NODE_ENV === 'production'`).
+ *
+ * @param options - Logging configuration.
+ * @param options.collapsed - Use `console.groupCollapsed` instead of `console.group`. Defaults to `false`.
+ * @param options.diff - Log a per-key diff between previous and next state. Defaults to `false`.
+ * @param options.timestamp - Include a timestamp in the log. Defaults to `true`.
+ * @returns Pipe middleware registered with `@ilokesto/state/logger` metadata.
+ *
+ * @example
+ * ```ts
+ * import { logger } from '@ilokesto/state/middleware';
+ * import { pipe } from '@ilokesto/state/utils';
+ *
+ * const store = pipe.use(logger({ diff: true })).create({ count: 0 });
+ * ```
+ */
 export function logger(options?: LoggerOptions): LoggerPipeMiddleware {
   const middleware: PipeAnyMiddleware = (initialState) => applyLogger(initialState, options);
   return definePipeableMiddleware(middleware, {

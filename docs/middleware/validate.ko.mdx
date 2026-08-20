@@ -5,12 +5,15 @@ description: "Standard Schema로 invalid synchronous state update를 막습니�
 
 # validate
 
-`validate`는 store가 다음 state를 받아들이기 전에 Standard Schema v1 validator를 실행합니다. validation이 실패하면 update를 멈추고 error를 로그로 남깁니다.
+`validate`는 store가 다음 state를 받아들이기 전에 Standard Schema v1 validator를 실행합니다. validation이 실패하면 update를 멈추고 `onError`를 호출합니다.
 
 ## Signature
 
 ```ts lineNumbers
-validate<T>(schema: StandardSchemaV1<T, T>): PipeMiddleware<T>
+validate<Schema>(
+  schema: StandardSchemaV1<T, T>,
+  options?: { onError?: (issues: ReadonlyArray<StandardSchemaIssue>) => void },
+): PipeMiddleware<T>
 ```
 
 ## 예제
@@ -41,8 +44,20 @@ const store = pipe
 
 ## 실패하면 어떻게 되나
 
-schema가 `issues`를 반환하면 `validate`는 `[Validation Error] Invalid state:`를 로그로 남기고 다음 middleware를 호출하지 않습니다. store는 이전 state를 유지합니다.
+schema가 `issues`를 반환하면 `validate`는 `onError`(기본값 `console.error`)를 호출하고 다음 middleware를 호출하지 않습니다. store는 이전 state를 유지합니다.
+
+### custom error handling
+
+`onError`를 전달하여 실패 동작을 제어할 수 있습니다. callback 안에서 throw하면 error가 `setState` 호출자에게 전파됩니다:
+
+```ts lineNumbers
+const store = pipe
+  .use(validate(schema, {
+    onError: (issues) => { throw new Error(issues[0]?.message ?? 'Validation failed'); },
+  }))
+  .create<CounterState>({ count: 0 });
+```
 
 ## Async 주의점
 
-async Standard Schema validation은 지원하지 않습니다. `validate()`가 Promise-like 결과를 반환하면 async validation error를 로그로 남기고 update를 멈춥니다. async check는 `setState` 호출 전에 수행하세요.
+async Standard Schema validation은 지원하지 않습니다. `validate()`가 Promise-like 결과를 반환하면 `onError`에 synthetic issue를 전달하고 update를 멈춥니다. async check는 `setState` 호출 전에 수행하세요.

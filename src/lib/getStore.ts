@@ -4,7 +4,7 @@ import type { ReduceFn, ReducerAction } from '../types/ReduceFn.js';
 
 type StoreSetStateAction<T> = Parameters<Store<T>['setState']>[0];
 
-const reducerByStore = new WeakMap<object, object>();
+const reducerByStore = new WeakMap<object, (...args: never[]) => unknown>();
 
 const isStore = <T>(initialValue: T | Store<T>): initialValue is Store<T> => {
   return initialValue instanceof Store;

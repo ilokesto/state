@@ -64,6 +64,48 @@ test('Given pipe validate middleware, when an update is invalid or async, then i
   expect(pipeStore.getState()).toEqual({ count: 1 });
 });
 
+test('Given pipe validate middleware with custom onError, when an update is invalid, then onError receives the issues', () => {
+  // Given
+  const receivedIssues: string[] = [];
+  const store = pipe
+    .use(validate(counterSchema, { onError: (issues) => { receivedIssues.push(issues[0]?.message ?? ''); } }))
+    .create({ count: 1 });
+
+  // When
+  store.setState({ count: -1 });
+
+  // Then
+  expect(receivedIssues).toEqual(['count must be a non-negative number']);
+  expect(store.getState()).toEqual({ count: 1 });
+});
+
+test('Given pipe validate middleware with throwing onError, when an update is invalid, then the error propagates', () => {
+  // Given
+  const store = pipe
+    .use(validate(counterSchema, { onError: () => { throw new Error('rejected'); } }))
+    .create({ count: 1 });
+
+  // When / Then
+  expect(() => store.setState({ count: -1 })).toThrow('rejected');
+  expect(store.getState()).toEqual({ count: 1 });
+});
+
+test('Given pipe validate middleware with custom onError, when an async schema is used, then onError is called with a synthetic issue', () => {
+  // Given
+  const receivedIssues: string[] = [];
+  const store = pipe
+    .use(validate(asyncCounterSchema, { onError: (issues) => { receivedIssues.push(issues[0]?.message ?? ''); } }))
+    .create({ count: 1 });
+
+  // When
+  store.setState({ count: 2 });
+
+  // Then
+  expect(receivedIssues.length).toBe(1);
+  expect(receivedIssues[0]).toContain('Async');
+  expect(store.getState()).toEqual({ count: 1 });
+});
+
 test('Given curried validate middleware, when it is appended twice, then it rejects the duplicate before Store creation', () => {
   // Given
   const builder = pipe.use(validate(counterSchema));

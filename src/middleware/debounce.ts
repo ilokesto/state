@@ -16,7 +16,7 @@ type DebouncePipeMiddleware = PipeableMiddleware<
 const applyDebounce = <T>(initialState: T | Store<T>, wait = 300): Store<T> => {
   const store = getStore(initialState);
 
-  let timeout: NodeJS.Timeout | null = null;
+  let timeout: ReturnType<typeof setTimeout> | null = null;
   let updates: Array<StoreSetStateAction<T>> = [];
   let savedNext: Dispatch<StoreSetStateAction<T>> | null = null;
   let unregisterTimeout: (() => void) | null = null;
@@ -66,6 +66,24 @@ const applyDebounce = <T>(initialState: T | Store<T>, wait = 300): Store<T> => {
   return store;
 };
 
+/**
+ * Create a pipe middleware that debounces state updates.
+ *
+ * Coalesces all updates within the wait period into a single commit.
+ * Function updaters are applied sequentially against the latest state at
+ * flush time; value updates overwrite previous ones.
+ *
+ * @param wait - Debounce delay in milliseconds. Defaults to `300`.
+ * @returns Pipe middleware registered with `@ilokesto/state/debounce` metadata.
+ *
+ * @example
+ * ```ts
+ * import { debounce } from '@ilokesto/state/middleware';
+ * import { pipe } from '@ilokesto/state/utils';
+ *
+ * const store = pipe.use(debounce(200)).create({ count: 0 });
+ * ```
+ */
 export function debounce(wait?: number): DebouncePipeMiddleware {
   const middleware: PipeAnyMiddleware = (initialState) => applyDebounce(initialState, wait);
   return definePipeableMiddleware(middleware, {

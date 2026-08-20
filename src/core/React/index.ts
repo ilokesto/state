@@ -12,6 +12,13 @@ export function create<T, Action extends ReducerAction>(
 
 export function create<T>(initialState: T | Store<T>): UseState<T>;
 
+/**
+ * Create a React state hook from plain state or a reducer.
+ *
+ * Returns a hook compatible with `useSyncExternalStore`. Call it with a
+ * selector to subscribe to a slice; call without arguments to read the full
+ * state. Use `.writeOnly()` or `.readOnly()` for lifecycle-independent access.
+ */
 export function create<T, Action extends ReducerAction>(
   firstArg: Store<T> | T | ReduceFn<T, Action>,
   secondArg?: T | Store<T>,

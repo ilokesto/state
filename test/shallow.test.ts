@@ -116,4 +116,43 @@ describe("shallow", () => {
 
     expect(() => shallow(a, b)).not.toThrow();
   });
+
+  // --- Regression: RegExp, Error, and other built-ins with no enumerable
+  // own properties were incorrectly reported as shallow-equal. ---
+
+  it("returns true for RegExp with same source and flags", () => {
+    expect(shallow(/abc/g, /abc/g)).toBe(true);
+    expect(shallow(/^\d+$/i, /^\d+$/i)).toBe(true);
+  });
+
+  it("returns false for RegExp with different source", () => {
+    expect(shallow(/abc/g, /xyz/g)).toBe(false);
+  });
+
+  it("returns false for RegExp with different flags", () => {
+    expect(shallow(/abc/g, /abc/i)).toBe(false);
+  });
+
+  it("returns false for different Error objects", () => {
+    expect(shallow(new Error("a"), new Error("b"))).toBe(false);
+    expect(shallow(new Error("same"), new Error("same"))).toBe(false);
+  });
+
+  it("returns false for different Promise objects", () => {
+    expect(shallow(Promise.resolve(1), Promise.resolve(2))).toBe(false);
+    expect(shallow(Promise.resolve(1), Promise.resolve(1))).toBe(false);
+  });
+
+  it("returns false for class instances without enumerable own properties", () => {
+    class Empty {}
+    expect(shallow(new Empty(), new Empty())).toBe(false);
+  });
+
+  it("still returns true for empty plain objects", () => {
+    expect(shallow({}, {})).toBe(true);
+  });
+
+  it("still returns true for Object.create(null) empty objects", () => {
+    expect(shallow(Object.create(null), Object.create(null))).toBe(true);
+  });
 });

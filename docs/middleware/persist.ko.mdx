@@ -98,7 +98,7 @@ const settings = pipe
 - `version`은 migration array 길이를 기준으로 합니다.
 - migration은 `local`과 `cookie`에서 실행되고 `session`에서는 실행되지 않습니다.
 - storage read 실패는 현재 live state를 유지하고 `onRehydrateStorage`에 전달됩니다. write 실패는 browser에서 catch 후 log됩니다.
-- cookie write는 단순한 `document.cookie = key=value` assignment입니다. 고급 cookie attribute가 필요하면 helper 밖에서 설정하세요.
+- cookie write는 `document.cookie = key=value; path=/` assignment를 사용하여 모든 route에서 cookie가 보이도록 합니다. 고급 cookie attribute가 필요하면 helper 밖에서 설정하세요.
 
 ## SSR과 hydration
 

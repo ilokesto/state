@@ -69,6 +69,10 @@ export function shallow<T>(valueA: T, valueB: T): boolean {
     return valueA.getTime() === valueB.getTime();
   }
 
+  if (valueA instanceof RegExp && valueB instanceof RegExp) {
+    return valueA.source === valueB.source && valueA.flags === valueB.flags;
+  }
+
   if (isIterable(valueA) && isIterable(valueB)) {
     if (hasIterableEntries(valueA) && hasIterableEntries(valueB)) {
       return compareEntries(valueA, valueB);
@@ -76,8 +80,20 @@ export function shallow<T>(valueA: T, valueB: T): boolean {
     return compareIterables(valueA, valueB);
   }
 
+  const entriesA = Object.entries(valueA);
+  const entriesB = Object.entries(valueB);
+
+  if (entriesA.length === 0 && entriesB.length === 0) {
+    // Two empty plain objects are shallow-equal, but non-plain objects
+    // (RegExp, Error, Promise, class instances without data properties)
+    // have already failed the Object.is check above and have no
+    // enumerable own properties to compare, so they are not shallow-equal.
+    const proto = Object.getPrototypeOf(valueA);
+    return proto === Object.prototype || proto === null;
+  }
+
   return compareEntries(
-    { entries: () => Object.entries(valueA) },
-    { entries: () => Object.entries(valueB) },
+    { entries: () => entriesA },
+    { entries: () => entriesB },
   );
 }

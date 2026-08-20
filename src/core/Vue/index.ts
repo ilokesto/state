@@ -14,6 +14,13 @@ export function create<T, Action extends ReducerAction>(
 
 export function create<T>(initialState: T | Store<T>): UseState<T>;
 
+/**
+ * Create a Vue composable from plain state or a reducer.
+ *
+ * Returns a function that must be called inside `setup()` or an active
+ * `effectScope()`. Returns `{ state, setState }` or `{ state, dispatch }`.
+ * Use `.writeOnly()` or `.readOnly()` for lifecycle-independent access.
+ */
 export function create<T, Action extends ReducerAction>(
   firstArg: Store<T> | T | ReduceFn<T, Action>,
   secondArg?: T | Store<T>,

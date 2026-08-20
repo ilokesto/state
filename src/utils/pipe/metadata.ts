@@ -165,6 +165,27 @@ export function definePipeableMiddleware<
   PipeMiddleware<State, Requires, Adds>,
   PipeMiddlewareMetadata<Id, Requires, Adds, Duplicate, Conflicts>
 >;
+/**
+ * Register metadata on a pipe middleware function.
+ *
+ * Every middleware passed to `pipe.use(...)` must be registered with this
+ * helper. The metadata declares the middleware's ID, capability requirements,
+ * conflicts, and ordering constraints that the pipe builder validates.
+ *
+ * @param middleware - The middleware function to tag.
+ * @param metadata - Pipe metadata describing ID, capabilities, conflicts, and ordering.
+ * @returns The same middleware function, now tagged with metadata.
+ *
+ * @example
+ * ```ts
+ * import { definePipeableMiddleware } from '@ilokesto/state/utils';
+ *
+ * const myMiddleware = definePipeableMiddleware(
+ *   (store) => store,
+ *   { id: '@my-app/middleware' },
+ * );
+ * ```
+ */
 export function definePipeableMiddleware(
   middleware: object,
   metadata: PipeMiddlewareMetadata,

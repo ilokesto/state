@@ -2,6 +2,9 @@ import { SetStateAction } from 'react';
 
 import type { ReducerAction } from '../../types/ReduceFn.js';
 
+/**
+ * React hook returned by `create()` for plain state.
+ */
 export type UseState<T> = {
   (): readonly [T, (nextState: SetStateAction<T>) => void];
   <S>(selector: (state: T) => S): readonly [S, (nextState: SetStateAction<T>) => void];
@@ -12,6 +15,9 @@ export type UseState<T> = {
   };
 };
 
+/**
+ * React hook returned by `create()` for reducer state.
+ */
 export type UseReducer<T, Action extends ReducerAction> = {
   (): readonly [T, (action: Action) => void];
   <S>(selector: (state: T) => S): readonly [S, (action: Action) => void];

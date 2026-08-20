@@ -14,6 +14,14 @@ export function create<T, Action extends ReducerAction>(
 
 export function create<T>(initialState: T | Store<T>): UseState<T>;
 
+/**
+ * Create an Angular signal from plain state or a reducer.
+ *
+ * Returns a function that must be called inside an injection context or with
+ * an explicit `{ destroyRef }`. Returns `{ state, setState, subscribe }` or
+ * `{ state, dispatch, subscribe }`. Use `.writeOnly()` or `.readOnly()` for
+ * lifecycle-independent access.
+ */
 export function create<T, Action extends ReducerAction>(
   firstArg: Store<T> | T | ReduceFn<T, Action>,
   secondArg?: T | Store<T>,

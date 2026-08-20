@@ -98,7 +98,7 @@ const settings = pipe
 - `version` is based on migration array length.
 - Migrations run for `local` and `cookie`, not `session`.
 - Storage read failures keep the live state and are passed to `onRehydrateStorage`; write failures are caught and logged in the browser.
-- Cookie writing uses a simple `document.cookie = key=value` assignment; configure advanced cookie attributes outside this helper if needed.
+- Cookie writing uses `document.cookie = key=value; path=/` so cookies are visible across all routes. Configure advanced cookie attributes outside this helper if needed.
 
 ## SSR and hydration
 

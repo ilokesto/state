@@ -16,19 +16,12 @@ type PersistOptions<Steps extends readonly MigrationFn[]> = {
   readonly migrate?: Steps;
   readonly session?: string;
 };
-const storageWriteCache = new Map<string, string>();
-
 class PersistHydrationError extends TypeError {
   constructor(message: string) {
     super(message);
     this.name = 'PersistHydrationError';
   }
 }
-
-const getStorageCacheKey = (
-  storageType: PersistUtils['common']['storageType'],
-  storageKey: string,
-) => `${storageType ?? 'none'}:${storageKey}`;
 
 const readStorageValue = (
   storageType: PersistUtils['common']['storageType'],
@@ -49,16 +42,6 @@ const readStorageValue = (
   }
 
   return null;
-};
-
-const cacheStoredValue = (
-  storageType: PersistUtils['common']['storageType'],
-  storageKey: string,
-  storedValue: string | null,
-) => {
-  if (storedValue !== null && storageType) {
-    storageWriteCache.set(getStorageCacheKey(storageType, storageKey), storedValue);
-  }
 };
 
 const hasOwn = <Key extends PropertyKey>(
@@ -90,7 +73,6 @@ const readSafePersistedPayload = (
   storageKey: string,
 ): PersistedPayload<unknown> | null => {
   const storedValue = readStorageValue(storageType, storageKey);
-  cacheStoredValue(storageType, storageKey, storedValue);
   if (storedValue === null) return null;
 
   return parseSafePersistedPayload(JSON.parse(storedValue));
@@ -196,9 +178,6 @@ export const setStorage: PersistUtils['setStorage'] = ({
   value: state,
 }) => {
   const encodedState = JSON.stringify({ state, version });
-  const cacheKey = getStorageCacheKey(storageType, storageKey);
-
-  if (storageWriteCache.get(cacheKey) === encodedState) return;
 
   try {
     if (storageType === 'local') {
@@ -206,13 +185,11 @@ export const setStorage: PersistUtils['setStorage'] = ({
     } else if (storageType === 'session') {
       sessionStorage.setItem(storageKey, encodedState);
     } else if (storageType === 'cookie') {
-      document.cookie = `${storageKey}=${encodeURIComponent(encodedState)}`;
+      document.cookie = `${storageKey}=${encodeURIComponent(encodedState)}; path=/`;
     }
-
-    storageWriteCache.set(cacheKey, encodedState);
   } catch (error) {
     if (typeof window !== 'undefined') {
-      console.error('Caro-Kann : Failed to write to storage', error);
+      console.error('[@ilokesto/state/persist] Failed to write to storage', error);
     }
   }
 };

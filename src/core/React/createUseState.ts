@@ -3,12 +3,11 @@ import { useMemo, useSyncExternalStore } from 'react';
 
 import { dispatchStoreAction } from '../../lib/actionMetadata.js';
 import type { ReducerAction } from '../../types/ReduceFn.js';
+import { identity } from '../shared/identity.js';
 import { shallow } from '../shared/shallow.js';
 import type { UseReducer, UseState } from './types.js';
 
 type Selector<T, S> = (state: T) => S;
-
-const identity = <Value>(value: Value): Value => value;
 
 function createShallowSelector<T, S>(
   selector: (state: T) => S,

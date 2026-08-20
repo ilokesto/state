@@ -1,4 +1,4 @@
-import type { Store } from '@ilokesto/store';
+import { Store } from '@ilokesto/store';
 import { getStoreActionMetadata } from '../lib/actionMetadata.js';
 import { getStore } from '../lib/getStore.js';
 import { registerStoreCleanup } from '../lib/storeCleanup.js';
@@ -40,10 +40,6 @@ const getDevtoolsExtension = () => {
     .__REDUX_DEVTOOLS_EXTENSION__;
 };
 
-const hasInitialState = <T>(value: T | Store<T>): value is Store<T> => {
-  return typeof value === 'object' && value !== null && 'getInitialState' in value;
-};
-
 const applyDevtools = <T>(initialState: T | Store<T>, name: string) => {
   const store = getStore(initialState);
   const isProduction = typeof process !== 'undefined' && process.env.NODE_ENV === 'production';
@@ -63,7 +59,7 @@ const applyDevtools = <T>(initialState: T | Store<T>, name: string) => {
         case 'RESET':
           isDispatchAction = true;
           store.setState(
-            hasInitialState(initialState)
+            initialState instanceof Store
               ? (initialState.getInitialState() as T)
               : (initialState as T),
           );
@@ -107,6 +103,25 @@ const applyDevtools = <T>(initialState: T | Store<T>, name: string) => {
   return store;
 };
 
+/**
+ * Create a pipe middleware that connects the store to the Redux DevTools
+ * browser extension.
+ *
+ * Supports `RESET`, `COMMIT`, and `ROLLBACK` dispatch messages from the
+ * DevTools UI. Automatically disabled in production
+ * (`NODE_ENV === 'production'`).
+ *
+ * @param name - Label shown in the DevTools extension.
+ * @returns Pipe middleware registered with `@ilokesto/state/devtools` metadata.
+ *
+ * @example
+ * ```ts
+ * import { devtools } from '@ilokesto/state/middleware';
+ * import { pipe } from '@ilokesto/state/utils';
+ *
+ * const store = pipe.use(devtools('counter')).create({ count: 0 });
+ * ```
+ */
 export function devtools(name: string): CurriedDevtools {
   return definePipeableMiddleware(
     <State>(initialState: State | Store<State>) => applyDevtools(initialState, name),

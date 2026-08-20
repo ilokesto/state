@@ -57,12 +57,16 @@ export class MemoryCookieDocument {
 
   set cookie(encodedCookie: string) {
     this.writes += 1;
-    const separatorIndex = encodedCookie.indexOf('=');
+    // Real browsers parse cookie attributes (path, max-age, expires, etc.)
+    // and store only the name=value pair. The first segment before `; `
+    // is the pair; the rest are attributes we discard.
+    const pair = encodedCookie.split(';')[0] ?? '';
+    const separatorIndex = pair.indexOf('=');
     if (separatorIndex < 0) return;
 
     this.values.set(
-      encodedCookie.slice(0, separatorIndex),
-      encodedCookie.slice(separatorIndex + 1),
+      pair.slice(0, separatorIndex),
+      pair.slice(separatorIndex + 1),
     );
   }
 
