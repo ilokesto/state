@@ -28,10 +28,7 @@ const getValueForKey = (value: unknown, key: string) => {
   return isRecord(value) ? value[key] : value;
 };
 
-const applyLogger = <T>(
-  initialState: T | Store<T>,
-  options: LoggerOptions = DEFAULT_LOGGER_OPTIONS,
-) => {
+const applyLogger = <T>(initialState: T | Store<T>, options: LoggerOptions) => {
   const store = getStore(initialState);
   const isProduction = typeof process !== 'undefined' && process.env.NODE_ENV === 'production';
 
@@ -112,7 +109,8 @@ const applyLogger = <T>(
  * ```
  */
 export function logger(options?: LoggerOptions): LoggerPipeMiddleware {
-  const middleware: PipeAnyMiddleware = (initialState) => applyLogger(initialState, options);
+  const resolvedOptions = { ...DEFAULT_LOGGER_OPTIONS, ...options };
+  const middleware: PipeAnyMiddleware = (initialState) => applyLogger(initialState, resolvedOptions);
   return definePipeableMiddleware(middleware, {
     adds: [],
     after: [],
