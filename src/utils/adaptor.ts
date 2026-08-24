@@ -12,7 +12,7 @@ import { Draft, produce } from 'immer';
  *
  * @example
  * ```ts
- * import { adaptor } from '@ilokesto/state/utils';
+ * import { adaptor } from '@ilokesto/state/adaptor';
  *
  * const increment = adaptor((draft) => { draft.count += 1; });
  * store.setState(increment);

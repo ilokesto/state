@@ -21,17 +21,17 @@ Immutable object update가 맞지만 코드가 장황해질 때 사용하세요.
 pnpm add immer
 ```
 
-그리고 utility subpath에서 `adaptor`를 import합니다.
+그리고 전용 subpath에서 `adaptor`를 import합니다.
 
 ```ts lineNumbers
-import { adaptor } from '@ilokesto/state/utils';
+import { adaptor } from '@ilokesto/state/adaptor';
 ```
 
 ## 기본 사용법
 
 ```tsx lineNumbers
 import { create } from '@ilokesto/state/react';
-import { adaptor } from '@ilokesto/state/utils';
+import { adaptor } from '@ilokesto/state/adaptor';
 
 type TodoState = {
   items: Array<{ id: string; title: string; done: boolean }>;
@@ -111,7 +111,8 @@ Adapter는 여전히 일반 store update pipeline을 통해 subscriber에게 알
 
 ```ts lineNumbers
 import { logger, validate } from '@ilokesto/state/middleware';
-import { adaptor, pipe } from '@ilokesto/state/utils';
+import { adaptor } from '@ilokesto/state/adaptor';
+import { pipe } from '@ilokesto/state/utils';
 
 const store = pipe
   .use(validate(tagsSchema))

@@ -18,7 +18,8 @@ public package surface는 `state/package.json`의 exports가 기준입니다.
 | `@ilokesto/state/solid` | Solid `create()` adapter입니다. |
 | `@ilokesto/state/angular` | Angular `create()` adapter입니다. |
 | `@ilokesto/state/middleware` | `logger`, `validate`, `debounce`, `devtools`, `persist`입니다. |
-| `@ilokesto/state/utils` | `pipe`, `adaptor`입니다. |
+| `@ilokesto/state/utils` | `pipe`입니다. |
+| `@ilokesto/state/adaptor` | `adaptor`; optional `immer` peer가 필요합니다. |
 
 ## Root entrypoint 주의점
 
@@ -35,4 +36,4 @@ import { create } from '@ilokesto/state';
 
 ## Peer dependencies
 
-프레임워크 peer는 optional입니다. 실제로 쓰는 어댑터의 프레임워크만 설치하세요. `immer`는 `@ilokesto/state/utils`의 `adaptor`를 사용할 때만 필요합니다.
+프레임워크 peer는 optional입니다. 실제로 쓰는 어댑터의 프레임워크만 설치하세요. `immer`는 `@ilokesto/state/adaptor`의 `adaptor`를 사용할 때만 필요합니다.

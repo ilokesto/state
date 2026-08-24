@@ -220,6 +220,9 @@ console.log(currentCount);
 
 - `pipe`: 일반 상태와 등록된 미들웨어로 스토어 조합
 - `definePipeableMiddleware()`: 사용자 미들웨어 메타데이터 등록
+
+### `@ilokesto/state/adaptor`
+
 - `adaptor()`: immer를 사용한 불변 객체 업데이트 헬퍼 생성
 
 `pipe`는 빌더 전용 API입니다. `pipe.use(...)`로 시작해 바깥쪽에서 안쪽 순서로 미들웨어를 추가한 다음, `.create(initialState)`를 호출하세요. 첫 번째 `.use()`가 업데이트 시 가장 바깥을 감싸며, `.create()`가 Store를 만들 때 미들웨어 설정은 왼쪽에서 오른쪽 순서로 실행됩니다.
@@ -372,7 +375,8 @@ counterStore.getState().count;
 - `@ilokesto/state/svelte` → Svelte 어댑터
 - `@ilokesto/state/solid` → Solid 어댑터
 - `@ilokesto/state/middleware` → 미들웨어 헬퍼
-- `@ilokesto/state/utils` → `adaptor`, `pipe`, `definePipeableMiddleware`, pipe 타입
+- `@ilokesto/state/utils` → `pipe`, `definePipeableMiddleware`, pipe 타입
+- `@ilokesto/state/adaptor` → `adaptor` (optional `immer` peer dependency 필요)
 
 ## 마이그레이션: 통합 shallow Selector 구독
 

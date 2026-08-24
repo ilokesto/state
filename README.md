@@ -222,6 +222,9 @@ console.log(currentCount);
 
 - `pipe` to compose a store from plain state and registered middleware
 - `definePipeableMiddleware()` to register custom pipe middleware metadata
+
+### `@ilokesto/state/adaptor`
+
 - `adaptor()` to create immutable object updaters with immer
 
 `pipe` is builder-only. Start with `pipe.use(...)`, add middleware in outer-to-inner order, then call `.create(initialState)`. The first `.use()` is outermost during updates, while middleware setup runs left to right when `.create()` creates the Store.
@@ -374,7 +377,8 @@ This is a breaking change. Callable and variadic pipe syntax has been removed. R
 - `@ilokesto/state/svelte` → Svelte adapter
 - `@ilokesto/state/solid` → Solid adapter
 - `@ilokesto/state/middleware` → middleware helpers
-- `@ilokesto/state/utils` → `adaptor`, `pipe`, `definePipeableMiddleware`, and pipe types
+- `@ilokesto/state/utils` → `pipe`, `definePipeableMiddleware`, and pipe types
+- `@ilokesto/state/adaptor` → `adaptor` (requires the optional `immer` peer dependency)
 
 ## Migration: unified shallow selector subscriptions
 

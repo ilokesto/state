@@ -21,17 +21,17 @@ Use it when immutable object updates are correct but verbose. Instead of returni
 pnpm add immer
 ```
 
-Then import `adaptor` from the utility subpath.
+Then import `adaptor` from its dedicated subpath.
 
 ```ts lineNumbers
-import { adaptor } from '@ilokesto/state/utils';
+import { adaptor } from '@ilokesto/state/adaptor';
 ```
 
 ## Basic usage
 
 ```tsx lineNumbers
 import { create } from '@ilokesto/state/react';
-import { adaptor } from '@ilokesto/state/utils';
+import { adaptor } from '@ilokesto/state/adaptor';
 
 type TodoState = {
   items: Array<{ id: string; title: string; done: boolean }>;
@@ -111,7 +111,8 @@ The adapter still notifies subscribers through the normal store update pipeline.
 
 ```ts lineNumbers
 import { logger, validate } from '@ilokesto/state/middleware';
-import { adaptor, pipe } from '@ilokesto/state/utils';
+import { adaptor } from '@ilokesto/state/adaptor';
+import { pipe } from '@ilokesto/state/utils';
 
 const store = pipe
   .use(validate(tagsSchema))

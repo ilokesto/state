@@ -67,7 +67,8 @@ pnpm add immer
 ```tsx lineNumbers
 import { create } from '@ilokesto/state/react';
 import { validate } from '@ilokesto/state/middleware';
-import { adaptor, pipe } from '@ilokesto/state/utils';
+import { adaptor } from '@ilokesto/state/adaptor';
+import { pipe } from '@ilokesto/state/utils';
 
 const profileStore = pipe
   .use(validate(profileSchema))

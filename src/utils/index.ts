@@ -1,4 +1,3 @@
-export { adaptor } from './adaptor.js';
 export { pipe } from './pipe/index.js';
 export { PipeConfigurationError } from './pipe/errors.js';
 export type { PipeConfigurationErrorCode } from './pipe/errors.js';

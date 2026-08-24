@@ -24,6 +24,11 @@
       "default": "./dist/index.js",
       "types": "./dist/index.d.ts"
     },
+    "./adaptor": {
+      "import": "./dist/utils/adaptor.js",
+      "default": "./dist/utils/adaptor.js",
+      "types": "./dist/utils/adaptor.d.ts"
+    },
     "./react": {
       "import": "./dist/core/React/index.js",
       "default": "./dist/core/React/index.js",
