@@ -33,6 +33,7 @@ React, Vue, Angular, Svelte, Solid는 일반 상태와 Reducer 상태 모두에�
 - 선택 결과와 관련된 업데이트는 consumer에 정확히 한 번 알립니다.
 - React unmount, Vue scope dispose, Angular `DestroyRef`, Solid owner cleanup, Svelte unsubscribe 시 구독을 해제합니다.
 - React server snapshot은 Store의 초기 상태에서 값을 선택하므로 현재 상태가 이미 변경되었어도 hydration 의미론을 유지합니다.
+- Selector 입력, 전체 상태 reactive 결과, `readOnly()` snapshot은 object state에 `Readonly<T>`를 사용합니다. callable state는 exact `T`로 유지되어 임의의 generic/overloaded signature를 보존하며 own-property modifier도 선언된 그대로입니다. plain-state writer는 mutable next-state와 updater 계약을 유지하고, reducer writer는 typed action을 받습니다.
 
 이 계약은 `Store.subscribeSelector`를 기반으로 하며, 어댑터는 프레임워크별 동등성 옵션을 노출하지 않습니다. `create(initialState)`와 `create(reducer, initialState)`에 동일하게 적용됩니다.
 

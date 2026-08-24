@@ -5,7 +5,7 @@ description: "How selectors and snapshots behave across adapters."
 
 # Selector semantics
 
-Selectors are adapter-level projection functions. They do not change the underlying store state; they decide what a reactive reader receives.
+Selectors are adapter-level projection functions. They receive snapshots and do not change the underlying store state; they decide what a reactive reader receives. Object state is `Readonly<T>`, while callable state remains exact `T`, preserving arbitrary generic and overloaded signatures and its declared own-property modifiers. Full-state reactive results and lifecycle-free `readOnly()` snapshots use the same contract. Plain-state writers retain mutable next-state and updater contracts, while reducer writers accept typed actions.
 
 ## Shared shallow comparison
 

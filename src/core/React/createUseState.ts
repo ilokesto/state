@@ -4,17 +4,21 @@ import { useMemo, useSyncExternalStore } from 'react';
 import { dispatchStoreAction } from '../../lib/actionMetadata.js';
 import type { ReducerAction } from '../../types/ReduceFn.js';
 import { identity } from '../shared/identity.js';
+import {
+  readonlySnapshot,
+  type ReadonlySnapshot,
+} from '../shared/readonlySnapshot.js';
 import { shallow } from '../shared/shallow.js';
 import type { UseReducer, UseState } from './types.js';
 
-type Selector<T, S> = (state: T) => S;
+type Selector<T, S> = (state: ReadonlySnapshot<T>) => S;
 
 function createShallowSelector<T, S>(
-  selector: (state: T) => S,
-): (state: T) => S {
+  selector: (state: ReadonlySnapshot<T>) => S,
+): (state: ReadonlySnapshot<T>) => S {
   let previous: Readonly<{ value: S }> | undefined;
 
-  return (state: T): S => {
+  return (state: ReadonlySnapshot<T>): S => {
     const next = selector(state);
 
     if (previous && shallow(previous.value, next)) {
@@ -28,23 +32,27 @@ function createShallowSelector<T, S>(
 
 export function useStoreState<T, S, Writer>(
   store: Store<T>,
-  selector: (state: T) => S,
+  selector: (state: ReadonlySnapshot<T>) => S,
   write: Writer,
 ) {
   const subscribe = useMemo(
     () => (listener: () => void) =>
-      store.subscribeSelector(selector, listener, shallow),
+      store.subscribeSelector(
+        (state) => selector(readonlySnapshot(state)),
+        listener,
+        shallow,
+      ),
     [store, selector],
   );
 
   const getSnapshot = useMemo(() => {
     const shallowSelector = createShallowSelector(selector);
-    return () => shallowSelector(store.getState());
+    return () => shallowSelector(readonlySnapshot(store.getState()));
   }, [store, selector]);
 
   const getServerSnapshot = useMemo(() => {
     const shallowSelector = createShallowSelector(selector);
-    return () => shallowSelector(store.getInitialState());
+    return () => shallowSelector(readonlySnapshot(store.getInitialState()));
   }, [store, selector]);
 
   const value = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
@@ -59,19 +67,19 @@ export function createUseState<T, Action extends ReducerAction>(
   const write = store.setState.bind(store);
   const dispatch = (action: Action): void => dispatchStoreAction(store, action);
 
-  function readOnly(): T;
+  function readOnly(): ReadonlySnapshot<T>;
   function readOnly<S>(selector: Selector<T, S>): S;
   function readOnly<S>(selector?: Selector<T, S>) {
-    const currentState = store.getState();
+    const currentState = readonlySnapshot(store.getState());
 
     return selector ? selector(currentState) : currentState;
   }
 
   function createUseSelectedState<Writer>(writer: Writer) {
-    function useSelectedState(): readonly [T, Writer];
+    function useSelectedState(): readonly [ReadonlySnapshot<T>, Writer];
     function useSelectedState<S>(selector: Selector<T, S>): readonly [S, Writer];
     function useSelectedState(selector?: Selector<T, unknown>) {
-      const select = selector ?? identity<T>;
+      const select = selector ?? identity<ReadonlySnapshot<T>>;
 
       return useStoreState(store, select, writer);
     }

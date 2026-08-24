@@ -5,7 +5,7 @@ import { pipeTypeFixtureCases } from './helpers/pipeTypeFixtureRegistry';
 
 const projectRoot = join(import.meta.dir, '..');
 
-test('Given pipe type fixtures, when their compiler configs are listed, then only the shared fixture and test configs remain', () => {
+test('Given state type fixtures, when their compiler configs are listed, then only shared fixture and test configs remain', () => {
   // Given / When
   const configs = [
     ...new Bun.Glob('test/**/tsconfig.json').scanSync({ cwd: projectRoot }),
@@ -13,6 +13,7 @@ test('Given pipe type fixtures, when their compiler configs are listed, then onl
 
   // Then
   expect(configs).toEqual([
+    'test/fixtures/adapter-readonly-types/tsconfig.json',
     'test/fixtures/pipe-types/tsconfig.json',
     'test/tsconfig.json',
   ]);

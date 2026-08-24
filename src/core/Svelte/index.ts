@@ -18,8 +18,11 @@ export function create<T>(initialState: T | Store<T>): UseState<T>;
  * Create a Svelte store from plain state or a reducer.
  *
  * Returns a writable Svelte store with `subscribe`, `set`, `update`,
- * `select`, `writeOnly()`, and `readOnly()`. For reducer state, returns a
- * readable store with `dispatch` instead of `set`/`update`.
+ * `select`, `writeOnly()`, and `readOnly()`. Full-store subscriptions,
+ * selectors, and `.readOnly()` receive snapshots: object state is `Readonly<T>`,
+ * while callable state remains exact `T`, including its declared own-property
+ * modifiers. For reducer state, returns a readable store with `dispatch`
+ * instead of `set`/`update`.
  */
 export function create<T, Action extends ReducerAction>(
   firstArg: Store<T> | T | ReduceFn<T, Action>,

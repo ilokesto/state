@@ -16,6 +16,7 @@ export type CompileTypeFixtureResult =
 
 type CompileTypeFixtureOptions = {
   readonly configPath?: string;
+  readonly fixtureRoot?: string;
 };
 
 type ParsedConfigCache = {
@@ -23,8 +24,7 @@ type ParsedConfigCache = {
   readonly source: string;
 };
 
-const fixtureRoot = join(import.meta.dir, '..', 'fixtures', 'pipe-types');
-const sharedConfigPath = join(fixtureRoot, 'tsconfig.json');
+const defaultFixtureRoot = join(import.meta.dir, '..', 'fixtures', 'pipe-types');
 const parsedConfigs = new Map<string, ParsedConfigCache>();
 const diagnosticHost: ts.FormatDiagnosticsHost = {
   getCanonicalFileName: (fileName) => fileName,
@@ -71,7 +71,7 @@ function parseConfig(configPath: string): ts.ParsedCommandLine | CompileTypeFixt
   return config;
 }
 
-function fixtureIndexPath(fixture: string): string | CompileTypeFixtureResult {
+function fixtureIndexPath(fixtureRoot: string, fixture: string): string | CompileTypeFixtureResult {
   const segments = fixture.split('/');
   if (
     fixture.length === 0 ||
@@ -92,12 +92,13 @@ export function compileTypeFixture(
   fixture: string,
   options: CompileTypeFixtureOptions = {},
 ): CompileTypeFixtureResult {
-  const indexPath = fixtureIndexPath(fixture);
+  const fixtureRoot = options.fixtureRoot ?? defaultFixtureRoot;
+  const indexPath = fixtureIndexPath(fixtureRoot, fixture);
   if (typeof indexPath !== 'string') {
     return indexPath;
   }
 
-  const configPath = options.configPath ?? sharedConfigPath;
+  const configPath = options.configPath ?? join(fixtureRoot, 'tsconfig.json');
   const config = parseConfig(configPath);
   if ('success' in config) {
     return config;

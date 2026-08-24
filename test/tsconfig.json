@@ -8,6 +8,8 @@
   },
   "include": ["../src", "."],
   "exclude": [
+    "fixtures/adapter-readonly-types/source-invalid",
+    "fixtures/adapter-readonly-types/dist-invalid",
     "fixtures/pipe-types/invalid-callable-root",
     "fixtures/pipe-types/invalid-conflict",
     "fixtures/pipe-types/invalid-cycle",

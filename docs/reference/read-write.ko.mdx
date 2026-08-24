@@ -9,7 +9,7 @@ description: "readOnly, writeOnly, subscribe와 생명주기 안전 사용법입
 
 ## `readOnly()`
 
-`readOnly()`는 underlying store를 동기적으로 읽습니다. selector를 넘길 수 있습니다.
+`readOnly()`는 underlying store를 동기적으로 읽습니다. 전체 object-state read는 `Readonly<T>`를 반환하고 selector도 이를 받습니다. callable state는 exact `T`로 유지되어 임의의 generic/overloaded signature와 선언된 own-property modifier를 보존합니다. selector를 넘길 수 있습니다.
 
 ```ts lineNumbers
 const current = useCounter.readOnly();

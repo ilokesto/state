@@ -9,7 +9,7 @@ description: "readOnly, writeOnly, subscribe, and lifecycle-safe usage."
 
 ## `readOnly()`
 
-`readOnly()` synchronously reads from the underlying store. You can pass a selector.
+`readOnly()` synchronously reads from the underlying store. Full object-state reads return `Readonly<T>` and selectors receive it. Callable state remains exact `T`, preserving arbitrary generic and overloaded signatures and its own-property modifiers as declared. You can pass a selector.
 
 ```ts lineNumbers
 const current = useCounter.readOnly();

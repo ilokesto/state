@@ -35,6 +35,7 @@ React, Vue, Angular, Svelte, and Solid use the same selector subscription behavi
 - A relevant update notifies the consumer exactly once.
 - Subscriptions are removed by the framework lifecycle: React unmount, Vue scope disposal, Angular `DestroyRef`, Solid owner cleanup, or Svelte unsubscribe.
 - React's server snapshot selects from the store's initial state, preserving hydration semantics even if the current state has already changed.
+- Selector inputs, full-state reactive results, and `readOnly()` snapshots use `Readonly<T>` for object state. Callable state remains exact `T`, preserving arbitrary generic and overloaded signatures; its own-property modifiers remain as declared. Plain-state writers retain mutable next-state and updater contracts, while reducer writers accept typed actions.
 
 This contract is built on `Store.subscribeSelector`; adapters do not expose framework-specific equality options. It applies equally to `create(initialState)` and `create(reducer, initialState)`.
 

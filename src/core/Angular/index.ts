@@ -18,9 +18,10 @@ export function create<T>(initialState: T | Store<T>): UseState<T>;
  * Create an Angular signal from plain state or a reducer.
  *
  * Returns a function that must be called inside an injection context or with
- * an explicit `{ destroyRef }`. Returns `{ state, setState, subscribe }` or
- * `{ state, dispatch, subscribe }`. Use `.writeOnly()` or `.readOnly()` for
- * lifecycle-independent access.
+ * an explicit `{ destroyRef }`. Without a selector, `state` is a `Signal` of a
+ * read-only snapshot: object state is `Readonly<T>`, while callable state
+ * remains exact `T`, including its declared own-property modifiers. Selectors
+ * and `.readOnly()` use the same snapshot.
  */
 export function create<T, Action extends ReducerAction>(
   firstArg: Store<T> | T | ReduceFn<T, Action>,
