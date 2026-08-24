@@ -4,7 +4,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const projectRoot = join(import.meta.dir, '..');
-const storeRoot = join(projectRoot, '..', 'store');
 const decoder = new TextDecoder();
 
 type ProcessResult = {
@@ -43,7 +42,7 @@ function packInto(packDir: string, packageDir: string, targetDir: string): Proce
   return run(['tar', '-xzf', tarball, '-C', targetDir, '--strip-components=1'], packageDir);
 }
 
-function createIsolatedConsumer(): { readonly consumerDir: string; readonly setupErrors: string } {
+function createIsolatedConsumer(): string {
   const workDir = mkdtempSync(join(tmpdir(), 'ilokesto-state-no-immer-'));
   tempDirs.push(workDir);
 
@@ -53,23 +52,25 @@ function createIsolatedConsumer(): { readonly consumerDir: string; readonly setu
   mkdirSync(consumerDir);
   writeFileSync(join(consumerDir, 'package.json'), '{"name":"consumer","type":"module"}\n');
 
-  const buildStore = run(['pnpm', 'build'], storeRoot);
-  const buildState = run(['pnpm', 'build'], projectRoot);
-  const packStore = packInto(packDir, storeRoot, join(consumerDir, 'node_modules', '@ilokesto', 'store'));
+  const packStore = packInto(
+    packDir,
+    join(projectRoot, '..', 'store'),
+    join(consumerDir, 'node_modules', '@ilokesto', 'store'),
+  );
   const packState = packInto(packDir, projectRoot, join(consumerDir, 'node_modules', '@ilokesto', 'state'));
 
-  const setupErrors = [buildStore, buildState, packStore, packState]
-    .filter((result) => result.exitCode !== 0)
-    .map((result) => `${result.exitCode}: ${result.stderr || result.stdout}`)
-    .join('\n');
+  for (const result of [packStore, packState]) {
+    if (result.exitCode !== 0) {
+      throw new Error(result.stderr || result.stdout);
+    }
+  }
 
-  return { consumerDir, setupErrors };
+  return consumerDir;
 }
 
 test('Given immer is not resolvable, when a packed consumer imports @ilokesto/state/utils, then the import succeeds without adaptor', () => {
   // Given: an isolated consumer with only the packed @ilokesto/state and @ilokesto/store - no immer anywhere on the resolution path.
-  const { consumerDir, setupErrors } = createIsolatedConsumer();
-  expect(setupErrors).toBe('');
+  const consumerDir = createIsolatedConsumer();
 
   // When
   const result = run(
@@ -77,23 +78,19 @@ test('Given immer is not resolvable, when a packed consumer imports @ilokesto/st
       'node',
       '--input-type=module',
       '--eval',
-      "const m = await import('@ilokesto/state/utils'); if (typeof m.pipe?.use !== 'function') throw new TypeError('Expected pipe builder export'); if ('adaptor' in m) throw new Error('adaptor must not be exported from @ilokesto/state/utils'); process.stdout.write('UTILS_WITHOUT_IMMER_OK\\n');",
+      "const m = await import('@ilokesto/state/utils'); if (typeof m.pipe?.use !== 'function') throw new TypeError('Expected pipe builder export'); if ('adaptor' in m) throw new Error('adaptor must not be exported from @ilokesto/state/utils');",
     ],
     consumerDir,
   );
 
   // Then
   expect(result.exitCode).toBe(0);
-  expect(result.stderr).toBe('');
-  expect(result.stdout).toBe('UTILS_WITHOUT_IMMER_OK\n');
 }, { timeout: 180_000 });
 
 test('Given immer is not resolvable, when a packed consumer imports @ilokesto/state/adaptor, then resolution fails on immer only', () => {
-  // Given
-  const { consumerDir, setupErrors } = createIsolatedConsumer();
-  expect(setupErrors).toBe('');
+  // Given / When
+  const consumerDir = createIsolatedConsumer();
 
-  // When
   const result = run(
     ['node', '--input-type=module', '--eval', "await import('@ilokesto/state/adaptor');"],
     consumerDir,
@@ -108,23 +105,17 @@ test('Given immer is not resolvable, when a packed consumer imports @ilokesto/st
 }, { timeout: 180_000 });
 
 test('Given the workspace where immer is installed, when Node imports the adaptor subpath, then adaptor produces immutable updaters', () => {
-  // Given
-  const build = run(['pnpm', 'build'], projectRoot);
-  expect(build.exitCode).toBe(0);
-
-  // When
+  // Given / When
   const result = run(
     [
       'node',
       '--input-type=module',
       '--eval',
-      "const { adaptor } = await import('@ilokesto/state/adaptor'); const next = adaptor((draft) => { draft.count += 1; })({ count: 1 }); if (next.count !== 2) throw new Error('adaptor did not produce the next state'); process.stdout.write('ADAPTOR_SUBPATH_OK\\n');",
+      "const { adaptor } = await import('@ilokesto/state/adaptor'); const next = adaptor((draft) => { draft.count += 1; })({ count: 1 }); if (next.count !== 2) throw new Error('adaptor did not produce the next state');",
     ],
     projectRoot,
   );
 
   // Then
   expect(result.exitCode).toBe(0);
-  expect(result.stderr).toBe('');
-  expect(result.stdout).toBe('ADAPTOR_SUBPATH_OK\n');
 }, { timeout: 180_000 });

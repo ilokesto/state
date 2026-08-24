@@ -32,7 +32,6 @@ const requiredMiddlewareExampleIds = [
   'safe-persist-pipe',
 ] as const;
 
-const decoder = new TextDecoder();
 const projectRoot = join(import.meta.dir, '..');
 const readmePath = join(projectRoot, 'README.md');
 const koreanReadmePath = join(projectRoot, 'README.ko.md');
@@ -118,20 +117,6 @@ function assertNoHistoryWithDelayedMiddleware(markdown: string, documentName: st
   }
 }
 
-function runCommand(command: readonly string[]): CompilerRun {
-  const result = Bun.spawnSync({
-    cmd: [...command],
-    cwd: projectRoot,
-    stderr: 'pipe',
-    stdout: 'pipe',
-  });
-
-  return {
-    diagnostics: `${decoder.decode(result.stdout)}${decoder.decode(result.stderr)}`,
-    exitCode: result.exitCode,
-  };
-}
-
 function compileExamples(documents: readonly DocumentExamples[]): CompilerRun {
   const temporaryProject = mkdtempSync(join(tmpdir(), 'ilokesto-state-pipe-docs-'));
 
@@ -156,9 +141,8 @@ function compileExamples(documents: readonly DocumentExamples[]): CompilerRun {
   }
 }
 
-test('Given marked bilingual pipe examples, when compiled against a fresh package build, then compiles every marked example without diagnostics', () => {
+test('Given marked bilingual pipe examples and a fresh package build, when compiled, then every example has no diagnostics', () => {
   // Given
-  const build = runCommand(['pnpm', 'build']);
   const englishExamples = extractMarkedPipeExamples(readFileSync(readmePath, 'utf8'), 'English README');
   const koreanExamples = extractMarkedPipeExamples(readFileSync(koreanReadmePath, 'utf8'), 'Korean README');
   assertRequiredMiddlewareExamples(englishExamples, 'English README');
@@ -166,9 +150,7 @@ test('Given marked bilingual pipe examples, when compiled against a fresh packag
   assertNoHistoryWithDelayedMiddleware(readFileSync(readmePath, 'utf8'), 'English README');
   assertNoHistoryWithDelayedMiddleware(readFileSync(koreanReadmePath, 'utf8'), 'Korean README');
 
-  // When / Then
-  expect(build.exitCode).toBe(0);
-  expect(build.diagnostics).toContain('rm -rf dist && tsc');
+  // When
   const result = compileExamples([
     { examples: englishExamples, language: 'en' },
     { examples: koreanExamples, language: 'ko' },

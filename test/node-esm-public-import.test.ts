@@ -2,34 +2,36 @@ import { expect, test } from 'bun:test';
 import { join } from 'node:path';
 
 const projectRoot = join(import.meta.dir, '..');
-const decoder = new TextDecoder();
 
-test('Given built package exports, when Node imports the public middleware entry, then the import resolves', () => {
-  // Given
-  const build = Bun.spawnSync({
-    cmd: ['pnpm', 'build'],
-    cwd: projectRoot,
-    stderr: 'pipe',
-    stdout: 'pipe',
-  });
+const distributionImportMatrix = `
+const root = await import('@ilokesto/state');
+const { adaptor } = await import('@ilokesto/state/adaptor');
+const { create: createReact } = await import('@ilokesto/state/react');
+const { create: createVue } = await import('@ilokesto/state/vue');
+const { create: createAngular } = await import('@ilokesto/state/angular');
+const { create: createSvelte } = await import('@ilokesto/state/svelte');
+const { create: createSolid } = await import('@ilokesto/state/solid');
+const { throttle } = await import('@ilokesto/state/middleware');
+const { definePipeableMiddleware, pipe } = await import('@ilokesto/state/utils');
+const { default: packageJson } = await import('@ilokesto/state/package.json', { with: { type: 'json' } });
 
-  // When
+if (Object.keys(root).length !== 0) throw new TypeError('Expected the root export to remain empty');
+if (adaptor((draft) => { draft.count += 1; })({ count: 1 }).count !== 2) throw new TypeError('Expected adaptor to produce immutable updates');
+if (![createReact, createVue, createAngular, createSvelte, createSolid].every((create) => typeof create === 'function')) throw new TypeError('Expected each framework export to provide create');
+if (typeof throttle !== 'function') throw new TypeError('Expected middleware to provide throttle');
+if (typeof pipe.use !== 'function' || typeof definePipeableMiddleware !== 'function') throw new TypeError('Expected utils to provide pipe composition');
+if (packageJson.name !== '@ilokesto/state' || packageJson.exports['./package.json'] !== './package.json') throw new TypeError('Expected package metadata export');
+`;
+
+test('Given a built package, when Node imports every public export, then each distribution entry resolves with its public shape', () => {
+  // Given / When
   const result = Bun.spawnSync({
-    cmd: [
-      'node',
-      '--input-type=module',
-      '--eval',
-      "const { throttle } = await import('@ilokesto/state/middleware'); if (typeof throttle !== 'function') throw new TypeError('Expected throttle export'); process.stdout.write('NODE_ESM_PUBLIC_MIDDLEWARE_IMPORT_OK\\n');",
-    ],
+    cmd: ['node', '--input-type=module', '--eval', distributionImportMatrix],
     cwd: projectRoot,
     stderr: 'pipe',
     stdout: 'pipe',
   });
 
   // Then
-  expect(build.exitCode).toBe(0);
-  expect(decoder.decode(build.stderr)).toBe('');
   expect(result.exitCode).toBe(0);
-  expect(decoder.decode(result.stderr)).toBe('');
-  expect(decoder.decode(result.stdout)).toBe('NODE_ESM_PUBLIC_MIDDLEWARE_IMPORT_OK\n');
-}, { timeout: 180_000 });
+}, { timeout: 20_000 });

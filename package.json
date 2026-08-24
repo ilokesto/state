@@ -3,7 +3,9 @@
   "version": "1.0.4",
   "scripts": {
     "build": "rm -rf dist && tsc",
-    "test": "bun test",
+    "pretest": "pnpm --filter @ilokesto/store run build && pnpm run build",
+    "test": "pnpm run test:dist",
+    "test:dist": "bun test",
     "test:typecheck": "pnpm build && tsc --noEmit -p test/tsconfig.json",
     "typecheck": "tsc --noEmit"
   },
