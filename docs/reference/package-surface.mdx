@@ -12,14 +12,27 @@ The public package surface is defined by `state/package.json` exports.
 | Import | Purpose |
 |---|---|
 | `@ilokesto/state` | Package identity and current empty runtime root. The source is `export {}`. |
-| `@ilokesto/state/react` | React `create()` adapter and the `UseState` and `UseReducer` types. |
-| `@ilokesto/state/vue` | Vue `create()` adapter. |
-| `@ilokesto/state/svelte` | Svelte `create()` adapter. |
-| `@ilokesto/state/solid` | Solid `create()` adapter. |
-| `@ilokesto/state/angular` | Angular `create()` adapter. |
-| `@ilokesto/state/middleware` | `logger`, `validate`, `debounce`, `devtools`, `persist`. |
-| `@ilokesto/state/utils` | `pipe`. |
+| `@ilokesto/state/react` | React `create()` adapter and `UseState`, `UseReducer` types. |
+| `@ilokesto/state/vue` | Vue `create()` adapter and `UseState`, `UseReducer` types. |
+| `@ilokesto/state/svelte` | Svelte `create()` adapter and `UseState`, `UseReducer` types. |
+| `@ilokesto/state/solid` | Solid `create()` adapter and `UseState`, `UseReducer` types. |
+| `@ilokesto/state/angular` | Angular `create()` adapter and `AngularOptions`, `UseState`, `UseReducer` types. |
+| `@ilokesto/state/middleware` | Registered middleware, store disposal, and middleware types. |
+| `@ilokesto/state/utils` | The pipe builder, custom-middleware registration, configuration errors, and pipe types. |
 | `@ilokesto/state/adaptor` | `adaptor`; requires the optional `immer` peer. |
+| `@ilokesto/state/package.json` | Package metadata export for tooling that needs this package manifest. |
+
+## Middleware exports
+
+`@ilokesto/state/middleware` exports `debounce`, `throttle`, `devtools`, `dispose`, `history`, `HistoryConfigurationError`, `logger`, `persist`, and `validate`.
+
+Its public types are `HistoryControls`, `HistoryOptions`, `HistoryStore`, `OnRehydrateStorage`, `OnRehydrateStorageCallback`, `PersistControls`, `PersistDecoder`, `PersistDecoderStateDiagnostic`, `PersistMigration`, `PersistStore`, `SafePersistConfig`, `SafePersistCookieConfig`, `SafePersistLocalConfig`, and `SafePersistSessionConfig`.
+
+## Utility exports
+
+`@ilokesto/state/utils` exports `pipe`, `definePipeableMiddleware`, and `PipeConfigurationError`.
+
+Its public types are `Pipe`, `PipeAnyMiddleware`, `PipeBuilder`, `PipeCapability`, `PipeConfigurationErrorCode`, `PipeDuplicatePolicy`, `PipeMiddleware`, `PipeMiddlewareConflictDiagnostic`, and `PipeMiddlewareMetadata`.
 
 ## Root entrypoint caveat
 

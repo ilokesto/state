@@ -40,6 +40,12 @@ export const useCounter = create(counterStore);
 
 Middleware setup은 첫 번째 `.use()`부터 마지막 `.use()`까지 실행됩니다. Update에서는 처음 등록한 middleware가 가장 바깥쪽입니다. 순서가 중요하며 `pipe`는 선언 순서를 바꾸지 않고 검증합니다.
 
+## Public pipe type
+
+`@ilokesto/state/utils`는 root builder용 `Pipe`와 구성된 chain용 `PipeBuilder`를 export합니다. `PipeMiddleware`는 state-specific middleware를, `PipeAnyMiddleware`는 모든 state type에 동작하는 middleware를 나타냅니다. `PipeCapability`는 middleware가 추가한 store API를, `PipeMiddlewareMetadata`는 ID와 관계를, `PipeDuplicatePolicy`는 duplicate ID 정책을 설명합니다.
+
+`PipeMiddlewareConflictDiagnostic`은 선언한 metadata가 충돌할 때 노출되는 compile-time diagnostic입니다. Runtime의 잘못된 configuration은 `PipeConfigurationError`를 던지며, `code`의 type은 `PipeConfigurationErrorCode`입니다.
+
 ## Builder syntax를 쓰는 이유
 
 `pipe`는 호출할 수 없고 variadic middleware list도 받지 않습니다. `.use()`마다 middleware 하나를 등록한 뒤 plain initial state로 store를 만드세요.
@@ -52,6 +58,16 @@ const store = pipe
 ```
 
 위에서 아래로 읽으면 됩니다: validation 등록, logging 등록, state 생성.
+
+## Custom middleware
+
+`.use()`에 전달하는 모든 값은 `definePipeableMiddleware()`로 등록되어야 합니다. 각 middleware에 `id`를 주고 metadata로 `adds`, `requires`, `before`, `after`, `conflicts`, optional `duplicate` policy를 선언하세요. 앞선 바깥 middleware가 추가한 capability는 이후 안쪽 middleware에서 사용할 수 있습니다. Chain에 없는 middleware와의 관계는 무시합니다. 존재하는 `before` 또는 `after` 관계에서는 pipe가 선언한 방향을 검증하고, 위반된(반대) 순서만 거부합니다. 유효한 관계는 선언한 순서를 유지합니다. Conflict, duplicate ID, cycle도 재정렬 없이 거부됩니다.
+
+## Configuration errors
+
+`PipeConfigurationError`는 문맥에 따른 기본 `id`, 관련 `ids`, 그리고 `DUPLICATE_CAPABILITY`, `DUPLICATE_MIDDLEWARE`, `INVALID_METADATA`, `INVALID_MIDDLEWARE_RESULT`, `INVALID_STORE_INPUT`, `MISSING_CAPABILITY`, `MIDDLEWARE_CONFLICT`, `MIDDLEWARE_CYCLE`, `MIDDLEWARE_ORDER` 중 하나인 code를 노출합니다. 기본 ID는 middleware나 capability를 가리킬 수 있고 적용할 identifier가 없으면 비어 있습니다. `ids`에는 관련된 문맥 identifier가 들어가며 비어 있을 수도 있습니다.
+
+`history()`는 동기 commit이 필요하므로 어느 순서든 `debounce()` 또는 `throttle()`과 같은 chain에 둘 수 없고 이 조합은 `MIDDLEWARE_CONFLICT`를 사용합니다. `debounce()`와 `persist()`를 함께 쓸 때는 `pipe.use(debounce(...)).use(persist(...))`처럼 debounce를 먼저 선언하세요. 반대 순서는 persistence가 deferred commit을 놓치므로 `MIDDLEWARE_ORDER`를 사용합니다.
 
 ## Validation과 함께 쓰기
 

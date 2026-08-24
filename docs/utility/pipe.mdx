@@ -40,6 +40,12 @@ export const useCounter = create(counterStore);
 
 Middleware setup runs from the first `.use()` to the last. During updates, the first registered middleware is outermost. Order matters, and `pipe` validates the declared order without rearranging it.
 
+## Public pipe types
+
+`@ilokesto/state/utils` exports `Pipe` for the root builder and `PipeBuilder` for a configured chain. `PipeMiddleware` describes state-specific middleware; `PipeAnyMiddleware` describes middleware that works for every state type. `PipeCapability` describes store API added by middleware, `PipeMiddlewareMetadata` declares its ID and relationships, and `PipeDuplicatePolicy` controls duplicate IDs.
+
+`PipeMiddlewareConflictDiagnostic` is the compile-time diagnostic exposed when declared metadata conflicts. At runtime, invalid configuration throws `PipeConfigurationError`; its `code` is `PipeConfigurationErrorCode`.
+
 ## Why builder syntax?
 
 `pipe` is not callable and does not accept a variadic middleware list. Register one middleware per `.use()`, then create the store from plain initial state.
@@ -52,6 +58,16 @@ const store = pipe
 ```
 
 Read the chain from top to bottom: register validation, register logging, then create state.
+
+## Custom middleware
+
+Every value passed to `.use()` must be registered with `definePipeableMiddleware()`. Give each middleware an `id`; use metadata to declare `adds`, `requires`, `before`, `after`, `conflicts`, and the optional `duplicate` policy. Capabilities added by an earlier outer middleware are available to later inner middleware. A relation to middleware absent from the chain is ignored. For a present `before` or `after` relation, pipe validates the declared direction and rejects only violated (reversed) order; valid relations keep their declared order. Conflicts, duplicate IDs, and cycles are also rejected without reordering.
+
+## Configuration errors
+
+`PipeConfigurationError` exposes a contextual primary `id`, related `ids`, and a code: `DUPLICATE_CAPABILITY`, `DUPLICATE_MIDDLEWARE`, `INVALID_METADATA`, `INVALID_MIDDLEWARE_RESULT`, `INVALID_STORE_INPUT`, `MISSING_CAPABILITY`, `MIDDLEWARE_CONFLICT`, `MIDDLEWARE_CYCLE`, or `MIDDLEWARE_ORDER`. The primary ID can name a middleware or a capability, and is empty when no identifier applies; `ids` contains the related contextual identifiers and can also be empty.
+
+`history()` cannot share a chain with `debounce()` or `throttle()` in either order because history needs synchronous commits; those combinations use `MIDDLEWARE_CONFLICT`. When using `debounce()` and `persist()`, declare debounce first: `pipe.use(debounce(...)).use(persist(...))`. The reverse uses `MIDDLEWARE_ORDER` because persistence would miss the deferred commit.
 
 ## Use with validation
 

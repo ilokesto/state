@@ -57,7 +57,7 @@ const store = pipe
   .create<ThemeState>({ theme: 'light' });
 ```
 
-`pipe.use(persist(...)).use(debounce(...))`는 지연된 commit의 persistence를 건너뛰므로 거부됩니다.
+`pipe.use(persist(...)).use(debounce(...))`는 지연된 commit의 persistence를 건너뛰므로 `MIDDLEWARE_ORDER`로 거부됩니다. Pipe는 선언 순서를 유지하며 자동으로 재정렬하지 않습니다.
 
 ## Session과 cookie storage
 

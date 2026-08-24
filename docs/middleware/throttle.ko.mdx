@@ -1,0 +1,41 @@
+---
+title: "throttle"
+description: "선행 update를 통과시키고 throttle window가 끝날 때까지 뒤의 update를 드롭합니다."
+---
+
+# throttle
+
+`throttle`은 leading-drop 방식으로 동작합니다. 첫 번째 update는 즉시 통과하고, 이후 update는 wait window가 끝날 때까지 드롭됩니다. 드롭된 update는 대기열에 넣거나 다시 시도하지 않습니다.
+
+## Signature
+
+```ts lineNumbers
+throttle(wait?: number): PipeAnyMiddleware
+```
+
+`wait`의 단위는 밀리초이며 기본값은 `300`입니다. 전달했다면 유한한 0 이상의 숫자여야 합니다.
+
+## 예제
+
+<!-- state-example:throttle-disposal -->
+```ts
+import { dispose, throttle } from '@ilokesto/state/middleware';
+import { pipe } from '@ilokesto/state/utils';
+
+const store = pipe
+  .use(throttle(250))
+  .create({ count: 0 });
+
+store.setState({ count: 1 });
+store.setState({ count: 2 }); // wait window 중 드롭
+
+dispose(store);
+```
+
+## Cleanup 소유권
+
+`throttle`은 자신이 준비한 store의 pending timer를 소유합니다. 해당 store가 더 이상 필요 없으면 `dispose(store)`를 호출해 timer를 취소하고 gate를 다시 여세요. Disposal은 전달한 store에만 적용되고 store를 무효화하거나 consumer를 unsubscribe하지 않으며 반복 호출해도 안전합니다. Cleanup 하나가 실패해도 등록된 모든 cleanup을 시도하며, 하나라도 실패하면 각 원래 thrown value가 담긴 `AggregateError`를 throw합니다.
+
+## 조합 제약
+
+`history()`는 성공한 동기 commit만 기록하므로 `throttle()`과 같은 chain에 둘 수 없습니다. 선언 순서와 관계없이 `MIDDLEWARE_CONFLICT` code의 `PipeConfigurationError`로 거부되며, pipe는 middleware 순서를 바꾸지 않고 선언한 순서를 유지합니다.

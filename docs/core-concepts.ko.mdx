@@ -25,7 +25,7 @@ const useCounter = create(reduce, { count: 0 });
 
 ## Selectors
 
-어댑터는 selector를 받아 컴포넌트가 필요한 조각만 받을 수 있게 합니다. React는 `useSyncExternalStore`와 deep compare helper로 snapshot을 memoize합니다.
+어댑터는 selector를 받아 컴포넌트가 필요한 조각만 받을 수 있게 합니다. 모든 adapter는 같은 1단계 `shallow` 비교를 사용하고, React는 `useSyncExternalStore`로 snapshot을 memoize합니다.
 
 ## Middleware pipeline
 

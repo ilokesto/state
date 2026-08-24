@@ -5,9 +5,11 @@ description: "Compose middleware with pipe and write Immer-style object updates 
 
 # Utility
 
-`@ilokesto/state/utils` exports small helpers for the parts of state management that are not tied to a framework adapter:
+`@ilokesto/state/utils` exports the pipe helpers that are not tied to a framework adapter. The separate `@ilokesto/state/adaptor` subpath exports the Immer-backed update helper:
 
-- [`pipe`](/en/state/utility/pipe) creates an `@ilokesto/store` instance and applies middleware in order.
+- [`pipe`](/en/state/utility/pipe) creates an `@ilokesto/store` instance and applies registered middleware in order.
+- [`definePipeableMiddleware`](/en/state/utility/pipe#custom-middleware) registers custom middleware metadata for `pipe.use(...)`.
+- [`PipeConfigurationError`](/en/state/utility/pipe#configuration-errors) reports invalid runtime pipe configurations.
 - [`adaptor`](/en/state/utility/adaptor) wraps Immer `produce` so object updates can be written with draft mutation syntax.
 
 Use Utility pages when you are building the store before connecting it to React, Vue, Svelte, Solid, or Angular.
@@ -54,7 +56,8 @@ pnpm add immer
 
 | Utility | Use it when | Avoid it when |
 | --- | --- | --- |
-| [`pipe`](/en/state/utility/pipe) | You want to create a store and apply middleware left-to-right. | You already own a `Store<T>` and want to mutate that exact instance manually. |
+| [`pipe`](/en/state/utility/pipe) | You want to create a store and apply registered middleware left-to-right. | You already own a `Store<T>` and want to mutate that exact instance manually. |
+| [`definePipeableMiddleware`](/en/state/utility/pipe#custom-middleware) | You are exposing custom middleware to a pipe chain. | The middleware is only used outside `pipe`. |
 | [`adaptor`](/en/state/utility/adaptor) | Object updates are easier to express as draft mutations. | State is primitive, or you do not want to install `immer`. |
 
 ## Typical composition flow

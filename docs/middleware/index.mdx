@@ -50,9 +50,20 @@ const store = pipe
 | [`logger`](/en/state/middleware/logger) | Development-time state update logs | Disabled in production; diff is debug output. |
 | [`validate`](/en/state/middleware/validate) | Synchronous Standard Schema validation | Async schema results are rejected. |
 | [`debounce`](/en/state/middleware/debounce) | Delaying and coalescing rapid updates | Reads before the timer fires still see previous state. |
+| [`history`](/en/state/middleware/history) | Undo and redo for synchronous changes | Cannot share a chain with debounce or throttle. |
+| [`throttle`](/en/state/middleware/throttle) | Leading-edge rate limiting | Updates during the wait window are dropped. |
 | [`devtools`](/en/state/middleware/devtools) | Redux DevTools inspection | Browser extension dependent; disabled in production. |
 | [`persist`](/en/state/middleware/persist) | Browser storage persistence | Migration support differs by storage type. |
+| `dispose(store)` | Release middleware-owned resources | Call it when the store is no longer needed. |
 
 ## Ordering advice
 
 Put validation before persistence when invalid state should never be stored. Put logger near the end when you want to see the state that actually passed earlier middleware. If debounce is used, remember it changes timing for everything after it. When both debounce and persist are used, declare `pipe.use(debounce(...)).use(persist(...))`; the reverse is rejected with `MIDDLEWARE_ORDER`.
+
+`history()` records only successful synchronous commits, so it cannot share a pipe chain with `debounce()` or `throttle()` in either declaration order. Those combinations are rejected with `MIDDLEWARE_CONFLICT`; pipe never reorders a chain to make it valid.
+
+## Store disposal
+
+Timer-based middleware and middleware with external subscriptions register cleanup on the store they prepare. Call `dispose(store)` from `@ilokesto/state/middleware` when that specific store is no longer needed. It cancels pending debounce or throttle work and releases middleware-owned resources such as DevTools subscriptions. Disposal does not unsubscribe consumers or invalidate the Store; it is scoped to the supplied store, is safe to call repeatedly, and runs a newly registered cleanup only on a later call.
+
+Disposal attempts every registered cleanup even when one throws. If one or more cleanups throw, `dispose` rethrows an `AggregateError` whose `errors` contain the original errors or other thrown values.

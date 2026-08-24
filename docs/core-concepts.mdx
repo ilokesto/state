@@ -25,7 +25,7 @@ const useCounter = create(reduce, { count: 0 });
 
 ## Selectors
 
-Adapters accept selectors so a component can receive only the part it needs. React also memoizes snapshots through `useSyncExternalStore` and a deep comparison helper.
+Adapters accept selectors so a component can receive only the part it needs. Every adapter uses the same one-level `shallow` comparison; React also memoizes snapshots through `useSyncExternalStore`.
 
 ## Middleware pipeline
 

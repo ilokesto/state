@@ -13,13 +13,26 @@ public package surface는 `state/package.json`의 exports가 기준입니다.
 |---|---|
 | `@ilokesto/state` | package identity와 현재 empty runtime root입니다. source는 `export {}`입니다. |
 | `@ilokesto/state/react` | React `create()` adapter와 `UseState`, `UseReducer` type입니다. |
-| `@ilokesto/state/vue` | Vue `create()` adapter입니다. |
-| `@ilokesto/state/svelte` | Svelte `create()` adapter입니다. |
-| `@ilokesto/state/solid` | Solid `create()` adapter입니다. |
-| `@ilokesto/state/angular` | Angular `create()` adapter입니다. |
-| `@ilokesto/state/middleware` | `logger`, `validate`, `debounce`, `devtools`, `persist`입니다. |
-| `@ilokesto/state/utils` | `pipe`입니다. |
+| `@ilokesto/state/vue` | Vue `create()` adapter와 `UseState`, `UseReducer` type입니다. |
+| `@ilokesto/state/svelte` | Svelte `create()` adapter와 `UseState`, `UseReducer` type입니다. |
+| `@ilokesto/state/solid` | Solid `create()` adapter와 `UseState`, `UseReducer` type입니다. |
+| `@ilokesto/state/angular` | Angular `create()` adapter와 `AngularOptions`, `UseState`, `UseReducer` type입니다. |
+| `@ilokesto/state/middleware` | 등록된 middleware, store disposal, middleware type입니다. |
+| `@ilokesto/state/utils` | pipe builder, custom middleware 등록, configuration error, pipe type입니다. |
 | `@ilokesto/state/adaptor` | `adaptor`; optional `immer` peer가 필요합니다. |
+| `@ilokesto/state/package.json` | 이 패키지 manifest가 필요한 tooling을 위한 package metadata export입니다. |
+
+## Middleware export
+
+`@ilokesto/state/middleware`는 `debounce`, `throttle`, `devtools`, `dispose`, `history`, `HistoryConfigurationError`, `logger`, `persist`, `validate`를 export합니다.
+
+Public type은 `HistoryControls`, `HistoryOptions`, `HistoryStore`, `OnRehydrateStorage`, `OnRehydrateStorageCallback`, `PersistControls`, `PersistDecoder`, `PersistDecoderStateDiagnostic`, `PersistMigration`, `PersistStore`, `SafePersistConfig`, `SafePersistCookieConfig`, `SafePersistLocalConfig`, `SafePersistSessionConfig`입니다.
+
+## Utility export
+
+`@ilokesto/state/utils`는 `pipe`, `definePipeableMiddleware`, `PipeConfigurationError`를 export합니다.
+
+Public type은 `Pipe`, `PipeAnyMiddleware`, `PipeBuilder`, `PipeCapability`, `PipeConfigurationErrorCode`, `PipeDuplicatePolicy`, `PipeMiddleware`, `PipeMiddlewareConflictDiagnostic`, `PipeMiddlewareMetadata`입니다.
 
 ## Root entrypoint 주의점
 

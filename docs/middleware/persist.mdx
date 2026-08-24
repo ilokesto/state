@@ -57,7 +57,7 @@ const store = pipe
   .create<ThemeState>({ theme: 'light' });
 ```
 
-`pipe.use(persist(...)).use(debounce(...))` is rejected because it would skip persistence for deferred commits.
+`pipe.use(persist(...)).use(debounce(...))` is rejected with `MIDDLEWARE_ORDER` because it would skip persistence for deferred commits. Pipe keeps the declared order and never rearranges it.
 
 ## Session and cookie storage
 

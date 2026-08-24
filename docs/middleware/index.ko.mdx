@@ -50,9 +50,20 @@ const store = pipe
 | [`logger`](/ko/state/middleware/logger) | 개발 중 state update 로그 | production에서는 비활성화되며 diff는 debug output입니다. |
 | [`validate`](/ko/state/middleware/validate) | synchronous Standard Schema validation | async schema 결과는 거부됩니다. |
 | [`debounce`](/ko/state/middleware/debounce) | 빠른 update 지연 및 병합 | timer 전 read는 이전 state를 볼 수 있습니다. |
-| [`devtools`](/ko/state/middleware/devtools) | Redux DevTools निरीpection | browser extension에 의존하며 production에서는 비활성화됩니다. |
+| [`history`](/ko/state/middleware/history) | 동기 변경의 undo와 redo | debounce 또는 throttle과 같은 체인을 쓸 수 없습니다. |
+| [`throttle`](/ko/state/middleware/throttle) | leading-edge rate limiting | wait window 중 update는 드롭됩니다. |
+| [`devtools`](/ko/state/middleware/devtools) | Redux DevTools inspection | browser extension에 의존하며 production에서는 비활성화됩니다. |
 | [`persist`](/ko/state/middleware/persist) | browser storage persistence | storage type마다 migration 지원이 다릅니다. |
+| `dispose(store)` | middleware 소유 resource 해제 | 해당 store가 더 이상 필요 없을 때 호출합니다. |
 
 ## 순서 잡는 법
 
 invalid state가 절대 저장되면 안 된다면 validation을 persistence보다 앞에 두세요. 앞선 middleware를 통과한 실제 state를 보고 싶다면 logger를 뒤쪽에 두는 편이 좋습니다. debounce를 사용하면 그 뒤의 모든 흐름에 timing 변화가 생긴다는 점을 기억하세요. debounce와 persist를 함께 사용할 때는 `pipe.use(debounce(...)).use(persist(...))` 순서로 선언하세요. 반대 순서는 `MIDDLEWARE_ORDER`로 거부됩니다.
+
+`history()`는 성공한 동기 commit만 기록하므로 선언 순서와 관계없이 `debounce()` 또는 `throttle()`과 같은 pipe 체인을 쓸 수 없습니다. 이 조합은 `MIDDLEWARE_CONFLICT`로 거부되며 pipe가 유효하게 만들려고 chain을 재정렬하지 않습니다.
+
+## Store 정리
+
+Timer 기반 middleware와 외부 subscription을 가진 middleware는 자신이 준비한 store에 cleanup을 등록합니다. 해당 store가 더 이상 필요 없으면 `@ilokesto/state/middleware`의 `dispose(store)`를 호출하세요. 대기 중인 debounce/throttle 작업을 취소하고 DevTools subscription 같은 middleware 소유 resource를 해제합니다. disposal은 consumer를 unsubscribe하거나 Store를 무효화하지 않습니다. 전달한 store에만 적용되고 여러 번 안전하게 호출할 수 있으며, 나중에 새 cleanup이 등록된 경우에만 이후 호출에서 실행합니다.
+
+Disposal은 cleanup 하나가 throw해도 등록된 모든 cleanup을 시도합니다. 하나 이상의 cleanup이 throw하면 `dispose`는 원래 error 또는 다른 thrown value가 `errors`에 담긴 `AggregateError`를 다시 throw합니다.

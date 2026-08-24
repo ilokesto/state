@@ -5,9 +5,11 @@ description: "pipe로 middleware를 조합하고 adaptor로 Immer 스타일 obje
 
 # 유틸리티 소개
 
-`@ilokesto/state/utils`는 framework adapter에 묶이지 않는 작은 helper를 export합니다.
+`@ilokesto/state/utils`는 framework adapter에 묶이지 않는 pipe helper를 export합니다. 별도 `@ilokesto/state/adaptor` subpath는 Immer 기반 update helper를 export합니다.
 
-- [`pipe`](/ko/state/utility/pipe)는 `@ilokesto/store` instance를 만들고 middleware를 순서대로 적용합니다.
+- [`pipe`](/ko/state/utility/pipe)는 `@ilokesto/store` instance를 만들고 등록된 middleware를 순서대로 적용합니다.
+- [`definePipeableMiddleware`](/ko/state/utility/pipe#custom-middleware)는 `pipe.use(...)`에 쓸 custom middleware metadata를 등록합니다.
+- [`PipeConfigurationError`](/ko/state/utility/pipe#configuration-errors)는 잘못된 runtime pipe configuration을 보고합니다.
 - [`adaptor`](/ko/state/utility/adaptor)는 Immer `produce`를 감싸 object update를 draft mutation syntax로 쓸 수 있게 합니다.
 
 React, Vue, Svelte, Solid, Angular에 연결하기 전에 store 자체를 준비할 때 Utility page를 보세요.
@@ -54,7 +56,8 @@ pnpm add immer
 
 | Utility | 사용할 때 | 피할 때 |
 | --- | --- | --- |
-| [`pipe`](/ko/state/utility/pipe) | store를 만들고 middleware를 왼쪽에서 오른쪽으로 적용하고 싶을 때 | 이미 소유한 `Store<T>` instance를 직접 조작해야 할 때 |
+| [`pipe`](/ko/state/utility/pipe) | store를 만들고 등록된 middleware를 왼쪽에서 오른쪽으로 적용하고 싶을 때 | 이미 소유한 `Store<T>` instance를 직접 조작해야 할 때 |
+| [`definePipeableMiddleware`](/ko/state/utility/pipe#custom-middleware) | pipe chain에 custom middleware를 노출할 때 | middleware를 `pipe` 밖에서만 사용할 때 |
 | [`adaptor`](/ko/state/utility/adaptor) | object update가 draft mutation으로 더 읽기 쉬울 때 | state가 primitive이거나 `immer`를 설치하고 싶지 않을 때 |
 
 ## 일반적인 composition flow
