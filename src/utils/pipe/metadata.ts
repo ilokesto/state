@@ -138,6 +138,27 @@ export function getCapturedPipeMiddleware(entry: object): object {
   return capturedPipeMiddleware.get(entry) ?? entry;
 }
 
+/**
+ * Register metadata on a pipe middleware function.
+ *
+ * Every middleware passed to `pipe.use(...)` must be registered with this
+ * helper. The metadata declares the middleware's ID, capability requirements,
+ * conflicts, and ordering constraints that the pipe builder validates.
+ *
+ * @param middleware - The middleware function to tag.
+ * @param metadata - Pipe metadata describing ID, capabilities, conflicts, and ordering.
+ * @returns The same middleware function, now tagged with metadata.
+ *
+ * @example
+ * ```ts
+ * import { definePipeableMiddleware } from '@ilokesto/state/utils';
+ *
+ * const myMiddleware = definePipeableMiddleware(
+ *   (store) => store,
+ *   { id: '@my-app/middleware' },
+ * );
+ * ```
+ */
 export function definePipeableMiddleware<
   const Id extends string,
   const Requires extends readonly PipeCapability[] = readonly [],
@@ -151,22 +172,6 @@ export function definePipeableMiddleware<
   metadata: PipeMiddlewareMetadata<Id, Requires, Adds, Duplicate, Conflicts, Before, After>,
 ): PipeableMiddleware<
   PipeAnyMiddleware<Requires, Adds>,
-  PipeMiddlewareMetadata<Id, Requires, Adds, Duplicate, Conflicts, Before, After>
->;
-export function definePipeableMiddleware<
-  State,
-  const Id extends string,
-  const Requires extends readonly PipeCapability[] = readonly [],
-  const Adds extends readonly PipeCapability[] = readonly [],
-  const Duplicate extends PipeDuplicatePolicy = 'reject',
-  const Conflicts extends readonly string[] = readonly string[],
-  const Before extends readonly string[] = readonly string[],
-  const After extends readonly string[] = readonly string[],
->(
-  middleware: PipeMiddleware<State, Requires, Adds>,
-  metadata: PipeMiddlewareMetadata<Id, Requires, Adds, Duplicate, Conflicts, Before, After>,
-): PipeableMiddleware<
-  PipeMiddleware<State, Requires, Adds>,
   PipeMiddlewareMetadata<Id, Requires, Adds, Duplicate, Conflicts, Before, After>
 >;
 /**
@@ -190,6 +195,22 @@ export function definePipeableMiddleware<
  * );
  * ```
  */
+export function definePipeableMiddleware<
+  State,
+  const Id extends string,
+  const Requires extends readonly PipeCapability[] = readonly [],
+  const Adds extends readonly PipeCapability[] = readonly [],
+  const Duplicate extends PipeDuplicatePolicy = 'reject',
+  const Conflicts extends readonly string[] = readonly string[],
+  const Before extends readonly string[] = readonly string[],
+  const After extends readonly string[] = readonly string[],
+>(
+  middleware: PipeMiddleware<State, Requires, Adds>,
+  metadata: PipeMiddlewareMetadata<Id, Requires, Adds, Duplicate, Conflicts, Before, After>,
+): PipeableMiddleware<
+  PipeMiddleware<State, Requires, Adds>,
+  PipeMiddlewareMetadata<Id, Requires, Adds, Duplicate, Conflicts, Before, After>
+>;
 export function definePipeableMiddleware(
   middleware: object,
   metadata: PipeMiddlewareMetadata,

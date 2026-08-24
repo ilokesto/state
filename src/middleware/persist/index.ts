@@ -143,10 +143,6 @@ const applyPersist = <T>(
   return persistedStore;
 };
 
-export function persist<DecodedState, const Steps extends readonly MigrationFn[]>(
-  options: SafePersistConfig<DecodedState, Steps>,
-): SafeCurriedPersist<DecodedState>;
-
 /**
  * Create a pipe middleware that persists store state to browser storage.
  *
@@ -164,6 +160,10 @@ export function persist<DecodedState, const Steps extends readonly MigrationFn[]
  *   `onRehydrateStorage`.
  * @returns Pipe middleware registered with `@ilokesto/state/persist` metadata.
  */
+export function persist<DecodedState, const Steps extends readonly MigrationFn[]>(
+  options: SafePersistConfig<DecodedState, Steps>,
+): SafeCurriedPersist<DecodedState>;
+
 export function persist<DecodedState, const Steps extends readonly MigrationFn[]>(
   options: SafePersistConfig<DecodedState, Steps>,
 ): object {
