@@ -13,6 +13,8 @@ description: "빠른 update를 지연하고 누적된 최신 state를 적용합�
 debounce(wait?: number): PipeAnyMiddleware
 ```
 
+`wait`의 단위는 밀리초이며 기본값은 `300`입니다. 전달했다면 유한한 0 이상의 숫자여야 하며 `0`도 유효합니다. 잘못된 wait 값은 middleware 또는 timer를 설정하기 전에 `RangeError`를 던집니다.
+
 ## 예제
 
 ```ts lineNumbers

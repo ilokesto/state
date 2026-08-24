@@ -13,6 +13,8 @@ description: "Delay rapid updates and apply the latest accumulated state."
 debounce(wait?: number): PipeAnyMiddleware
 ```
 
+`wait` is measured in milliseconds and defaults to `300`. When supplied, it must be a finite non-negative number; `0` is valid. Invalid waits throw `RangeError` before middleware or timer setup.
+
 ## Example
 
 ```ts lineNumbers
