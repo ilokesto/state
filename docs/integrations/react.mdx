@@ -7,6 +7,14 @@ description: "Use @ilokesto/state from React components and hooks."
 
 Use the React adapter when a React component needs a subscribed value from an `@ilokesto/store`-backed state container. Import from `@ilokesto/state/react`, not from the root package.
 
+## Adapter types
+
+`UseState` and `UseReducer` describe the hooks returned by the plain-state and reducer `create()` overloads. Import them from the same React subpath when a public API accepts either hook type.
+
+```ts lineNumbers
+import type { UseReducer, UseState } from '@ilokesto/state/react';
+```
+
 ## Plain state hook
 
 Plain state returns the same shape as a small React state hook: `[selection, setState]`.

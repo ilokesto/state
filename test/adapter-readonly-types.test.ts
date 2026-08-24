@@ -81,6 +81,26 @@ test('Given source adapter contracts, when selectors or lifecycle-free reads mut
   expectReadonlyMutationErrors('source-invalid');
 });
 
+test('Given source React adapter declarations, when consumers use the exported hook types, then they compile', () => {
+  // Given / When
+  const result = compileAdapterFixture('source-type-exports-valid');
+
+  // Then
+  expect(result.success, result.diagnostics).toBeTrue();
+  expect(result.exitCode).toBe(0);
+  expect(result.diagnostics).toBe('');
+});
+
+test('Given generated React adapter declarations, when consumers use the exported hook types, then they compile', () => {
+  // Given / When
+  const result = compileAdapterFixture('dist-type-exports-valid');
+
+  // Then
+  expect(result.success, result.diagnostics).toBeTrue();
+  expect(result.exitCode).toBe(0);
+  expect(result.diagnostics).toBe('');
+});
+
 test('Given generated adapter declarations, when valid public-subpath consumers compile, then every adapter accepts them', () => {
   // Given / When
   const result = compileAdapterFixture('dist-valid');

@@ -7,6 +7,14 @@ description: "React 컴포넌트와 hook에서 @ilokesto/state를 사용합니�
 
 React component가 `@ilokesto/store` 기반 상태를 구독해야 할 때 React adapter를 사용하세요. root package가 아니라 `@ilokesto/state/react`에서 import합니다.
 
+## Adapter type
+
+`UseState`와 `UseReducer`는 plain-state와 reducer `create()` overload가 반환하는 hook을 나타냅니다. public API가 이 hook type을 받을 때 같은 React subpath에서 import하세요.
+
+```ts lineNumbers
+import type { UseReducer, UseState } from '@ilokesto/state/react';
+```
+
 ## Plain state hook
 
 plain state는 작은 React state hook처럼 `[selection, setState]`를 반환합니다.
