@@ -25,7 +25,11 @@ type PipeMetadataIds<Chain extends PipeMetadataChain> = PipeMetadataId<Chain[num
 type PipeRelationshipIds<
   Metadata extends PipeMiddlewareMetadata,
   Key extends PipeRelationshipKey,
-> = Metadata[Key] extends readonly string[] ? Metadata[Key][number] : never;
+> = Extract<Metadata[Key], readonly string[]> extends infer Relationships extends readonly string[]
+  ? string extends Relationships[number]
+    ? never
+    : Relationships[number]
+  : never;
 
 type PipeMetadataWithIdFromUnion<
   Metadata extends PipeMiddlewareMetadata,

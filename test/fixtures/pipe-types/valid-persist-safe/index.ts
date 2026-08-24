@@ -1,6 +1,6 @@
 import { Store } from '@ilokesto/store';
 
-import { logger, persist, validate } from '../../../../src/middleware';
+import { debounce, logger, persist, validate } from '../../../../src/middleware';
 import type {
   PersistDecoder,
   PersistMigration,
@@ -65,6 +65,10 @@ const curriedCookie: PersistStore<CounterState> = pipe
 const curriedSession: PersistStore<CounterState> = pipe
   .use(persist({ decode: decodeCounter, session: 'safe-session-pipe' }))
   .create({ count: 0 });
+const debounceBeforePersist: PersistStore<CounterState> = pipe
+  .use(debounce(25))
+  .use(persist({ decode: decodeCounter, local: 'debounce-before-persist' }))
+  .create({ count: 0 });
 const persistBeforeValidate: PersistStore<CounterState> = pipe
   .use(persist({ decode: decodeCounter, local: 'before-validate' }))
   .use(validate(counterSchema))
@@ -96,6 +100,7 @@ directSession.getState().count;
 curriedLocal.getState().count;
 curriedCookie.getState().count;
 curriedSession.getState().count;
+debounceBeforePersist.getState().count;
 persistBeforeValidate.getState().count;
 persistAfterValidate.getState().count;
 persistBeforeCustom.getState().count;

@@ -335,6 +335,8 @@ Every middleware passed to `.use()` must be registered with `definePipeableMiddl
 
 `before: ['id']` means this middleware must be declared earlier, which makes it outer. `after: ['id']` means it must be declared later, which makes it inner. A relation to a middleware that is absent is ignored. Pipe rejects invalid present relationships and cycles, and it never reorders middleware for you.
 
+When both are used, the safe chain is `pipe.use(debounce(...)).use(persist(...))`. The reverse `pipe.use(persist(...)).use(debounce(...))` is rejected with `MIDDLEWARE_ORDER`.
+
 Capabilities make a middleware's Store additions visible to later middleware and the final Store. `requires` must already be available when `.use()` runs, so an earlier outer middleware cannot require a capability supplied by a later inner middleware. `adds` supplies capabilities in the immediate outer-to-inner direction.
 
 <!-- pipe-example:custom-capability -->

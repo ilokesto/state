@@ -36,6 +36,29 @@ const store = pipe
   .create<ThemeState>({ theme: 'light' });
 ```
 
+## debounce와 함께 사용하기
+
+두 middleware를 함께 사용할 때는 persistence가 debounced commit을 관찰하도록 `debounce`를 `persist`보다 먼저 선언하세요.
+
+```ts lineNumbers
+import { debounce, persist } from '@ilokesto/state/middleware';
+import { pipe } from '@ilokesto/state/utils';
+
+type ThemeState = { readonly theme: 'light' | 'dark' };
+
+const decodeTheme = (value: unknown): ThemeState | null => {
+  if (typeof value !== 'object' || value === null || !('theme' in value)) return null;
+  return value.theme === 'light' || value.theme === 'dark' ? { theme: value.theme } : null;
+};
+
+const store = pipe
+  .use(debounce(250))
+  .use(persist({ local: 'theme', decode: decodeTheme }))
+  .create<ThemeState>({ theme: 'light' });
+```
+
+`pipe.use(persist(...)).use(debounce(...))`는 지연된 commit의 persistence를 건너뛰므로 거부됩니다.
+
 ## Session과 cookie storage
 
 ```ts lineNumbers

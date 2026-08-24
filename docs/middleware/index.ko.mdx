@@ -55,4 +55,4 @@ const store = pipe
 
 ## 순서 잡는 법
 
-invalid state가 절대 저장되면 안 된다면 validation을 persistence보다 앞에 두세요. 앞선 middleware를 통과한 실제 state를 보고 싶다면 logger를 뒤쪽에 두는 편이 좋습니다. debounce를 사용하면 그 뒤의 모든 흐름에 timing 변화가 생긴다는 점을 기억하세요.
+invalid state가 절대 저장되면 안 된다면 validation을 persistence보다 앞에 두세요. 앞선 middleware를 통과한 실제 state를 보고 싶다면 logger를 뒤쪽에 두는 편이 좋습니다. debounce를 사용하면 그 뒤의 모든 흐름에 timing 변화가 생긴다는 점을 기억하세요. debounce와 persist를 함께 사용할 때는 `pipe.use(debounce(...)).use(persist(...))` 순서로 선언하세요. 반대 순서는 `MIDDLEWARE_ORDER`로 거부됩니다.

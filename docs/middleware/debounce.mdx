@@ -28,6 +28,29 @@ store.setState({ query: 'il' });
 store.setState({ query: 'ilo' });
 ```
 
+## Using with persist
+
+When both middleware are used, declare `debounce` before `persist` so persistence observes the debounced commit:
+
+```ts lineNumbers
+import { debounce, persist } from '@ilokesto/state/middleware';
+import { pipe } from '@ilokesto/state/utils';
+
+type SearchState = { readonly query: string };
+
+const decodeSearch = (value: unknown): SearchState | null => {
+  if (typeof value !== 'object' || value === null || !('query' in value)) return null;
+  return typeof value.query === 'string' ? { query: value.query } : null;
+};
+
+const store = pipe
+  .use(debounce(250))
+  .use(persist({ local: 'search', decode: decodeSearch }))
+  .create<SearchState>({ query: '' });
+```
+
+`pipe.use(persist(...)).use(debounce(...))` is rejected because it would skip persistence for deferred commits.
+
 ## Function updates
 
 Function updates are kept in order and replayed against an accumulated current state when the timer fires. That means updater functions still compose with one another inside the debounce window.

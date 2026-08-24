@@ -55,4 +55,4 @@ const store = pipe
 
 ## Ordering advice
 
-Put validation before persistence when invalid state should never be stored. Put logger near the end when you want to see the state that actually passed earlier middleware. If debounce is used, remember it changes timing for everything after it.
+Put validation before persistence when invalid state should never be stored. Put logger near the end when you want to see the state that actually passed earlier middleware. If debounce is used, remember it changes timing for everything after it. When both debounce and persist are used, declare `pipe.use(debounce(...)).use(persist(...))`; the reverse is rejected with `MIDDLEWARE_ORDER`.

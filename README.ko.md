@@ -333,6 +333,8 @@ const counterStore = pipe
 
 `before: ['id']`는 이 미들웨어가 더 앞에 선언되어 바깥쪽이 되어야 함을 뜻합니다. `after: ['id']`는 더 뒤에 선언되어 안쪽이 되어야 함을 뜻합니다. 대상 미들웨어가 없으면 관계는 무시됩니다. 파이프는 존재하는 관계의 오류와 순환을 거부하며, 미들웨어 순서를 자동으로 바꾸지 않습니다.
 
+둘을 함께 사용할 때 안전한 체인은 `pipe.use(debounce(...)).use(persist(...))`입니다. 반대 순서인 `pipe.use(persist(...)).use(debounce(...))`는 `MIDDLEWARE_ORDER`로 거부됩니다.
+
 기능(capability)은 미들웨어가 Store에 추가한 API를 이후 미들웨어와 최종 Store에서 보이게 합니다. `requires`는 `.use()`를 호출할 때 이미 사용할 수 있어야 하므로, 앞선 바깥 미들웨어가 나중의 안쪽 미들웨어가 제공하는 기능을 요구할 수 없습니다. `adds`는 즉시 바깥에서 안쪽으로 향하는 방향으로 기능을 제공합니다.
 
 <!-- pipe-example:custom-capability -->

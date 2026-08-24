@@ -18,10 +18,12 @@ export type PipeMiddlewareMetadata<
   Adds extends readonly PipeCapability[] = readonly PipeCapability[],
   Duplicate extends PipeDuplicatePolicy = PipeDuplicatePolicy,
   Conflicts extends readonly string[] = readonly string[],
+  Before extends readonly string[] = readonly string[],
+  After extends readonly string[] = readonly string[],
 > = {
   readonly adds?: Adds;
-  readonly after?: readonly string[];
-  readonly before?: readonly string[];
+  readonly after?: After;
+  readonly before?: Before;
   readonly conflicts?: Conflicts;
   readonly duplicate?: Duplicate;
   readonly id: Id;

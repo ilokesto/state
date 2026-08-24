@@ -16,8 +16,12 @@ export type PipeTypeFixtureCase =
 export const pipeTypeFixtureCases = {
   'dist-consumer': { kind: 'dist-valid' },
   'dist-consumer/public-invalid': {
-    diagnosticCount: 7,
-    expectedMarkers: ['__pipeCallableRootError', '__pipeStoreInputError'],
+    diagnosticCount: 8,
+    expectedMarkers: [
+      '__pipeCallableRootError',
+      '__pipeMiddlewareOrderError',
+      '__pipeStoreInputError',
+    ],
     kind: 'dist-invalid',
   },
   'invalid-callable-root': {
@@ -64,6 +68,11 @@ export const pipeTypeFixtureCases = {
   'invalid-persist-chain': {
     diagnosticCount: 1,
     expectedMarkers: ['__persistMigrationChainError'],
+    kind: 'invalid',
+  },
+  'invalid-persist-debounce-order': {
+    diagnosticCount: 1,
+    expectedMarkers: ['__pipeMiddlewareOrderError'],
     kind: 'invalid',
   },
   'invalid-persist-decoder-state': {

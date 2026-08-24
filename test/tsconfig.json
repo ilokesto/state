@@ -19,6 +19,7 @@
     "fixtures/pipe-types/invalid-missing-capability",
     "fixtures/pipe-types/invalid-order",
     "fixtures/pipe-types/invalid-persist-chain",
+    "fixtures/pipe-types/invalid-persist-debounce-order",
     "fixtures/pipe-types/invalid-persist-decoder-state",
     "fixtures/pipe-types/invalid-persist-first-input",
     "fixtures/pipe-types/invalid-persist-session-migrate",

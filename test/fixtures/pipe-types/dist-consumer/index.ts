@@ -65,6 +65,15 @@ const stateIdentity: PipeMiddleware<CounterState> = (store) => store;
 const stateIdentityMiddleware = definePipeableMiddleware(stateIdentity, {
   id: '@consumer/state-identity',
 } as const);
+const explicitGenericMiddleware: PipeAnyMiddleware = (store) => store;
+const explicitAfter = definePipeableMiddleware<'@consumer/explicit-after'>(
+  explicitGenericMiddleware,
+  { after: ['@consumer/dependency'], id: '@consumer/explicit-after' } as const,
+);
+const explicitBefore = definePipeableMiddleware<'@consumer/explicit-before'>(
+  explicitGenericMiddleware,
+  { before: ['@consumer/dependency'], id: '@consumer/explicit-before' } as const,
+);
 
 const metadata: PipeMiddlewareMetadata = { id: '@consumer/metadata' };
 const duplicatePolicy: PipeDuplicatePolicy = 'reject';
@@ -133,6 +142,8 @@ function configurationErrorCode(error: unknown): string {
 
 metadata.id;
 duplicatePolicy;
+explicitAfter;
+explicitBefore;
 configurationErrorCode(configurationError);
 historyConfigurationError.code;
 store.increment();

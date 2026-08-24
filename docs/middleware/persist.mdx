@@ -36,6 +36,29 @@ const store = pipe
   .create<ThemeState>({ theme: 'light' });
 ```
 
+## Using with debounce
+
+When both middleware are used, declare `debounce` before `persist` so persistence observes the debounced commit:
+
+```ts lineNumbers
+import { debounce, persist } from '@ilokesto/state/middleware';
+import { pipe } from '@ilokesto/state/utils';
+
+type ThemeState = { readonly theme: 'light' | 'dark' };
+
+const decodeTheme = (value: unknown): ThemeState | null => {
+  if (typeof value !== 'object' || value === null || !('theme' in value)) return null;
+  return value.theme === 'light' || value.theme === 'dark' ? { theme: value.theme } : null;
+};
+
+const store = pipe
+  .use(debounce(250))
+  .use(persist({ local: 'theme', decode: decodeTheme }))
+  .create<ThemeState>({ theme: 'light' });
+```
+
+`pipe.use(persist(...)).use(debounce(...))` is rejected because it would skip persistence for deferred commits.
+
 ## Session and cookie storage
 
 ```ts lineNumbers

@@ -42,6 +42,15 @@ const stateSpecific = definePipeableMiddleware(
   },
 );
 
+const explicitAfter = definePipeableMiddleware<'@fixture/explicit-after'>(
+  <State>(store: Store<State>): Store<State> => store,
+  { after: ['@fixture/dependency'], id: '@fixture/explicit-after' } as const,
+);
+const explicitBefore = definePipeableMiddleware<'@fixture/explicit-before'>(
+  <State>(store: Store<State>): Store<State> => store,
+  { before: ['@fixture/dependency'], id: '@fixture/explicit-before' } as const,
+);
+
 declare const clockStore: Store<{ readonly label: string }> & ClockCapability['shape'];
 
 const genericStore = stateAgnostic(clockStore);
@@ -49,6 +58,8 @@ const counterStore = stateSpecific(new Store<CounterState>({ count: 0 }));
 
 genericStore.getState().label;
 counterStore.getState().count;
+explicitAfter;
+explicitBefore;
 
 const genericLiteralContract: PipeableMiddleware<
   PipeAnyMiddleware<typeof requires, typeof noCapabilities>,

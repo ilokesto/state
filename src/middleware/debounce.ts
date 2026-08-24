@@ -78,7 +78,8 @@ const applyDebounce = <T>(initialState: T | Store<T>, wait = 300): Store<T> => {
  * Coalesces all updates within the wait period into a single commit.
  * Function updaters are applied sequentially against the latest state at
  * flush time; value updates overwrite previous ones. If an updater throws,
- * its error surfaces and later updates remain schedulable.
+ * its error surfaces and later updates remain schedulable. When used with
+ * `persist`, `persist` must be declared after `debounce` in the pipe chain.
  *
  * @param wait - Debounce delay in milliseconds. Defaults to `300`.
  * @returns Pipe middleware registered with `@ilokesto/state/debounce` metadata.
