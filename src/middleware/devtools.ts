@@ -47,6 +47,16 @@ const applyDevtools = <T>(initialState: T | Store<T>, name: string) => {
 
   let isDispatchAction = false;
 
+  const runDispatchAction = (action: () => void): void => {
+    const wasDispatchAction = isDispatchAction;
+    isDispatchAction = true;
+    try {
+      action();
+    } finally {
+      isDispatchAction = wasDispatchAction;
+    }
+  };
+
   if (devTools) {
     devTools.init(store.getState() as T);
 
@@ -57,25 +67,27 @@ const applyDevtools = <T>(initialState: T | Store<T>, name: string) => {
 
       switch (message.payload?.type) {
         case 'RESET':
-          isDispatchAction = true;
-          store.setState(
-            initialState instanceof Store
-              ? (initialState.getInitialState() as T)
-              : (initialState as T),
-          );
-          isDispatchAction = false;
+          runDispatchAction(() => {
+            store.setState(
+              initialState instanceof Store
+                ? (initialState.getInitialState() as T)
+                : (initialState as T),
+            );
+          });
           devTools.init(store.getState() as T);
           break;
         case 'COMMIT':
           devTools.init(store.getState() as T);
           break;
-        case 'ROLLBACK':
-          if (typeof message.state === 'string') {
-            isDispatchAction = true;
-            store.setState(JSON.parse(message.state) as T);
-            isDispatchAction = false;
+        case 'ROLLBACK': {
+          const state = message.state;
+          if (typeof state === 'string') {
+            runDispatchAction(() => {
+              store.setState(JSON.parse(state) as T);
+            });
           }
           break;
+        }
         default:
           break;
       }
