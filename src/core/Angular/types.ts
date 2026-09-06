@@ -1,11 +1,11 @@
-import type { Store } from '@ilokesto/store';
+import type { StoreApi } from '@ilokesto/store';
 import type { DestroyRef, Signal } from '@angular/core';
 
 import type { ReducerAction } from '../../types/ReduceFn.js';
 import type { ReadonlySnapshot } from '../shared/readonlySnapshot.js';
 
 export type Selector<T, S> = (state: ReadonlySnapshot<T>) => S;
-export type SetStateAction<T> = Parameters<Store<T>['setState']>[0];
+export type SetStateAction<T> = Parameters<StoreApi<T>['setState']>[0];
 export type StateWriter<T> = (nextState: SetStateAction<T>) => void;
 export type ActionWriter<Action> = (action: Action) => void;
 export type AngularOptions = {
@@ -15,13 +15,13 @@ export type AngularOptions = {
 export type AngularStateResult<S, T> = Readonly<{
   state: Signal<S>;
   setState: StateWriter<T>;
-  subscribe: Store<T>['subscribe'];
+  subscribe: StoreApi<T>['subscribe'];
 }>;
 
 export type AngularReducerResult<S, T, Action> = Readonly<{
   state: Signal<S>;
   dispatch: ActionWriter<Action>;
-  subscribe: Store<T>['subscribe'];
+  subscribe: StoreApi<T>['subscribe'];
 }>;
 
 export type UseState<T> = {
@@ -33,7 +33,7 @@ export type UseState<T> = {
     (): ReadonlySnapshot<T>;
     <S>(selector: Selector<T, S>): S;
   };
-  subscribe: Store<T>['subscribe'];
+  subscribe: StoreApi<T>['subscribe'];
 };
 
 export type UseReducer<T, Action extends ReducerAction> = {
@@ -45,5 +45,5 @@ export type UseReducer<T, Action extends ReducerAction> = {
     (): ReadonlySnapshot<T>;
     <S>(selector: Selector<T, S>): S;
   };
-  subscribe: Store<T>['subscribe'];
+  subscribe: StoreApi<T>['subscribe'];
 };

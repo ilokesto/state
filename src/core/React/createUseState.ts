@@ -1,7 +1,7 @@
-import type { Store } from '@ilokesto/store';
+import type { StoreApi, ReadableStore } from '@ilokesto/store';
 import { useMemo, useSyncExternalStore } from 'react';
 
-import { dispatchStoreAction } from '../../lib/actionMetadata.js';
+import { createDispatch } from '../shared/createDispatch.js';
 import type { ReducerAction } from '../../types/ReduceFn.js';
 import { identity } from '../shared/identity.js';
 import {
@@ -31,7 +31,7 @@ function createShallowSelector<T, S>(
 }
 
 export function useStoreState<T, S, Writer>(
-  store: Store<T>,
+  store: ReadableStore<T>,
   selector: (state: ReadonlySnapshot<T>) => S,
   write: Writer,
 ) {
@@ -61,11 +61,11 @@ export function useStoreState<T, S, Writer>(
 }
 
 export function createUseState<T, Action extends ReducerAction>(
-  store: Store<T>,
+  store: StoreApi<T>,
   isReduce: boolean,
+  dispatch = createDispatch<T, Action>(store),
 ): UseState<T> | UseReducer<T, Action> {
   const write = store.setState.bind(store);
-  const dispatch = (action: Action): void => dispatchStoreAction(store, action);
 
   function readOnly(): ReadonlySnapshot<T>;
   function readOnly<S>(selector: Selector<T, S>): S;

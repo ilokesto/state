@@ -13,18 +13,21 @@ pnpm add @ilokesto/state @ilokesto/store react
 
 ## 1. Import from a framework subpath
 
-The root entrypoint does not export `create`. Choose the adapter subpath.
+Create state through the framework-neutral root, then bind the same store to your framework.
 
 ```ts lineNumbers
-import { create } from '@ilokesto/state/react';
+import { createStore } from '@ilokesto/state';
+import { bind } from '@ilokesto/state/react';
 ```
 
 ## 2. Create plain state
 
 ```tsx lineNumbers
-import { create } from '@ilokesto/state/react';
+import { createStore } from '@ilokesto/state';
+import { bind } from '@ilokesto/state/react';
 
-const useTheme = create({ mode: 'light' as 'light' | 'dark' });
+const theme = createStore<{ mode: 'light' | 'dark' }>({ mode: 'light' });
+const useTheme = bind(theme);
 
 function ThemeButton() {
   const [mode, setTheme] = useTheme((state) => state.mode);

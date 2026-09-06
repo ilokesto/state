@@ -7,7 +7,7 @@ description: "Common @ilokesto/state mistakes and fixes."
 
 ## `create` is undefined from the root import
 
-Import from a subpath. The root `@ilokesto/state` entrypoint is currently an empty runtime root.
+Import `bind` or the convenience `create` from a framework subpath. The root exports `createStore` and `createReducer`, not framework hooks.
 
 ```ts lineNumbers
 import { create } from '@ilokesto/state/react';

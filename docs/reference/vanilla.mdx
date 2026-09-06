@@ -1,0 +1,91 @@
+---
+title: "Vanilla state and binding"
+description: "Create state once and connect it explicitly to any supported framework."
+---
+
+# Vanilla state and binding
+
+The root `@ilokesto/state` entrypoint contains no framework runtime imports.
+Create state in a service or module, then connect it to a framework with `bind`.
+
+## Plain state
+
+```ts
+import { createStore } from '@ilokesto/state';
+import { bind } from '@ilokesto/state/react';
+
+const counter = createStore({ count: 0 });
+const useCounter = bind(counter);
+
+counter.update(previous => ({ count: previous.count + 1 }));
+counter.set({ count: 0 });
+```
+
+`createStore(initialState)` always creates a fresh Store. Passing a Store-shaped
+object stores that object as the value; it is not interpreted as an existing store.
+`bind(store)` explicitly accepts a structural `StoreApi<T>` and never constructs
+another store. A supplied external implementation must obey the Store contract.
+
+`set(value)` replaces the value, including function values, without calling it.
+`update(updater)` computes the next value. Both pass through the same middleware
+pipeline as `setState(valueOrUpdater)`. Store methods are prototype methods: retain
+their receiver when passing them as callbacks, or bind them explicitly.
+
+## Reducer state
+
+```ts
+import { createReducer } from '@ilokesto/state';
+import { bindReducer } from '@ilokesto/state/react';
+
+type Action = { readonly type: 'add'; readonly amount: number };
+const counter = createReducer(
+  (value: number, action: Action) => value + action.amount,
+  0,
+);
+const useCounter = bindReducer(counter);
+
+counter.dispatch({ type: 'add', amount: 2 });
+counter.store.set(10);
+```
+
+`createReducer(reducer, initialStateOrStore)` returns
+`ReducerState<T, Action>`: an explicit `{ store, dispatch }` handle.
+It accepts a value or an existing concrete Store, including a pipe-created Store.
+The same reducer reference can reuse a Store; a different reducer on that Store
+is rejected. Bindings do not register reducers again. Direct store writes bypass
+the reducer; dispatched actions retain the existing middleware metadata and order.
+
+## Framework bindings
+
+Each of `react`, `vue`, `solid`, `svelte`, and `angular` exports both `bind` and
+`bindReducer`. Return values and lifecycle rules match the existing `create`
+helpers. React returns a hook, Vue a composable, Solid an accessor factory,
+Angular a signal factory, and Svelte a store.
+
+```ts
+import { createStore } from '@ilokesto/state';
+import { bind as bindReact } from '@ilokesto/state/react';
+import { bind as bindSvelte } from '@ilokesto/state/svelte';
+
+const shared = createStore({ count: 0 });
+const useShared = bindReact(shared);
+const sharedSvelte = bindSvelte(shared);
+```
+
+Only import the framework adapters you use. `create(value)` and
+`create(reducer, valueOrStore)` remain convenience constructors using the same
+foundation. For shared state, prefer explicit creation and binding.
+
+## Composition and ownership
+
+The root also exports `pipe`, `definePipeableMiddleware`,
+`PipeConfigurationError`, and `dispose`. Middleware factories stay in
+`@ilokesto/state/middleware`, and the optional Immer adaptor stays in
+`@ilokesto/state/adaptor`.
+
+`dispose(store)` releases middleware resources; it does not destroy the Store.
+Framework lifecycle cleanup releases framework subscriptions. For manually
+created subscriptions, call their returned unsubscribe function.
+
+See [the major migration guide](/en/state/advanced/migration) for changed
+notification behavior.

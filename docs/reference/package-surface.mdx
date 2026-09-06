@@ -11,7 +11,7 @@ The public package surface is defined by `state/package.json` exports.
 
 | Import | Purpose |
 |---|---|
-| `@ilokesto/state` | Package identity and current empty runtime root. The source is `export {}`. |
+| `@ilokesto/state` | Framework-neutral `Store`, `createStore`, `createReducer`, `pipe`, `definePipeableMiddleware`, `PipeConfigurationError`, and `dispose`, plus their public state contracts. |
 | `@ilokesto/state/react` | React `create()` adapter and `UseState`, `UseReducer` types. |
 | `@ilokesto/state/vue` | Vue `create()` adapter and `UseState`, `UseReducer` types. |
 | `@ilokesto/state/svelte` | Svelte `create()` adapter and `UseState`, `UseReducer` types. |
@@ -36,7 +36,7 @@ Its public types are `Pipe`, `PipeAnyMiddleware`, `PipeBuilder`, `PipeCapability
 
 ## Root entrypoint caveat
 
-Do not import adapter APIs from the root entry point. The empty runtime root exists as package identity; use a subpath such as `@ilokesto/state/react` or `@ilokesto/state/middleware`.
+Do not import adapter APIs from the root entry point. The root constructs state without loading framework peers; bind it using a subpath such as `@ilokesto/state/react` or `@ilokesto/state/middleware`.
 
 ```ts lineNumbers
 // Good

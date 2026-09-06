@@ -1,4 +1,4 @@
-import type { Store } from '@ilokesto/store';
+import type { StoreApi } from '@ilokesto/store';
 
 type Cleanup = () => void;
 
@@ -9,7 +9,7 @@ type CleanupEntry = {
 
 const cleanupsByStore = new WeakMap<object, Set<CleanupEntry>>();
 
-export function registerStoreCleanup<T>(store: Store<T>, cleanup: Cleanup): () => void {
+export function registerStoreCleanup<T>(store: StoreApi<T>, cleanup: Cleanup): () => void {
   const entry: CleanupEntry = { active: true, cleanup };
   const entries = cleanupsByStore.get(store) ?? new Set<CleanupEntry>();
   entries.add(entry);
@@ -35,7 +35,7 @@ export function registerStoreCleanup<T>(store: Store<T>, cleanup: Cleanup): () =
  * @param store - The store to dispose.
  * @throws {AggregateError} When one or more cleanup functions throw.
  */
-export function dispose<T>(store: Store<T>): void {
+export function dispose<T>(store: StoreApi<T>): void {
   const entries = cleanupsByStore.get(store);
   if (!entries) {
     return;

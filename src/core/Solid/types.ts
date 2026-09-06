@@ -1,11 +1,11 @@
-import type { Store } from '@ilokesto/store';
+import type { StoreApi } from '@ilokesto/store';
 import type { Accessor } from 'solid-js';
 
 import type { ReducerAction } from '../../types/ReduceFn.js';
 import type { ReadonlySnapshot } from '../shared/readonlySnapshot.js';
 
 export type Selector<T, S> = (state: ReadonlySnapshot<T>) => S;
-export type SetStateAction<T> = Parameters<Store<T>['setState']>[0];
+export type SetStateAction<T> = Parameters<StoreApi<T>['setState']>[0];
 export type StateWriter<T> = (nextState: SetStateAction<T>) => void;
 export type ActionWriter<Action> = (action: Action) => void;
 

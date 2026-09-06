@@ -1,4 +1,4 @@
-import type { Store } from '@ilokesto/store';
+import type { StoreApi, ReadableStore } from '@ilokesto/store';
 import { computed, getCurrentScope, onScopeDispose, shallowRef } from 'vue';
 
 import type { ReducerAction } from '../../types/ReduceFn.js';
@@ -8,7 +8,7 @@ import { readonlySnapshot, type ReadonlySnapshot } from '../shared/readonlySnaps
 import { shallow } from '../shared/shallow.js';
 import type { Selector } from './types.js';
 
-function createSelection<T, S>(store: Store<T>, selector: Selector<T, S>) {
+function createSelection<T, S>(store: ReadableStore<T>, selector: Selector<T, S>) {
   if (!getCurrentScope()) {
     throw new Error(
       '[@ilokesto/state/vue] create() returned composables must run inside setup() or an active effectScope(). Use readOnly() for synchronous reads outside Vue scope.',
@@ -30,9 +30,8 @@ function createSelection<T, S>(store: Store<T>, selector: Selector<T, S>) {
   return computed(() => snapshot.value as S);
 }
 
-export function createUseComposable<T, Action extends ReducerAction>(store: Store<T>, isReduce: boolean) {
+export function createUseComposable<T, Action extends ReducerAction>(store: StoreApi<T>, isReduce: boolean, dispatch = createDispatch<T, Action>(store)) {
   const write = store.setState.bind(store);
-  const dispatch = createDispatch<T, Action>(store);
 
   return Object.assign(
     <S = T>(selector?: Selector<T, S>) => {

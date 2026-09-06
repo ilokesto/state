@@ -1,0 +1,65 @@
+---
+title: "Next major migration"
+description: "Move to explicit state construction and ordered notification delivery."
+---
+
+# Next major migration
+
+These changes are recorded in Changesets; package versions have not been applied.
+
+## Create once, bind explicitly
+
+Before:
+
+```ts
+import { create } from '@ilokesto/state/react';
+const useCounter = create({ count: 0 });
+```
+
+Recommended:
+
+```ts
+import { createStore } from '@ilokesto/state';
+import { bind } from '@ilokesto/state/react';
+const counter = createStore({ count: 0 });
+const useCounter = bind(counter);
+```
+
+The original convenience API remains available. Use `createReducer(reducer, valueOrStore)`
+and `bindReducer(handle)` when actions, rather than values, drive updates.
+The previously empty root entrypoint now exports vanilla construction and composition.
+
+## Notification behavior changes
+
+| Before | Next major |
+| --- | --- |
+| Nested updates recursively interrupt delivery | Commits are immediate; notifications drain synchronously in FIFO order |
+| Later selectors can miss intermediate commits | Selectors evaluate each captured commit |
+| A removed listener can still run in the current pass | Unsubscribe immediately skips pending delivery |
+| Duplicate plain callbacks share one registration | Every registration owns a separate disposer |
+| A listener error prevents later listeners from running | Delivery continues and reports an `AggregateError` afterward |
+
+Use the callback arguments of `subscribeSelector` to observe each transition.
+Plain `subscribe` is an invalidation signal with no arguments: `getState()` inside
+it reads the latest committed value, which can be newer than the current delivery
+record. New subscriptions do not receive records captured before registration.
+
+Handle listener failures around the outermost synchronous update. Inspect
+`AggregateError.errors` for the original thrown values. State is already committed;
+an error is not a rollback signal. Updater and middleware errors still propagate
+directly rather than being converted to notification errors.
+
+## Functions and lifecycle
+
+Use `store.set(fn)` to store a function as a value. `store.update(updater)` is
+explicit computation. `setState(fn)` retains its updater meaning.
+Svelte `set(fn)` now correctly stores the function without invoking it.
+
+Store prototype methods still require their receiver. Subclasses and middleware
+capability properties are retained. Use `ReadableStore<T>` for readers and
+`StoreApi<T>` for writable structural integrations.
+
+No framework support or middleware feature has been removed. Existing pipe
+ordering, reducer identity, SSR initial snapshots, and resource cleanup contracts
+remain in place. Applications depending on the old notification edge cases
+must update before adopting this major version.

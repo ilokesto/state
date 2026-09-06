@@ -1,4 +1,4 @@
-import { Store } from '@ilokesto/store';
+import { Store, createStore } from '@ilokesto/store';
 import { getDispatchedStoreAction } from './actionMetadata.js';
 import type { ReduceFn, ReducerAction } from '../types/ReduceFn.js';
 
@@ -21,7 +21,7 @@ export const getStore = <T, Action extends ReducerAction>(
   initState: T | Store<T>,
   reduceFn?: ReduceFn<T, Action>,
 ): Store<T> => {
-  const store = isStore(initState) ? initState : new Store(initState);
+  const store = isStore(initState) ? initState : createStore(initState);
 
   if (reduceFn) {
     const registeredReducer = reducerByStore.get(store);
@@ -41,7 +41,8 @@ export const getStore = <T, Action extends ReducerAction>(
       }
 
       const currentState = store.getState();
-      next(reduceFn(currentState, nextState));
+      const reducedState = reduceFn(currentState, nextState);
+      next(typeof reducedState === 'function' ? () => reducedState : reducedState);
     });
     reducerByStore.set(store, reduceFn);
   }

@@ -1,4 +1,4 @@
-import type { Store } from '@ilokesto/store';
+import type { StoreApi } from '@ilokesto/store';
 
 import type { ReducerAction } from '../types/ReduceFn.js';
 
@@ -10,7 +10,7 @@ const actionMetadataByStore = new WeakMap<object, StoreActionMetadata>();
 const dispatchedActionByStore = new WeakMap<object, ReducerAction>();
 
 export function runWithStoreActionMetadata<T, Result>(
-  store: Store<T>,
+  store: StoreApi<T>,
   metadata: StoreActionMetadata,
   fn: () => Result,
 ): Result {
@@ -28,16 +28,16 @@ export function runWithStoreActionMetadata<T, Result>(
   }
 }
 
-export function getStoreActionMetadata<T>(store: Store<T>): StoreActionMetadata | undefined {
+export function getStoreActionMetadata<T>(store: StoreApi<T>): StoreActionMetadata | undefined {
   return actionMetadataByStore.get(store);
 }
 
-export function getDispatchedStoreAction<T>(store: Store<T>): ReducerAction | undefined {
+export function getDispatchedStoreAction<T>(store: StoreApi<T>): ReducerAction | undefined {
   return dispatchedActionByStore.get(store);
 }
 
 export function dispatchStoreAction<T, Action extends ReducerAction>(
-  store: Store<T>,
+  store: StoreApi<T>,
   action: Action,
 ): void {
   const previousAction = dispatchedActionByStore.get(store);

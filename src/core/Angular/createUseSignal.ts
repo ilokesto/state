@@ -1,4 +1,4 @@
-import type { Store } from '@ilokesto/store';
+import type { StoreApi, ReadableStore } from '@ilokesto/store';
 import { DestroyRef, inject, signal } from '@angular/core';
 
 import type { ReducerAction } from '../../types/ReduceFn.js';
@@ -22,7 +22,7 @@ function resolveDestroyRef(options?: AngularOptions): DestroyRef {
   }
 }
 
-function createSelection<T, S>(store: Store<T>, selector: Selector<T, S>, options?: AngularOptions) {
+function createSelection<T, S>(store: ReadableStore<T>, selector: Selector<T, S>, options?: AngularOptions) {
   const destroyRef = resolveDestroyRef(options);
   const selection = signal(selector(readonlySnapshot(store.getState())));
   const unsubscribe = store.subscribeSelector(
@@ -38,9 +38,8 @@ function createSelection<T, S>(store: Store<T>, selector: Selector<T, S>, option
   return selection.asReadonly();
 }
 
-export function createUseSignal<T, Action extends ReducerAction>(store: Store<T>, isReduce: boolean) {
+export function createUseSignal<T, Action extends ReducerAction>(store: StoreApi<T>, isReduce: boolean, dispatch = createDispatch<T, Action>(store)) {
   const write = store.setState.bind(store);
-  const dispatch = createDispatch<T, Action>(store);
   const subscribe = store.subscribe.bind(store);
 
   return Object.assign(

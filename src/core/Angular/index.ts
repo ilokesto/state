@@ -1,4 +1,5 @@
-import type { Store } from '@ilokesto/store';
+import type { Store, StoreApi } from '@ilokesto/store';
+import type { ReducerState } from '../../lib/createReducer.js';
 
 import type { ReduceFn, ReducerAction } from '../../types/ReduceFn.js';
 import type { UseReducer, UseState } from './types.js';
@@ -40,4 +41,16 @@ export function create<T, Action extends ReducerAction>(
     createUseSignal<T, Action>,
     { firstArg, secondArg, isReduce: arguments.length === 2 },
   );
+}
+
+/** Bind an existing structural store without recreating or inspecting its value. */
+export function bind<T>(store: StoreApi<T>): UseState<T>;
+export function bind<T>(store: StoreApi<T>) {
+  return createUseSignal<T, never>(store, false);
+}
+
+/** Bind an explicit reducer handle without registering the reducer again. */
+export function bindReducer<T, Action extends ReducerAction>(state: ReducerState<T, Action>): UseReducer<T, Action>;
+export function bindReducer<T, Action extends ReducerAction>(state: ReducerState<T, Action>) {
+  return createUseSignal<T, Action>(state.store, true, state.dispatch);
 }

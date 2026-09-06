@@ -6,6 +6,22 @@
 
 이 패키지는 스토어 핵심 로직을 프레임워크와 무관하게 유지하면서, React, Vue, Angular, Svelte, Solid를 위한 얇은 어댑터를 제공합니다.
 
+
+## 한 번 만들고 명시적으로 연결하기
+
+`@ilokesto/state` 루트는 프레임워크 독립적인 `createStore`, `createReducer`, 조합 API와 구조적 저장소 계약을 내보냅니다. 각 프레임워크는 `bind(store)`와 `bindReducer(handle)`을 제공하며 기존 `create` 편의 API도 같은 기반을 사용합니다.
+
+```ts
+import { createStore } from '@ilokesto/state';
+import { bind } from '@ilokesto/state/react';
+
+const counter = createStore({ count: 0 });
+const useCounter = bind(counter);
+counter.update(previous => ({ count: previous.count + 1 }));
+```
+
+[상태 생성과 연결](docs/reference/vanilla.ko.mdx), [메이저 이전 안내](docs/advanced/migration.ko.mdx)를 참고하세요. 빌드 후 루트에서 `node packages/state/examples/vanilla-counter.mjs`로 예제를 실행할 수 있습니다.
+
 ## 주요 기능
 
 - 일반 상태나 Reducer로부터 프레임워크 친화적인 상태 어댑터 생성

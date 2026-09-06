@@ -6,6 +6,22 @@ A small multi-framework state helper built on top of `@ilokesto/store`.
 
 This package keeps the store core framework-agnostic and exposes thin adapters for React, Vue, Angular, Svelte, and Solid.
 
+
+## Create once, bind explicitly
+
+`@ilokesto/state` now exports vanilla `createStore`, `createReducer`, composition, and structural store contracts. Each framework exports `bind(store)` and `bindReducer(handle)`; existing `create` convenience APIs use the same foundation.
+
+```ts
+import { createStore } from '@ilokesto/state';
+import { bind } from '@ilokesto/state/react';
+
+const counter = createStore({ count: 0 });
+const useCounter = bind(counter);
+counter.update(previous => ({ count: previous.count + 1 }));
+```
+
+See [vanilla state and binding](docs/reference/vanilla.mdx) and the [major migration guide](docs/advanced/migration.mdx). After building, run `node packages/state/examples/vanilla-counter.mjs` from the workspace root.
+
 ## Features
 
 - Create framework-friendly state adapters from plain state or a reducer

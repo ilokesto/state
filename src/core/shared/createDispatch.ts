@@ -1,4 +1,4 @@
-import type { Store } from '@ilokesto/store';
+import type { StoreApi } from '@ilokesto/store';
 
 import { dispatchStoreAction } from '../../lib/actionMetadata.js';
 import type { ReducerAction } from '../../types/ReduceFn.js';
@@ -11,7 +11,7 @@ import type { ReducerAction } from '../../types/ReduceFn.js';
  * @returns A function that dispatches an action to the store.
  */
 export function createDispatch<T, Action extends ReducerAction>(
-  store: Store<T>,
+  store: StoreApi<T>,
 ): (action: Action) => void {
   return (action) => {
     dispatchStoreAction(store, action);

@@ -1,4 +1,4 @@
-import { Store } from '@ilokesto/store';
+import { Store, createStore } from '@ilokesto/store';
 
 import { PipeConfigurationError } from './errors.js';
 import {
@@ -67,7 +67,7 @@ function createBuilderCreate(chain: readonly object[]): unknown {
     }
 
     validatePipeMiddlewareChain(chain);
-    let store = new Store(initialState);
+    let store = createStore(initialState);
     for (const middleware of chain) {
       store = applyMiddleware(middleware, store);
     }

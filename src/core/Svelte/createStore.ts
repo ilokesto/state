@@ -1,4 +1,4 @@
-import type { Store } from '@ilokesto/store';
+import type { StoreApi, ReadableStore } from '@ilokesto/store';
 
 import type { Readable, Subscriber, Unsubscriber, Updater } from 'svelte/store';
 
@@ -9,7 +9,7 @@ import { readonlySnapshot, type ReadonlySnapshot } from '../shared/readonlySnaps
 import { shallow } from '../shared/shallow.js';
 import type { Selector, UseReducer, UseState } from './types.js';
 
-function createReadable<T, S>(store: Store<T>, selector: Selector<T, S>): Readable<S> {
+function createReadable<T, S>(store: ReadableStore<T>, selector: Selector<T, S>): Readable<S> {
   return {
     subscribe(run: Subscriber<S>): Unsubscriber {
       const initialSelection = selector(readonlySnapshot(store.getState()));
@@ -25,9 +25,8 @@ function createReadable<T, S>(store: Store<T>, selector: Selector<T, S>): Readab
   };
 }
 
-export function createStore<T, Action extends ReducerAction>(store: Store<T>, isReduce: boolean) {
+export function createStore<T, Action extends ReducerAction>(store: StoreApi<T>, isReduce: boolean, dispatch = createDispatch<T, Action>(store)) {
   const write = store.setState.bind(store);
-  const dispatch = createDispatch<T, Action>(store);
   const subscribe = (run: Subscriber<ReadonlySnapshot<T>>): Unsubscriber => {
     const initialState = readonlySnapshot(store.getState());
     const unsubscribe = store.subscribeSelector(
@@ -57,8 +56,8 @@ export function createStore<T, Action extends ReducerAction>(store: Store<T>, is
 
   return {
     subscribe,
-    set: (nextState: T) => write(nextState),
-    update: (updater: Updater<T>) => write(updater),
+    set: (nextState: T) => store.set(nextState),
+    update: (updater: Updater<T>) => store.update(updater),
     setState: write,
     select,
     writeOnly: () => write,

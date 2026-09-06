@@ -11,7 +11,7 @@ public package surface는 `state/package.json`의 exports가 기준입니다.
 
 | Import | Purpose |
 |---|---|
-| `@ilokesto/state` | package identity와 현재 empty runtime root입니다. source는 `export {}`입니다. |
+| `@ilokesto/state` | 프레임워크 독립적인 `Store`, `createStore`, `createReducer`, `pipe`, `definePipeableMiddleware`, `PipeConfigurationError`, `dispose`와 공개 상태 계약을 내보냅니다. |
 | `@ilokesto/state/react` | React `create()` adapter와 `UseState`, `UseReducer` type입니다. |
 | `@ilokesto/state/vue` | Vue `create()` adapter와 `UseState`, `UseReducer` type입니다. |
 | `@ilokesto/state/svelte` | Svelte `create()` adapter와 `UseState`, `UseReducer` type입니다. |
@@ -36,7 +36,7 @@ Public type은 `Pipe`, `PipeAnyMiddleware`, `PipeBuilder`, `PipeCapability`, `Pi
 
 ## Root entrypoint 주의점
 
-adapter API를 root entry point에서 import하지 마세요. empty runtime root는 package identity에 가깝습니다. `@ilokesto/state/react` 또는 `@ilokesto/state/middleware` 같은 subpath를 사용하세요.
+adapter API를 root entry point에서 import하지 마세요. 루트는 프레임워크 peer를 불러오지 않고 상태를 생성합니다. `@ilokesto/state/react` 또는 `@ilokesto/state/middleware` 같은 subpath를 사용하세요.
 
 ```ts lineNumbers
 // Good

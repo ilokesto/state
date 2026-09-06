@@ -13,18 +13,21 @@ pnpm add @ilokesto/state @ilokesto/store react
 
 ## 1. 프레임워크 subpath에서 import하기
 
-root entrypoint는 `create`를 내보내지 않습니다. 사용하는 어댑터 subpath를 고르세요.
+프레임워크 독립적인 루트에서 상태를 만들고, 같은 저장소를 프레임워크에 연결하세요.
 
 ```ts lineNumbers
-import { create } from '@ilokesto/state/react';
+import { createStore } from '@ilokesto/state';
+import { bind } from '@ilokesto/state/react';
 ```
 
 ## 2. plain state 만들기
 
 ```tsx lineNumbers
-import { create } from '@ilokesto/state/react';
+import { createStore } from '@ilokesto/state';
+import { bind } from '@ilokesto/state/react';
 
-const useTheme = create({ mode: 'light' as 'light' | 'dark' });
+const theme = createStore<{ mode: 'light' | 'dark' }>({ mode: 'light' });
+const useTheme = bind(theme);
 
 function ThemeButton() {
   const [mode, setTheme] = useTheme((state) => state.mode);
