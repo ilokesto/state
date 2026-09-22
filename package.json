@@ -11,7 +11,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ilokesto/metarepo.git",
+    "url": "git+https://github.com/ilokesto/ilokesto.git",
     "directory": "packages/state"
   },
   "homepage": "https://ilokesto.ayden94.com/en/state",
