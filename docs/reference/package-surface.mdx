@@ -1,17 +1,17 @@
 ---
 title: "Package surface"
-description: "Entry points, peer dependencies, and the root entrypoint caveat."
+description: "Entry points, peer dependencies, and root exports."
 ---
 
 # Package surface
 
-The public entrypoint paths are defined by `state/package.json` exports. The symbols available on those paths differ between the currently versioned `@ilokesto/state@1.0.4` and the pending-major workspace source; the table marks that boundary.
+The public entrypoint paths are defined by `state/package.json` exports. Import framework-neutral construction from the root and framework adapters from their subpaths.
 
 ## Entry point matrix
 
 | Import | Purpose |
 |---|---|
-| `@ilokesto/state` | **Pending major:** framework-neutral `Store`, `createStore`, `createReducer`, `pipe`, `definePipeableMiddleware`, `PipeConfigurationError`, and `dispose`, plus their public state contracts. The current npm version does not provide these root runtime APIs. |
+| `@ilokesto/state` | Framework-neutral `Store`, `createStore`, `createReducer`, `pipe`, `definePipeableMiddleware`, `PipeConfigurationError`, and `dispose`, plus their public state contracts. |
 | `@ilokesto/state/react` | React `create()` adapter and `UseState`, `UseReducer` types. |
 | `@ilokesto/state/vue` | Vue `create()` adapter and `UseState`, `UseReducer` types. |
 | `@ilokesto/state/svelte` | Svelte `create()` adapter and `UseState`, `UseReducer` types. |
@@ -34,9 +34,9 @@ Its public types are `HistoryControls`, `HistoryOptions`, `HistoryStore`, `OnReh
 
 Its public types are `Pipe`, `PipeAnyMiddleware`, `PipeBuilder`, `PipeCapability`, `PipeConfigurationErrorCode`, `PipeDuplicatePolicy`, `PipeMiddleware`, `PipeMiddlewareConflictDiagnostic`, and `PipeMiddlewareMetadata`.
 
-## Root entrypoint caveat
+## Root and framework entrypoints
 
-For `@ilokesto/state@1.0.4`, import runtime APIs from subpaths. The root construction exports shown above belong to the pending major and are not available merely because you installed the current npm version. In either version, framework adapter APIs such as `create` and `bind` come from a framework subpath, never the root.
+Import framework-neutral construction APIs from the root. Framework adapter APIs such as `create`, `bind`, and `bindReducer` come from a framework subpath, never the root.
 
 ```ts lineNumbers
 // Available from the framework subpath
@@ -44,7 +44,7 @@ import { create } from '@ilokesto/state/react';
 import { logger } from '@ilokesto/state/middleware';
 ```
 
-After adopting the pending major, use `createStore` or `createReducer` from the root and connect the result with `bind` or `bindReducer` from a framework subpath. See [Vanilla state and binding](/en/state/reference/vanilla) and the [migration guide](/en/state/advanced/migration).
+Use `createStore` or `createReducer` from the root and connect the result with `bind` or `bindReducer` from a framework subpath. See [Vanilla state and binding](/en/state/reference/vanilla) and the [migration guide](/en/state/advanced/migration).
 
 ## Peer dependencies
 

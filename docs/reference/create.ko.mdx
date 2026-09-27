@@ -40,10 +40,10 @@ const useCounter = create(store);
 
 여러 adapter 또는 프레임워크 밖 코드가 하나의 source of truth를 공유해야 한다면 기존의 구체 `Store<T>`를 넘기세요. `create`는 값 또는 `Store<T>`를 받으며, 모든 구조적 `StoreApi<T>`를 받는 것은 아닙니다.
 
-## 예정된 명시적 binding
+## 명시적 binding
 
-다음 major용 workspace source는 모든 프레임워크 subpath에서 `bind(store: StoreApi<T>)`와 `bindReducer(handle)`도 내보냅니다. `create`와 달리 `bind`는 구조적 store를 받고 그 값을 해석하거나 새 store를 만들지 않습니다. `bindReducer`는 root `createReducer`가 반환한 `{ store, dispatch }`를 받아 reducer를 다시 등록하지 않습니다.
+모든 프레임워크 subpath는 `bind(store: StoreApi<T>)`와 `bindReducer(handle)`도 내보냅니다. `create`와 달리 `bind`는 구조적 store를 받고 그 값을 해석하거나 새 store를 만들지 않습니다. `bindReducer`는 root `createReducer`가 반환한 `{ store, dispatch }`를 받아 reducer를 다시 등록하지 않습니다.
 
-이 binding은 현재 버전이 적용된 `@ilokesto/state@1.0.4`에는 없습니다. Workspace 계약은 [프레임워크 독립 상태와 연결](/ko/state/reference/vanilla)에서, 채택 시점은 [이전 가이드](/ko/state/advanced/migration)에서 확인하세요.
+계약은 [프레임워크 독립 상태와 연결](/ko/state/reference/vanilla)에서, 이전 메이저에서 바뀐 내용은 [이전 가이드](/ko/state/advanced/migration)에서 확인하세요.
 
 `readOnly()`와 `writeOnly()`는 [읽기와 쓰기 API](/ko/state/reference/read-write)에서, 작업 중심 예제는 [plain state 가이드](/ko/state/guides/plain-state)와 [reducer state 가이드](/ko/state/guides/reducer-state)에서 이어서 확인하세요.

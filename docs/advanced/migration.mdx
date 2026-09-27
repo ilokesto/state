@@ -1,11 +1,11 @@
 ---
-title: "Next major migration"
+title: "2.0 migration"
 description: "Move to explicit state construction and ordered notification delivery."
 ---
 
-# Next major migration
+# 2.0 migration
 
-These changes are recorded in Changesets; package versions have not been applied.
+This guide covers the state construction and notification changes introduced in 2.0.
 
 ## Create once, bind explicitly
 
@@ -31,7 +31,7 @@ The previously empty root entrypoint now exports vanilla construction and compos
 
 ## Notification behavior changes
 
-| Before | Next major |
+| Before 2.0 | 2.0 |
 | --- | --- |
 | Nested updates recursively interrupt delivery | Commits are immediate; notifications drain synchronously in FIFO order |
 | Later selectors can miss intermediate commits | Selectors evaluate each captured commit |
@@ -62,4 +62,4 @@ capability properties are retained. Use `ReadableStore<T>` for readers and
 No framework support or middleware feature has been removed. Existing pipe
 ordering, reducer identity, SSR initial snapshots, and resource cleanup contracts
 remain in place. Applications depending on the old notification edge cases
-must update before adopting this major version.
+must update when moving to 2.0.

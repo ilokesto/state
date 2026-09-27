@@ -7,13 +7,13 @@ description: "@ilokesto/state에서 자주 만나는 문제와 해결법입니�
 
 ## root import에서 `create`가 undefined입니다
 
-`@ilokesto/state@1.0.4`에서는 프레임워크 subpath에서 편의 함수 `create`를 import하세요.
+프레임워크 subpath에서 편의 함수 `create`를 import하세요.
 
 ```ts lineNumbers
 import { create } from '@ilokesto/state/react';
 ```
 
-다음 major는 프레임워크 subpath에 `bind`, root에 `createStore` / `createReducer`도 추가합니다. 해당 release를 채택하기 전에는 이 API를 사용하지 마세요. [이전 가이드](/ko/state/advanced/migration)를 확인하세요.
+프레임워크 subpath는 `bind`도 내보내고 root는 `createStore`와 `createReducer`를 내보냅니다. 이전 메이저에서 바뀐 내용은 [이전 가이드](/ko/state/advanced/migration)를 확인하세요.
 
 ## Vue가 setup 또는 effectScope 안에서 실행하라고 합니다
 
