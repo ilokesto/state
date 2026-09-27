@@ -29,18 +29,21 @@ Use this package when you want one small store model with adapter-specific retur
 Install the framework peer you use, such as `react`, `vue`, `svelte`, `solid-js`, or `@angular/core`. Install `immer` only when you use `adaptor` from `@ilokesto/state/adaptor`.
 
 
-## What this package is not
+## Choose State or Store
 
-- It is not a generated API reference.
-- It is not a framework tutorial.
-- It does not change `@ilokesto/store`; it wraps a `Store<T>` or creates one from an initial value.
-- The root package is package identity today. Runtime APIs are imported from subpaths such as `@ilokesto/state/react`.
+Choose `@ilokesto/state` when framework components should react to shared state, or when you need reducers, persistence, validation, DevTools, history, or timed middleware. Choose the smaller [`@ilokesto/store`](/en/store) when plain TypeScript code should own a value and you are prepared to connect subscriptions and cleanup yourself.
+
+State does not replace `@ilokesto/store`; it creates or wraps the same store model. It is not an async server cache, a normalized entity layer, or a framework tutorial.
 
 ## Where to start
 
-- Start with [Quick start](/en/state/quick-start).
-- Learn the model in [Core concepts](/en/state/core-concepts).
-- Pick your adapter under Integrations: React, Vue, Svelte, Solid, or Angular.
-- Use [Middleware](/en/state/middleware) and [Utility](/en/state/utility) when you need logging, validation, persistence, composition, or Immer-style updates.
+- **First result:** [Quick start](/en/state/quick-start) creates a React theme toggle and explains what to click and observe.
+- **Choose a model:** [Core concepts](/en/state/core-concepts), [Plain state](/en/state/guides/plain-state), and [Reducer state](/en/state/guides/reducer-state) explain direct updates versus named actions.
+- **Connect your framework:** choose React, Vue, Svelte, Solid, or Angular under Integrations.
+- **Build the store:** [Middleware](/en/state/middleware) and [Utility](/en/state/utility) cover validation, persistence, composition, and Immer-style updates.
+- **Look up contracts:** Reference covers the [package surface](/en/state/reference/package-surface), [`create`](/en/state/reference/create), [vanilla construction and binding](/en/state/reference/vanilla), and [lifecycle-free reads and writes](/en/state/reference/read-write).
+- **Resolve problems:** [Troubleshooting](/en/state/troubleshooting) starts with import and lifecycle errors.
 
-> This documentation lives in the `@ilokesto/state` repository and is synced to the ilokesto docs site.
+## Version and source basis
+
+The installable package manifest is `@ilokesto/state@1.0.4`. The landing example and quick start use the established framework-subpath `create()` API. This documentation was audited against the workspace source at commit `bb26d48`. Root `createStore`/`createReducer`, framework `bind`/`bindReducer`, and the new notification foundation are pending-major workspace APIs recorded in Changesets; use the [next-major migration guide](/en/state/advanced/migration) rather than assuming they are present in the current npm version.

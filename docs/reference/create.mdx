@@ -20,7 +20,7 @@ Plain state exposes a writer named `setState` or a framework-native equivalent. 
 ## Reducer overload
 
 ```ts lineNumbers
-create<T, Action extends object>(
+create<T, Action extends { readonly type: string }>(
   reduceFn: (state: T, action: Action) => T,
   initialState: T | Store<T>,
 ): UseReducer<T, Action>
@@ -38,4 +38,12 @@ const store = new Store({ count: 0 });
 const useCounter = create(store);
 ```
 
-Use an existing `Store<T>` when multiple adapters or non-framework code need to share one source of truth.
+Use an existing concrete `Store<T>` when multiple adapters or non-framework code need to share one source of truth. `create` accepts a value or `Store<T>`; it does not accept every structural `StoreApi<T>`.
+
+## Pending explicit bindings
+
+The next-major workspace source also exports `bind(store: StoreApi<T>)` and `bindReducer(handle)` from every framework subpath. Unlike `create`, `bind` accepts a structural store and never interprets its value or creates another store. `bindReducer` accepts the `{ store, dispatch }` returned by root `createReducer` and does not register the reducer again.
+
+These bindings are not in the currently versioned `@ilokesto/state@1.0.4`. See [Vanilla state and binding](/en/state/reference/vanilla) for the workspace contract and the [migration guide](/en/state/advanced/migration) for adoption timing.
+
+Continue to [Read and write APIs](/en/state/reference/read-write) for `readOnly()` and `writeOnly()`, or choose the [plain-state guide](/en/state/guides/plain-state) and [reducer-state guide](/en/state/guides/reducer-state) for task-oriented examples.

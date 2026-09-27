@@ -5,13 +5,13 @@ description: "Entry points, peer dependencies, and the root entrypoint caveat."
 
 # Package surface
 
-The public package surface is defined by `state/package.json` exports.
+The public entrypoint paths are defined by `state/package.json` exports. The symbols available on those paths differ between the currently versioned `@ilokesto/state@1.0.4` and the pending-major workspace source; the table marks that boundary.
 
 ## Entry point matrix
 
 | Import | Purpose |
 |---|---|
-| `@ilokesto/state` | Framework-neutral `Store`, `createStore`, `createReducer`, `pipe`, `definePipeableMiddleware`, `PipeConfigurationError`, and `dispose`, plus their public state contracts. |
+| `@ilokesto/state` | **Pending major:** framework-neutral `Store`, `createStore`, `createReducer`, `pipe`, `definePipeableMiddleware`, `PipeConfigurationError`, and `dispose`, plus their public state contracts. The current npm version does not provide these root runtime APIs. |
 | `@ilokesto/state/react` | React `create()` adapter and `UseState`, `UseReducer` types. |
 | `@ilokesto/state/vue` | Vue `create()` adapter and `UseState`, `UseReducer` types. |
 | `@ilokesto/state/svelte` | Svelte `create()` adapter and `UseState`, `UseReducer` types. |
@@ -36,16 +36,15 @@ Its public types are `Pipe`, `PipeAnyMiddleware`, `PipeBuilder`, `PipeCapability
 
 ## Root entrypoint caveat
 
-Do not import adapter APIs from the root entry point. The root constructs state without loading framework peers; bind it using a subpath such as `@ilokesto/state/react` or `@ilokesto/state/middleware`.
+For `@ilokesto/state@1.0.4`, import runtime APIs from subpaths. The root construction exports shown above belong to the pending major and are not available merely because you installed the current npm version. In either version, framework adapter APIs such as `create` and `bind` come from a framework subpath, never the root.
 
 ```ts lineNumbers
-// Good
+// Available from the framework subpath
 import { create } from '@ilokesto/state/react';
 import { logger } from '@ilokesto/state/middleware';
-
-// Not supported by the current root entrypoint
-import { create } from '@ilokesto/state';
 ```
+
+After adopting the pending major, use `createStore` or `createReducer` from the root and connect the result with `bind` or `bindReducer` from a framework subpath. See [Vanilla state and binding](/en/state/reference/vanilla) and the [migration guide](/en/state/advanced/migration).
 
 ## Peer dependencies
 

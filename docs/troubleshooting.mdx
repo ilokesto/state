@@ -7,11 +7,13 @@ description: "Common @ilokesto/state mistakes and fixes."
 
 ## `create` is undefined from the root import
 
-Import `bind` or the convenience `create` from a framework subpath. The root exports `createStore` and `createReducer`, not framework hooks.
+With `@ilokesto/state@1.0.4`, import the convenience `create` from a framework subpath.
 
 ```ts lineNumbers
 import { create } from '@ilokesto/state/react';
 ```
+
+The pending major also adds `bind` to framework subpaths and `createStore` / `createReducer` to the root. Do not use those APIs until you adopt that release; see the [migration guide](/en/state/advanced/migration).
 
 ## Vue says the composable must run inside setup or effectScope
 

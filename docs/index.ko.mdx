@@ -29,16 +29,21 @@ function Counter() {
 사용하는 프레임워크 peer만 함께 설치하세요. 예를 들어 `react`, `vue`, `svelte`, `solid-js`, `@angular/core` 중 실제 adapter에 필요한 것만 설치하면 됩니다. `@ilokesto/state/adaptor`의 `adaptor`를 사용할 때만 `immer`를 추가하세요.
 
 
-## 이 패키지가 하지 않는 것
+## State와 Store 중 고르기
 
-- generated API reference가 아닙니다.
-- 프레임워크 자체를 설명하는 긴 튜토리얼이 아닙니다.
-- `@ilokesto/store`의 동작을 바꾸지 않습니다. `Store<T>`를 감싸거나 초기 값으로 store를 만듭니다.
-- 현재 root package는 package identity에 가깝습니다. 런타임 API는 `@ilokesto/state/react` 같은 subpath에서 import합니다.
+프레임워크 컴포넌트가 공유 상태에 반응해야 하거나 reducer, 영속화, 검증, DevTools, history, 시간 기반 middleware가 필요하면 `@ilokesto/state`를 선택하세요. 순수 TypeScript 코드가 값 하나를 소유하고 구독과 정리를 직접 연결할 수 있다면 더 작은 [`@ilokesto/store`](/ko/store)를 선택하세요.
+
+State는 `@ilokesto/store`를 대체하지 않고 같은 store 모델을 만들거나 감쌉니다. 비동기 서버 캐시, 정규화된 엔티티 계층, 프레임워크 자체를 설명하는 튜토리얼은 아닙니다.
 
 ## 어디서 시작할까
 
-- [Quick start](/ko/state/quick-start)부터 보세요.
-- [Core concepts](/ko/state/core-concepts)에서 mental model을 잡으세요.
-- Integrations에서 React, Vue, Svelte, Solid, Angular 중 사용하는 어댑터를 고르세요.
-- logging, validation, persistence, composition, Immer 스타일 업데이트가 필요하면 [Middleware](/ko/state/middleware)와 [Utility](/ko/state/utility)를 보세요.
+- **첫 결과 만들기:** [빠른 시작](/ko/state/quick-start)에서 React 테마 전환 버튼을 만들고 무엇을 클릭하고 확인할지 알아봅니다.
+- **모델 고르기:** [핵심 개념](/ko/state/core-concepts), [Plain state](/ko/state/guides/plain-state), [Reducer state](/ko/state/guides/reducer-state)에서 직접 업데이트와 이름 있는 action을 비교합니다.
+- **프레임워크 연결하기:** Integrations에서 React, Vue, Svelte, Solid, Angular 중 사용하는 어댑터를 고르세요.
+- **Store 구성하기:** [Middleware](/ko/state/middleware)와 [Utility](/ko/state/utility)에서 검증, 영속화, 조합, Immer 스타일 업데이트를 다룹니다.
+- **계약 확인하기:** Reference에서 [패키지 표면](/ko/state/reference/package-surface), [`create`](/ko/state/reference/create), [프레임워크 독립 생성과 연결](/ko/state/reference/vanilla), [생명주기 없는 읽기와 쓰기](/ko/state/reference/read-write)를 확인합니다.
+- **문제 해결하기:** [문제 해결](/ko/state/troubleshooting)은 import와 생명주기 오류부터 다룹니다.
+
+## 버전과 소스 기준
+
+설치 가능한 패키지 manifest 버전은 `@ilokesto/state@1.0.4`입니다. 소개 예제와 빠른 시작은 기존 프레임워크 subpath의 `create()` API를 사용합니다. 이 문서는 commit `bb26d48`의 workspace source를 기준으로 검토했습니다. Root `createStore`/`createReducer`, 프레임워크 `bind`/`bindReducer`, 새로운 알림 기반은 Changeset에 기록된 다음 major용 workspace API입니다. 현재 npm 버전에 있다고 가정하지 말고 [다음 major 이전 가이드](/ko/state/advanced/migration)를 확인하세요.
