@@ -7,6 +7,12 @@ A small multi-framework state helper built on top of `@ilokesto/store`.
 This package keeps the store core framework-agnostic and exposes thin adapters for React, Vue, Angular, Svelte, and Solid.
 
 
+## Documentation
+
+- Full docs: [English](https://ilokesto.ayden94.com/en/state) · [한국어](https://ilokesto.ayden94.com/ko/state)
+- Source: [packages/state](https://github.com/ilokesto/ilokesto/tree/main/packages/state)
+- npm: [@ilokesto/state](https://www.npmjs.com/package/@ilokesto/state)
+
 ## Create once, bind explicitly
 
 `@ilokesto/state` now exports vanilla `createStore`, `createReducer`, composition, and structural store contracts. Each framework exports `bind(store)` and `bindReducer(handle)`; existing `create` convenience APIs use the same foundation.

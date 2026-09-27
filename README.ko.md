@@ -7,6 +7,12 @@
 이 패키지는 스토어 핵심 로직을 프레임워크와 무관하게 유지하면서, React, Vue, Angular, Svelte, Solid를 위한 얇은 어댑터를 제공합니다.
 
 
+## 문서
+
+- 전체 문서: [English](https://ilokesto.ayden94.com/en/state) · [한국어](https://ilokesto.ayden94.com/ko/state)
+- 소스: [packages/state](https://github.com/ilokesto/ilokesto/tree/main/packages/state)
+- npm: [@ilokesto/state](https://www.npmjs.com/package/@ilokesto/state)
+
 ## 한 번 만들고 명시적으로 연결하기
 
 `@ilokesto/state` 루트는 프레임워크 독립적인 `createStore`, `createReducer`, 조합 API와 구조적 저장소 계약을 내보냅니다. 각 프레임워크는 `bind(store)`와 `bindReducer(handle)`을 제공하며 기존 `create` 편의 API도 같은 기반을 사용합니다.
