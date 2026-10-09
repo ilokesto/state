@@ -1,5 +1,7 @@
 import { Store } from '@ilokesto/store';
 import { getStore } from '../lib/getStore.js';
+import { registerRestoreBaseline } from '../lib/restoreSource.js';
+import { registerStoreCleanup } from '../lib/storeCleanup.js';
 import { definePipeableMiddleware } from '../utils/pipe/metadata.js';
 import type { PipeableMiddleware } from '../utils/pipe/metadata.js';
 import type {
@@ -186,6 +188,8 @@ function applyHistory<State>(
       redoStack.length = 0;
     },
   };
+
+  registerStoreCleanup(store, registerRestoreBaseline(store, controls.clearHistory));
 
   store.pushMiddleware((nextState, next) => {
     const before = store.getState();

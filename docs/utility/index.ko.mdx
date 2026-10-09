@@ -20,7 +20,7 @@ Framework adapter는 “이 state를 UI에서 어떻게 reactive하게 읽을까
 
 ```ts lineNumbers
 import { create } from '@ilokesto/state/react';
-import { logger, persist } from '@ilokesto/state/middleware';
+import { jsonStorage, logger, persist } from '@ilokesto/state/middleware';
 import { pipe } from '@ilokesto/state/utils';
 
 type PreferencesState = { theme: 'system' | 'light' | 'dark' };
@@ -33,14 +33,18 @@ const decodePreferences = (value: unknown): PreferencesState | null => {
 };
 
 const preferencesStore = pipe
-  .use(persist({ local: 'preferences', decode: decodePreferences }))
+  .use(persist({ key: 'preferences', storage: jsonStorage(() => window.localStorage), decode: decodePreferences }))
   .use(logger({ collapsed: true }))
   .create<PreferencesState>({ theme: 'system' });
 
 export const usePreferences = create(preferencesStore);
+
+export async function restorePreferences() {
+  await preferencesStore.persist.rehydrate();
+}
 ```
 
-Component는 여전히 일반 adapter API를 사용합니다. Utility layer는 `create`에 넘길 store를 준비할 뿐입니다.
+Component는 여전히 일반 adapter API를 사용합니다. 클라이언트 시작 코드나 effect에서 `restorePreferences()`를 호출하고 오류를 처리한 뒤 편집을 활성화하세요. Utility layer는 `create`에 넘길 store를 준비할 뿐이며 생성 시 저장소 I/O는 없습니다.
 
 ## 설치 메모
 

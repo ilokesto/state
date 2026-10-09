@@ -37,7 +37,11 @@ The validate middleware rejects async Standard Schema results. Keep validation s
 
 ## Persisted state did not migrate
 
-`persist` migrations run for `local` and `cookie`, not `session`. Check the stored `{ state, version }` payload and migration array length.
+All storage adapters use the same migration pipeline. Start it explicitly with `await store.persist.rehydrate()` and handle rejection. Check the stored `{ state, version }` envelope, migration array length, and required `decode` function. Inspect `store.persist.getStatus().error`; invalid data preserves memory and storage instead of silently replacing them. Await `store.persist.flush()` for migration write completion.
+
+## Persistence reports a conflict or an unsaved change
+
+Edits before restoration completes produce `CONFLICT`. Explicitly choose `rehydrate({ conflict: 'keep-current' })` or `rehydrate({ conflict: 'use-stored' })`; there is no automatic deep merge. `flush()` before successful hydration rejects with `NOT_HYDRATED`. Subscribe to persistence status to distinguish restoration from saving. See [Persist migrations](/en/state/advanced/persist-migrations) for the API replacement table.
 
 ## `adaptor` cannot be imported or used
 

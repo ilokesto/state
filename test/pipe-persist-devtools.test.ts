@@ -1,3 +1,4 @@
+import { jsonStorage } from '../src/middleware';
 import { expect, test } from 'bun:test';
 
 import './pipe-devtools-dispose.test';
@@ -47,7 +48,7 @@ function useAtRuntime(builder: object, middleware: object): object {
   return nextBuilder;
 }
 
-test('Given browser fake installation fails after localStorage replacement, when setup unwinds, then it restores the original globals', () => {
+test('Given browser fake installation fails after localStorage replacement, when setup unwinds, then it restores the original globals', async () => {
   // Given
   const originalLocalStorageDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
   const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'window');
@@ -91,7 +92,7 @@ test('Given browser fake installation fails after localStorage replacement, when
   }
 });
 
-test('Given pre-existing browser globals, when fake-backed work completes, then it restores both descriptors', () => {
+test('Given pre-existing browser globals, when fake-backed work completes, then it restores both descriptors', async () => {
   // Given
   const originalLocalStorageDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
   const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'window');
@@ -119,9 +120,9 @@ test('Given pre-existing browser globals, when fake-backed work completes, then 
   }
 });
 
-test('Given persist and devtools via pipe, when they hydrate, write, and receive DevTools commands, then their observable contracts remain unchanged', () => {
+test('Given persist and devtools via pipe, when they hydrate, write, and receive DevTools commands, then their observable contracts remain unchanged', async () => {
   // Given
-    withBrowserFakes<CounterState>((storage, connections) => {
+    await withBrowserFakes<CounterState, Promise<void>>(async (storage, connections) => {
     storage.setItem('counter', JSON.stringify({ state: { count: 4 }, version: 0 }));
 
     const decodeCounter = (value: unknown): CounterState | null => {
@@ -131,8 +132,11 @@ test('Given persist and devtools via pipe, when they hydrate, write, and receive
     };
 
     // When
-    const persisted = pipe.use(persist({ decode: decodeCounter, local: 'counter' })).create({ count: 0 });
+    const persisted = pipe.use(persist({ decode: decodeCounter, key: 'counter', storage: jsonStorage(() => localStorage) })).create({ count: 0 });
+    await persisted.persist.rehydrate();
+    await persisted.persist.flush();
     persisted.setState({ count: 6 });
+    await persisted.persist.flush();
     const instrumented = pipe.use(devtools('counter')).create({ count: 1 });
     const connection = connections[0];
     instrumented.setState({ count: 2 });
@@ -154,21 +158,25 @@ test('Given persist and devtools via pipe, when they hydrate, write, and receive
   });
 });
 
-test('Given persist and devtools setup permutations via pipe, when each is applied, then hydration and DevTools initialization retain their distinct order', () => {
+test('Given persist and devtools setup permutations via pipe, when each is applied, then hydration and DevTools initialization retain their distinct order', async () => {
   // Given
-    withBrowserFakes<CounterState>((storage, connections) => {
+    await withBrowserFakes<CounterState, Promise<void>>(async (storage, connections) => {
     storage.setItem('devtools-first', JSON.stringify({ state: { count: 3 }, version: 0 }));
     storage.setItem('persist-first', JSON.stringify({ state: { count: 5 }, version: 0 }));
 
     // When
     const devtoolsFirst = pipe
       .use(devtools('devtools-first'))
-      .use(persist({ decode: decodeCounter, local: 'devtools-first' }))
+      .use(persist({ decode: decodeCounter, key: 'devtools-first', storage: jsonStorage(() => localStorage) }))
       .create({ count: 0 });
+    await devtoolsFirst.persist.rehydrate();
+    await devtoolsFirst.persist.flush();
     const persistFirst = pipe
-      .use(persist({ decode: decodeCounter, local: 'persist-first' }))
+      .use(persist({ decode: decodeCounter, key: 'persist-first', storage: jsonStorage(() => localStorage) }))
       .use(devtools('persist-first'))
       .create({ count: 0 });
+    await persistFirst.persist.rehydrate();
+    await persistFirst.persist.flush();
 
     // Then
     expect(devtoolsFirst.getState()).toEqual({ count: 3 });
@@ -176,51 +184,55 @@ test('Given persist and devtools setup permutations via pipe, when each is appli
     expect(connections).toHaveLength(2);
     expect(connections[0].inits).toEqual([{ count: 0 }]);
     expect(connections[0].sends).toEqual([
-      { action: 'devtools-first:anonymous action', state: { count: 3 } },
+      { action: 'devtools-first:persist/rehydrate', state: { count: 3 } },
     ]);
-    expect(connections[1].inits).toEqual([{ count: 5 }]);
-    expect(connections[1].sends).toEqual([]);
+    expect(connections[1].inits).toEqual([{ count: 0 }]);
+    expect(connections[1].sends).toEqual([{ action: 'persist-first:persist/rehydrate', state: { count: 5 } }]);
     expect(storage.reads).toBe(2);
   });
 });
 
-test('Given tagged persist and devtools curried forms, when pipe creates both setup permutations, then it preserves persist and devtools setup order', () => {
+test('Given tagged persist and devtools curried forms, when pipe creates both setup permutations, then it preserves persist and devtools setup order', async () => {
   // Given
-    withBrowserFakes<CounterState>((storage, connections) => {
+    await withBrowserFakes<CounterState, Promise<void>>(async (storage, connections) => {
     storage.setItem('pipe-persist-first', JSON.stringify({ state: { count: 5 }, version: 0 }));
     storage.setItem('pipe-devtools-first', JSON.stringify({ state: { count: 3 }, version: 0 }));
 
     // When
     const persistFirst = pipe
-      .use(persist({ decode: decodeCounter, local: 'pipe-persist-first' }))
+      .use(persist({ decode: decodeCounter, key: 'pipe-persist-first', storage: jsonStorage(() => localStorage) }))
       .use(devtools('pipe-persist-first'))
       .create<CounterState>({ count: 0 });
+    await persistFirst.persist.rehydrate();
+    await persistFirst.persist.flush();
     const devtoolsFirst = pipe
       .use(devtools('pipe-devtools-first'))
-      .use(persist({ decode: decodeCounter, local: 'pipe-devtools-first' }))
+      .use(persist({ decode: decodeCounter, key: 'pipe-devtools-first', storage: jsonStorage(() => localStorage) }))
       .create<CounterState>({ count: 0 });
+    await devtoolsFirst.persist.rehydrate();
+    await devtoolsFirst.persist.flush();
 
     // Then
     expect(persistFirst.getState()).toEqual({ count: 5 });
     expect(devtoolsFirst.getState()).toEqual({ count: 3 });
     expect(connections).toHaveLength(2);
-    expect(connections[0].inits).toEqual([{ count: 5 }]);
-    expect(connections[0].sends).toEqual([]);
+    expect(connections[0].inits).toEqual([{ count: 0 }]);
+    expect(connections[0].sends).toEqual([{ action: 'pipe-persist-first:persist/rehydrate', state: { count: 5 } }]);
     expect(connections[1].inits).toEqual([{ count: 0 }]);
     expect(connections[1].sends).toEqual([
-      { action: 'pipe-devtools-first:anonymous action', state: { count: 3 } },
+      { action: 'pipe-devtools-first:persist/rehydrate', state: { count: 3 } },
     ]);
     expect(storage.reads).toBe(2);
   });
 });
 
-test('Given invalid duplicate curried forms, when pipe validates before persist and devtools side effects, then it rejects without storage or extension setup', () => {
+test('Given invalid duplicate curried forms, when pipe validates before persist and devtools side effects, then it rejects without storage or extension setup', async () => {
   // Given
-    withBrowserFakes<CounterState>((storage, connections) => {
+    await withBrowserFakes<CounterState, Promise<void>>(async (storage, connections) => {
     const duplicatePersist = () =>
       useAtRuntime(
-        useAtRuntime(pipe, persist({ decode: decodeCounter, local: 'duplicate-persist' })),
-        persist({ decode: decodeCounter, local: 'duplicate-persist' }),
+        useAtRuntime(pipe, persist({ decode: decodeCounter, key: 'duplicate-persist', storage: jsonStorage(() => localStorage) })),
+        persist({ decode: decodeCounter, key: 'duplicate-persist', storage: jsonStorage(() => localStorage) }),
       );
     const duplicateDevtools = () =>
       useAtRuntime(useAtRuntime(pipe, devtools('duplicate-devtools')), devtools('duplicate-devtools'));
@@ -234,9 +246,9 @@ test('Given invalid duplicate curried forms, when pipe validates before persist 
   });
 });
 
-test('Given persistence storage boundaries via pipe, when payloads migrate or are malformed, then migration and eager hydration retain their behavior', () => {
+test('Given persistence storage boundaries via pipe, when payloads migrate or are malformed, then migration and eager hydration retain their behavior', async () => {
   // Given
-    withBrowserFakes<CounterState>((storage) => {
+    await withBrowserFakes<CounterState, Promise<void>>(async (storage) => {
     storage.setItem('migrated', JSON.stringify({ state: { count: 2 }, version: 0 }));
     storage.setItem('malformed', '{');
     const originalConsoleError = console.error;
@@ -247,10 +259,13 @@ test('Given persistence storage boundaries via pipe, when payloads migrate or ar
       // When
       const migrated = pipe.use(persist({
         decode: decodeCounter,
-        local: 'migrated',
+        key: 'migrated', storage: jsonStorage(() => localStorage),
         migrate: [(state: unknown) => ({ count: (state as CounterState).count + 1 })],
       })).create({ count: 0 });
-      const malformed = pipe.use(persist({ decode: decodeCounter, local: 'malformed' })).create({ count: 7 });
+    await migrated.persist.rehydrate();
+    await migrated.persist.flush();
+      const malformed = pipe.use(persist({ decode: decodeCounter, key: 'malformed', storage: jsonStorage(() => localStorage) })).create({ count: 7 });
+      await expect(malformed.persist.rehydrate()).rejects.toBeInstanceOf(Error);
 
       // Then
       expect(migrated.getState()).toEqual({ count: 3 });
@@ -262,14 +277,14 @@ test('Given persistence storage boundaries via pipe, when payloads migrate or ar
   });
 });
 
-test('Given devtools production and browser guards, when pipe middleware initializes, then it avoids extension setup', () => {
+test('Given devtools production and browser guards, when pipe middleware initializes, then it avoids extension setup', async () => {
   // Given
   const initialNodeEnv = process.env.NODE_ENV;
   const windowDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'window');
 
   try {
     // When / Then
-    withBrowserFakes<CounterState>((_, connections) => {
+    await withBrowserFakes<CounterState, Promise<void>>(async (_, connections) => {
       process.env.NODE_ENV = 'production';
       const store = pipe.use(devtools('production')).create<CounterState>({ count: 0 });
       store.setState({ count: 1 });

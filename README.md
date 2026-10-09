@@ -255,7 +255,7 @@ console.log(currentCount);
 <!-- pipe-example:builder-basics -->
 ```ts
 import { create } from '@ilokesto/state/react';
-import { logger, persist } from '@ilokesto/state/middleware';
+import { jsonStorage, logger, persist } from '@ilokesto/state/middleware';
 import { pipe } from '@ilokesto/state/utils';
 
 const decodeCounter = (value: unknown): { readonly count: number } | null => {
@@ -266,10 +266,14 @@ const decodeCounter = (value: unknown): { readonly count: number } | null => {
 
 const counterStore = pipe
   .use(logger({ timestamp: true }))
-  .use(persist({ local: 'counter', decode: decodeCounter }))
+  .use(persist({ key: 'counter', storage: jsonStorage(() => window.localStorage), decode: decodeCounter }))
   .create({ count: 0 });
 
 export const useCounter = create(counterStore);
+
+export async function restoreCounter() {
+  await counterStore.persist.rehydrate();
+}
 ```
 
 `.create()` accepts plain state only. It does not accept an existing `Store`.
@@ -331,15 +335,16 @@ dispose(counterStore);
 
 ### Safe persistence
 
-For persisted data that crosses a trust boundary, pass `decode`. Safe persistence follows
-parse, migrate, decode: it parses a stored payload, migrates an older payload to the current
-version, then calls `decode` on the migration result. Invalid payloads, failed migrations, failed
-decodes, and future versions fall back to the initial state. A successful migration is written
-back with the current version. Current-version payloads are decoded without a rewrite.
+`persist` requires `key`, a storage factory, and `decode`. Creation performs no storage I/O.
+Call `await store.persist.rehydrate()` explicitly in client startup or a client effect.
+Restoration reads the envelope, migrates, decodes, validates, and commits immediately.
+Invalid data, failed migrations, and future versions reject restoration while preserving
+the current memory and stored value. Successful migrations queue a write with the current
+version; current-version payloads are decoded without a rewrite.
 
 <!-- pipe-example:safe-persist-pipe -->
 ```ts
-import { persist } from '@ilokesto/state/middleware';
+import { indexedDBStorage, persist } from '@ilokesto/state/middleware';
 import { pipe } from '@ilokesto/state/utils';
 
 type CounterState = { readonly count: number };
@@ -352,17 +357,60 @@ const decodeCounter = (value: unknown): CounterState | null => {
 };
 
 const counterStore = pipe
-  .use(persist({ local: 'counter', decode: decodeCounter }))
+  .use(persist({
+    key: 'counter',
+    storage: indexedDBStorage({ database: 'my-app-state' }),
+    decode: decodeCounter,
+  }))
   .create<CounterState>({ count: 0 });
+
+await counterStore.persist.rehydrate();
+counterStore.setState({ count: 1 });
+await counterStore.persist.flush();
 ```
 
 `decode` is required. Stored values are never trusted without validation.
+
+IndexedDB preserves native `File`, `Blob`, `Map`, `Set`, `Date`, and `ArrayBuffer`
+through structured clone, without base64 conversion. `jsonStorage(() => window.localStorage)`
+and `jsonStorage(() => window.sessionStorage)` support JSON values only; `cookieStorage({ path: '/' })`
+is also JSON-based. There is no automatic fallback from IndexedDB to another adapter.
+Pass helper results directly, not wrapped in another `() =>`.
+
+This persistence API is a **breaking change released as a patch**, an explicit exception
+for the v2 correction in [issue #102](https://github.com/ilokesto/ilokesto/issues/102).
+
+| Old API | Replacement |
+| --- | --- |
+| `local`, `session`, `cookie` options | `key` + `jsonStorage(...)` or `cookieStorage(...)` |
+| Eager hydration / `skipHydration` | Explicit `await store.persist.rehydrate()` |
+| `hasHydrated()` / `onRehydrateStorage` | `getStatus()` / `subscribe(listener)` |
+| Synchronous `rehydrate()` / `clearStorage()` | Await their promises |
+| Assuming an update is saved | `await store.persist.flush()` |
+
+Edits before restoration completes produce a conflict; choose
+`rehydrate({ conflict: 'keep-current' })` or `rehydrate({ conflict: 'use-stored' })`
+explicitly. No deep merge occurs. Observe hydration, saving, pending work, and errors
+through `getStatus()` and `subscribe()`. `clearStorage()` deletes only the configured key,
+leaves memory unchanged, and orders deletion after older writes.
+
+Factories create independent instances for each store. `dispose(store)` cleans up only
+that store's pending work and owned connection; await `flush()` first when saving before
+disposal is required. IndexedDB saving completes at transaction completion, not request
+success. `flush()` covers its call-time target and does not advance debounce timers.
+
+See the [persistence migration guide](docs/advanced/persist-migrations.mdx).
+After building, run `node packages/state/examples/persist-lifecycle.mjs` for a complete
+custom storage factory example with restoration, saving, and explicit conflict resolution.
 
 Every middleware passed to `.use()` must be registered with `definePipeableMiddleware`, including custom middleware. Its metadata requires an `id`; duplicate IDs reject by default. Set `duplicate: 'allow'` on every occurrence only when repetition is intentional.
 
 `before: ['id']` means this middleware must be declared earlier, which makes it outer. `after: ['id']` means it must be declared later, which makes it inner. A relation to a middleware that is absent is ignored. Pipe rejects invalid present relationships and cycles, and it never reorders middleware for you.
 
-When both are used, the safe chain is `pipe.use(debounce(...)).use(persist(...))`. The reverse `pipe.use(persist(...)).use(debounce(...))` is rejected with `MIDDLEWARE_ORDER`.
+Declare `debounce()` before `persist()`; the reverse order remains rejected with
+`MIDDLEWARE_ORDER`. Persistence observes actual commits, including delayed commits.
+Restoration bypasses timing middleware and establishes a new history baseline.
+The `history()` + `debounce()`/`throttle()` restriction still applies.
 
 Capabilities make a middleware's Store additions visible to later middleware and the final Store. `requires` must already be available when `.use()` runs, so an earlier outer middleware cannot require a capability supplied by a later inner middleware. `adds` supplies capabilities in the immediate outer-to-inner direction.
 

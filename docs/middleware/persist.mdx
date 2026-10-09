@@ -1,50 +1,23 @@
 ---
 title: "persist"
-description: "Persist store state to localStorage, sessionStorage, or cookies."
+description: "Explicit asynchronous persistence with IndexedDB, JSON storage, and cookies."
 ---
 
 # persist
 
-`persist` reads the initial value from browser storage, writes changed state back as JSON, and optionally runs migrations for supported storage types.
+`persist` keeps state commits synchronous and manages asynchronous restoration, saving, and errors. Configure `key`, a `storage` factory, and a required `decode` function. Register it with `pipe.use(...)`, then create the store with `.create(initialState)`.
 
-## Signature
+Creating a helper, middleware, or store performs no storage I/O and does not access `window`, `document`, or `indexedDB`. Start restoration explicitly with `await store.persist.rehydrate()`.
 
-```ts lineNumbers
-persist<DecodedState, const Steps extends readonly MigrationFn[]>(
-  options: SafePersistConfig<DecodedState, Steps>,
-): PipeMiddleware<DecodedState>
-```
+## Save and restore JSON state
 
-`persist(options)` returns registered middleware for `pipe.use(...)`. Create the store with `.create(initialState)` after registering it. `decode` is required so values read from storage are validated before they become live state.
-
-## Local storage example
+Run this complete example in a browser module. It restores the previous theme, changes it to dark, and waits for saving to finish.
 
 ```ts lineNumbers
-import { persist } from '@ilokesto/state/middleware';
+import { dispose, jsonStorage, persist } from '@ilokesto/state/middleware';
 import { pipe } from '@ilokesto/state/utils';
 
 type ThemeState = { theme: 'light' | 'dark' };
-
-const decodeTheme = (value: unknown): ThemeState | null => {
-  if (typeof value !== 'object' || value === null) return null;
-  if (!('theme' in value) || (value.theme !== 'light' && value.theme !== 'dark')) return null;
-  return { theme: value.theme };
-};
-
-const store = pipe
-  .use(persist({ local: 'theme', decode: decodeTheme }))
-  .create<ThemeState>({ theme: 'light' });
-```
-
-## Using with debounce
-
-When both middleware are used, declare `debounce` before `persist` so persistence observes the debounced commit:
-
-```ts lineNumbers
-import { debounce, persist } from '@ilokesto/state/middleware';
-import { pipe } from '@ilokesto/state/utils';
-
-type ThemeState = { readonly theme: 'light' | 'dark' };
 
 const decodeTheme = (value: unknown): ThemeState | null => {
   if (typeof value !== 'object' || value === null || !('theme' in value)) return null;
@@ -52,136 +25,119 @@ const decodeTheme = (value: unknown): ThemeState | null => {
 };
 
 const store = pipe
-  .use(debounce(250))
-  .use(persist({ local: 'theme', decode: decodeTheme }))
-  .create<ThemeState>({ theme: 'light' });
-```
-
-`pipe.use(persist(...)).use(debounce(...))` is rejected with `MIDDLEWARE_ORDER` because it would skip persistence for deferred commits. Pipe keeps the declared order and never rearranges it.
-
-## Session and cookie storage
-
-```ts lineNumbers
-type SessionState = { token: string | null };
-type ConsentState = { accepted: boolean };
-
-const decodeSession = (value: unknown): SessionState | null => {
-  if (typeof value !== 'object' || value === null || !('token' in value)) return null;
-  return typeof value.token === 'string' || value.token === null ? { token: value.token } : null;
-};
-
-const decodeConsent = (value: unknown): ConsentState | null => {
-  if (typeof value !== 'object' || value === null || !('accepted' in value)) return null;
-  return typeof value.accepted === 'boolean' ? { accepted: value.accepted } : null;
-};
-
-const sessionStore = pipe
-  .use(persist({ session: 'session', decode: decodeSession }))
-  .create<SessionState>({ token: null });
-
-const cookieStore = pipe
-  .use(persist({ cookie: 'cookie-consent', decode: decodeConsent }))
-  .create<ConsentState>({ accepted: false });
-```
-
-## Migration example
-
-```ts lineNumbers
-import type { PersistMigration } from '@ilokesto/state/middleware';
-
-type SettingsV1 = { theme: string };
-type SettingsState = { theme: string; count: number };
-
-const toV1: PersistMigration<unknown, SettingsV1> = (old) => ({
-  theme: typeof old === 'string' ? old : 'light',
-});
-const toCurrent: PersistMigration<SettingsV1, SettingsState> = (old) => ({
-  ...old,
-  count: 0,
-});
-const decodeSettings = (value: unknown): SettingsState | null => {
-  if (typeof value !== 'object' || value === null) return null;
-  if (!('theme' in value) || typeof value.theme !== 'string') return null;
-  if (!('count' in value) || typeof value.count !== 'number') return null;
-  return { theme: value.theme, count: value.count };
-};
-
-const settings = pipe
   .use(persist({
-    local: 'settings',
-    migrate: [toV1, toCurrent],
-    decode: decodeSettings,
+    key: 'theme',
+    storage: jsonStorage(() => window.localStorage),
+    decode: decodeTheme,
   }))
-  .create<SettingsState>({ theme: 'light', count: 0 });
+  .create<ThemeState>({ theme: 'light' });
+
+try {
+  await store.persist.rehydrate();
+  store.setState({ theme: 'dark' });
+  await store.persist.flush();
+} finally {
+  dispose(store);
+}
 ```
 
-## Storage format and caveats
+Handle rejected operations in the caller. Calling `setState` commits synchronously; it does not mean the value has reached storage.
 
-- Values are stored as `{ state, version }` JSON.
-- `version` is based on migration array length.
-- Migrations run for `local` and `cookie`, not `session`.
-- Storage read failures keep the live state and are passed to `onRehydrateStorage`; write failures are caught and logged in the browser.
-- Cookie writing uses `document.cookie = key=value; path=/` so cookies are visible across all routes. Configure advanced cookie attributes outside this helper if needed.
+## Choose an adapter
 
-## SSR and hydration
+All helpers below are exported by `@ilokesto/state/middleware` and return a storage factory. Pass their result directly; do not add an outer `() =>`.
 
-`persist` is safe to evaluate on the server. Storage reads return `null` when `window` or `document` is unavailable, so the store stays at its initial state during server rendering.
+| Storage | `storage` option | Supported values |
+| --- | --- | --- |
+| IndexedDB | `indexedDBStorage({ database: 'my-app-state' })` | Structured-cloneable values |
+| localStorage | `jsonStorage(() => window.localStorage)` | JSON values |
+| sessionStorage | `jsonStorage(() => window.sessionStorage)` | JSON values |
+| Cookie | `cookieStorage({ path: '/' })` | JSON values within cookie limits |
 
-By default, `persist` hydrates eagerly — it reads storage and applies the persisted value at store creation time. In a client-only SPA this is fine, but in SSR frameworks like Next.js App Router, eager hydration causes a React hydration mismatch: the server renders the initial state while the client renders the persisted state.
+`jsonStorage` takes a getter to defer browser access. `jsonStorage(window.localStorage)` is not supported and evaluates a browser global during SSR. Web Storage itself remains synchronous; the persistence completion and error contract is asynchronous.
 
-### `skipHydration` and manual `rehydrate()`
+Factories can be reused across stores. Each activation creates an independent adapter instance, reused for that store's lifetime, not for each write. A custom factory needs no metadata. Its instance provides `getItem`, `setItem`, `removeItem`, and optionally `dispose` for owned resources. Factory creation failures can be retried; ordinary I/O failures do not recreate an existing instance.
 
-Pass `skipHydration: true` to defer hydration. The store keeps the initial state on both server and client until you call `store.persist.rehydrate()` explicitly.
+## Native files and complex values
+
+IndexedDB stores the `{ state, version }` envelope with structured clone. It preserves native `File` names, types and contents, plus `Blob`, `Map`, `Set`, `Date`, and `ArrayBuffer`, without base64 conversion.
 
 ```ts lineNumbers
-import { persist } from '@ilokesto/state/middleware';
+import { indexedDBStorage, persist } from '@ilokesto/state/middleware';
 import { pipe } from '@ilokesto/state/utils';
 
-type CounterState = { count: number };
+type EditorState = { attachment: File | null; updatedAt: Date };
 
-const decodeCounter = (value: unknown): CounterState | null => {
+const decodeEditor = (value: unknown): EditorState | null => {
   if (typeof value !== 'object' || value === null) return null;
-  if (!('count' in value) || typeof value.count !== 'number') return null;
-  return { count: value.count };
+  if (!('attachment' in value) || (value.attachment !== null && !(value.attachment instanceof File))) return null;
+  if (!('updatedAt' in value) || !(value.updatedAt instanceof Date)) return null;
+  return { attachment: value.attachment, updatedAt: value.updatedAt };
 };
 
-const counterStore = pipe
-  .use(persist({ local: 'counter', decode: decodeCounter, skipHydration: true }))
-  .create<CounterState>({ count: 0 });
-
-// In a React client component:
-useEffect(() => {
-  counterStore.persist.rehydrate();
-}, []);
-```
-
-### `hasHydrated()`
-
-Check `store.persist.hasHydrated()` to gate UI that should only render after hydration.
-
-```ts lineNumbers
-const hydrated = counterStore.persist.hasHydrated();
-```
-
-### `onRehydrateStorage`
-
-Pass `onRehydrateStorage` to observe eager or manual hydration. The factory runs before storage is read and receives the live pre-hydration state. Its returned callback runs exactly once after the attempt completes.
-
-On success, the callback receives the hydrated state and `undefined`. Empty storage is also successful and preserves the live pre-hydration state. Storage, parsing, migration, and decoding failures preserve that live state and call the callback with `undefined` and the original error. `store.persist.hasHydrated()` is already `true` inside the post callback. If the post callback throws, that exception propagates and is not passed back into the same callback.
-
-```ts lineNumbers
-const themeStore = pipe
+const editor = pipe
   .use(persist({
-    local: 'theme',
-    decode: decodeTheme,
-    skipHydration: true,
-    onRehydrateStorage: (state) => (rehydratedState, error) => {
-      if (error) {
-        console.error('Rehydration failed', error);
-        return;
-      }
-      console.log('Rehydrated from', state, 'to', rehydratedState);
-    },
+    key: 'editor',
+    storage: indexedDBStorage({ database: 'my-app-state' }),
+    decode: decodeEditor,
   }))
-  .create<ThemeState>({ theme: 'light' });
+  .create<EditorState>({ attachment: null, updatedAt: new Date(0) });
+
+await editor.persist.rehydrate();
+editor.setState({
+  attachment: new File(['draft'], 'draft.txt', { type: 'text/plain' }),
+  updatedAt: new Date(),
+});
+await editor.persist.flush();
 ```
+
+Create image preview `blob:` URLs from restored blobs in the UI and revoke them when no longer needed. Do not persist those URLs. IndexedDB success means **transaction complete**, not merely request success. Uncloneable values, quota errors, and failed transactions reject saving. There is no automatic fallback to localStorage. JSON adapters do not preserve these native values: `Date.toJSON()` becomes a string, while `Map`, `Set`, `Blob`, and other unsupported values reject.
+
+## Lifecycle controls
+
+| Control | Contract |
+| --- | --- |
+| `await rehydrate()` | Explicitly restore; concurrent calls share an attempt, success is a later no-op, failure is retryable |
+| `await rehydrate({ conflict: 'keep-current' })` | Keep and save the current state after a restoration conflict |
+| `await rehydrate({ conflict: 'use-stored' })` | Explicitly replace current state with validated stored state |
+| `await flush()` | Wait for the save target at call time; retry failed pending writes |
+| `await clearStorage()` | Delete only this key after older writes; keep the in-memory state |
+| `getStatus()` | Read the latest immutable lifecycle snapshot |
+| `subscribe(listener)` | Observe future snapshots; returns an unsubscribe function |
+
+Edits before restoration completes stop restoration as a conflict by default. Neither memory nor storage is overwritten until the caller chooses a policy. There is **no automatic deep merge**. `flush()` before successful hydration rejects rather than overwriting unexamined stored data.
+
+Saving is serial: one write runs while the waiting slot retains only the latest committed value. A failed write remains pending and is retried on a new commit or explicit `flush()`, without infinite automatic retries. `flush()` does not wait forever for future edits or force a state debounce timer to run. A successful `clearStorage()` prevents earlier pending writes from resurrecting the deleted value; a later user commit can save again. Waiting flush operations superseded by clearing reject with `CLEARED`.
+
+## Observe status and errors
+
+`getStatus()` and `subscribe()` replace `hasHydrated()` and `onRehydrateStorage`. Hydration is `idle`, `hydrating`, `hydrated`, `conflict`, or `error`; saving is `idle`, `writing`, or `error`. `pending` reports unsaved work, `disposed` reports terminal persistence disposal, and `error` is a `PersistError` or `null`.
+
+This fragment extends the `editor` example:
+
+```ts lineNumbers
+const unsubscribe = editor.persist.subscribe((status) => {
+  if (status.error) {
+    console.error(status.error.operation, status.error.code, status.error.cause);
+  }
+});
+const status = editor.persist.getStatus();
+const ready = status.hydration === 'hydrated';
+unsubscribe();
+```
+
+Errors expose `operation`, a stable `code`, and the original `cause`. Rejected reads, migration, decoding, and validation preserve the current state. A notification failure after a commit does not roll back that commit or justify applying restoration again.
+
+## SSR and ownership
+
+Use identical initial state on server and client. Start `rehydrate()` in a client effect, handle its rejected promise, and gate editing until `getStatus().hydration === 'hydrated'` if the feature does not offer conflict resolution. Subscribe before starting restoration so the UI sees every transition. No `skipHydration` option is needed.
+
+The owner of a store calls `dispose(store)` when that instance is no longer needed. It cancels pending work and cleans up only its own connection, transactions, and subscriptions. A factory shared by two stores does not share this ownership. Late completions cannot mutate a disposed lifecycle. Disposal does not guarantee saving or undo a completed transaction: call `await store.persist.flush()` **before** disposal when saving is required.
+
+## Middleware and migration
+
+Persistence observes actual commits, not attempted writes. Validation rejection and throttle drops are not saved; deferred and reentrant commits are. Restoration follows read, envelope validation, migration, decode, registered state validation, and immediate commit. It bypasses debounce/throttle, runs state validation once, and becomes a new history baseline. User edits made by restoration listeners remain ordinary saved commits.
+
+Declare `debounce()` before `persist()`; the reverse order remains rejected with `MIDDLEWARE_ORDER`. The existing restriction on `history()` combined with `debounce()` or `throttle()` remains.
+
+All adapters support the same migration pipeline. Data version is the migration array length, distinct from IndexedDB schema version and internal commit sequence. See [Persist migrations](/en/state/advanced/persist-migrations) for the breaking API migration table and runnable examples.

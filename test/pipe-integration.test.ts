@@ -1,3 +1,4 @@
+import { jsonStorage } from '../src/middleware';
 import { expect, jest, spyOn, test } from 'bun:test';
 import { Store } from '@ilokesto/store';
 
@@ -76,7 +77,7 @@ function restoreGlobal(name: 'localStorage' | 'window', descriptor: PropertyDesc
   Object.defineProperty(globalThis, name, descriptor);
 }
 
-function withBrowserFakes(action: (storage: MemoryStorage, connections: DevtoolsConnection[]) => void): void {
+async function withBrowserFakes(action: (storage: MemoryStorage, connections: DevtoolsConnection[]) => Promise<void>): Promise<void> {
   const localStorageDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
   const windowDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'window');
   const storage = new MemoryStorage();
@@ -101,7 +102,7 @@ function withBrowserFakes(action: (storage: MemoryStorage, connections: Devtools
         },
       },
     });
-    action(storage, connections);
+    await action(storage, connections);
   } finally {
     restoreGlobal('localStorage', localStorageDescriptor);
     restoreGlobal('window', windowDescriptor);
@@ -166,49 +167,49 @@ test('Given validate and debounce in either declaration order, when valid and in
   }
 });
 
-test('Given persist and devtools in either order and a noncanonical five-built-in chain, when builders create Stores, then hydration and initialization retain setup order without a canonical order requirement', () => {
+test('Given persist and devtools in either order and a noncanonical five-built-in chain, when builders create Stores, then hydration and initialization retain setup order without a canonical order requirement', async () => {
   // Given
   jest.useFakeTimers();
 
   try {
-    withBrowserFakes((storage, connections) => {
+    await withBrowserFakes(async (storage, connections) => {
       storage.values.set('persist-first', JSON.stringify({ state: { count: 5 }, version: 0 }));
       storage.values.set('devtools-first', JSON.stringify({ state: { count: 3 }, version: 0 }));
       storage.values.set('all-built-ins', JSON.stringify({ state: { count: 7 }, version: 0 }));
 
       // When
       const persistFirst = pipe
-        .use(persist({ decode: decodeCounter, local: 'persist-first' }))
+        .use(persist({ decode: decodeCounter, key: 'persist-first', storage: jsonStorage(() => localStorage) }))
         .use(devtools('persist-first'))
         .create<CounterState>({ count: 0 });
       const devtoolsFirst = pipe
         .use(devtools('devtools-first'))
-        .use(persist({ decode: decodeCounter, local: 'devtools-first' }))
+        .use(persist({ decode: decodeCounter, key: 'devtools-first', storage: jsonStorage(() => localStorage) }))
         .create<CounterState>({ count: 0 });
       const allBuiltIns = pipe
         .use(debounce(10))
         .use(devtools('all-built-ins'))
         .use(validate({ '~standard': { validate: (value: unknown) => ({ value }), vendor: 'test', version: 1 as const } }))
-        .use(persist({ decode: decodeCounter, local: 'all-built-ins' }))
+        .use(persist({ decode: decodeCounter, key: 'all-built-ins', storage: jsonStorage(() => localStorage) }))
         .use(logger({ timestamp: false }))
         .create<CounterState>({ count: 0 });
 
       expect(allBuiltIns.getState()).toEqual({ count: 0 });
-      jest.advanceTimersByTime(10);
+      await Promise.all([persistFirst.persist.rehydrate(), devtoolsFirst.persist.rehydrate(), allBuiltIns.persist.rehydrate()]);
 
       // Then
       expect(persistFirst.getState()).toEqual({ count: 5 });
       expect(devtoolsFirst.getState()).toEqual({ count: 3 });
       expect(allBuiltIns.getState()).toEqual({ count: 7 });
       expect(connections).toHaveLength(3);
-      expect(connections[0]).toEqual({ inits: [{ count: 5 }], sends: [] });
+      expect(connections[0]).toEqual({ inits: [{ count: 0 }], sends: [{ action: 'persist-first:persist/rehydrate', state: { count: 5 } }] });
       expect(connections[1]).toEqual({
         inits: [{ count: 0 }],
-        sends: [{ action: 'devtools-first:anonymous action', state: { count: 3 } }],
+        sends: [{ action: 'devtools-first:persist/rehydrate', state: { count: 3 } }],
       });
       expect(connections[2]).toEqual({
         inits: [{ count: 0 }],
-        sends: [{ action: 'all-built-ins:anonymous action', state: { count: 7 } }],
+        sends: [{ action: 'all-built-ins:persist/rehydrate', state: { count: 7 } }],
       });
       expect(storage.reads).toBe(3);
     });

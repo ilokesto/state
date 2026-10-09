@@ -1,6 +1,7 @@
 import { Store } from '@ilokesto/store';
 import { getStoreActionMetadata } from '../lib/actionMetadata.js';
 import { getStore } from '../lib/getStore.js';
+import { restoreSource } from '../lib/restoreSource.js';
 import { registerStoreCleanup } from '../lib/storeCleanup.js';
 import { definePipeableMiddleware } from '../utils/pipe/metadata.js';
 import type { PipeableMiddleware } from '../utils/pipe/metadata.js';
@@ -59,6 +60,11 @@ const applyDevtools = <T>(initialState: T | Store<T>, name: string) => {
 
   if (devTools) {
     devTools.init(store.getState() as T);
+    registerStoreCleanup(store, store.subscribeCommit((commit) => {
+      if (commit.source === restoreSource) {
+        devTools.send(`${name}:persist/rehydrate`, commit.state);
+      }
+    }));
 
     const unsubscribe = devTools.subscribe((message) => {
       if (message.type !== 'DISPATCH') {

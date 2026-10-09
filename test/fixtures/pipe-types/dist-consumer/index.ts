@@ -1,3 +1,4 @@
+import { jsonStorage, cookieStorage } from '@ilokesto/state/middleware';
 import {
   PipeConfigurationError,
   definePipeableMiddleware,
@@ -22,9 +23,6 @@ import type {
   PersistDecoderStateDiagnostic,
   PersistMigration,
   SafePersistConfig,
-  SafePersistCookieConfig,
-  SafePersistLocalConfig,
-  SafePersistSessionConfig,
 } from '@ilokesto/state/middleware';
 import type {
   Pipe,
@@ -100,17 +98,17 @@ const decodeCounter: PersistDecoder<CounterState> = (value) => {
 
   return typeof value.count === 'number' ? { count: value.count } : null;
 };
-const safeLocalConfig: SafePersistLocalConfig<CounterState, []> = {
+const safeLocalConfig: SafePersistConfig<CounterState, []> = {
   decode: decodeCounter,
-  local: 'dist-safe-local',
+  key: 'dist-safe-local', storage: jsonStorage(() => localStorage),
 };
-const safeCookieConfig: SafePersistCookieConfig<CounterState, []> = {
-  cookie: 'dist-safe-cookie',
+const safeCookieConfig: SafePersistConfig<CounterState, []> = {
+  key: 'dist-safe-cookie', storage: cookieStorage(),
   decode: decodeCounter,
 };
-const safeSessionConfig: SafePersistSessionConfig<CounterState> = {
+const safeSessionConfig: SafePersistConfig<CounterState> = {
   decode: decodeCounter,
-  session: 'dist-safe-session',
+  key: 'dist-safe-session', storage: jsonStorage(() => sessionStorage),
 };
 const safePersistConfig: SafePersistConfig<CounterState> = safeLocalConfig;
 const migration: PersistMigration<unknown, CounterState> = () => ({ count: 0 });

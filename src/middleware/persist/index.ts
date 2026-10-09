@@ -1,32 +1,27 @@
-import { Store } from '@ilokesto/store';
+import type { Store } from '@ilokesto/store';
 import { getStore } from '../../lib/getStore.js';
 import { definePipeableMiddleware } from '../../utils/pipe/metadata.js';
 import type { PipeableMiddleware } from '../../utils/pipe/metadata.js';
-import type {
-  PipeCapability,
-  PipeMiddleware,
-  PipeMiddlewareMetadata,
-} from '../../utils/pipe/types.js';
-import type {
-  MigrationFn,
-  OnRehydrateStorage,
-  PersistControls,
-  PersistStore,
-  SafePersistConfig,
-} from './Persist.js';
-import { getSafeStorage, parseOptions, setStorage } from './persistUtils.js';
+import type { PipeCapability, PipeMiddleware, PipeMiddlewareMetadata } from '../../utils/pipe/types.js';
+import type { MigrationFn, PersistControls, PersistStore, SafePersistConfig } from './Persist.js';
+import { createPersistRuntime } from './createPersistRuntime.js';
 
 type PersistCapability = PipeCapability<
   '@ilokesto/state/persist-controls',
-  { readonly persist: PersistControls<unknown> }
+  { readonly persist: PersistControls }
 >;
 
-const persistCapability = {
+const persistCapability: PersistCapability = {
   id: '@ilokesto/state/persist-controls',
   shape: {
     persist: {
-      hasHydrated: (): boolean => false,
-      rehydrate: (): void => undefined,
+      rehydrate: async () => undefined,
+      flush: async () => undefined,
+      clearStorage: async () => undefined,
+      getStatus: () => ({
+        hydration: 'idle', saving: 'idle', pending: false, disposed: false, error: null,
+      } as const),
+      subscribe: () => () => undefined,
     },
   },
 } satisfies PersistCapability;
@@ -34,153 +29,43 @@ const persistCapability = {
 type SafeCurriedPersist<State> = PipeableMiddleware<
   PipeMiddleware<State>,
   PipeMiddlewareMetadata<
-    '@ilokesto/state/persist',
-    readonly [],
-    readonly [PersistCapability],
-    'reject',
-    readonly [],
-    readonly [],
-    readonly ['@ilokesto/state/debounce']
+    '@ilokesto/state/persist', readonly [], readonly [PersistCapability], 'reject',
+    readonly [], readonly [], readonly ['@ilokesto/state/debounce']
   >,
   'persist-decoder'
 >;
 
-const definePersistControls = <State>(
-  store: Store<State>,
-  controls: PersistControls<State>,
-): PersistStore<State> => {
-  Object.defineProperties(store, {
-    persist: { configurable: false, enumerable: true, value: controls, writable: false },
-  });
-  return store as PersistStore<State>;
-};
-
-const applyPersist = <T>(
-  initialState: T | Store<T>,
-  options: SafePersistConfig<T, readonly MigrationFn[]>,
-): PersistStore<T> => {
-  const store = getStore(initialState);
-  const baseSetState = store.setState.bind(store);
-  const optionObj = parseOptions(options);
-  const skipHydration = options.skipHydration === true;
-  const onRehydrateStorage: OnRehydrateStorage<T> | undefined = options.onRehydrateStorage;
-
-  let hydrated = false;
-  let prevPersistedState = store.getState() as T;
-  let lastEncodedValue: string | undefined;
-
-  const runRehydration = (fallbackState: T) => {
-    if (!optionObj.storageType) {
-      return { kind: 'empty', state: fallbackState, version: optionObj.storageVersion } as const;
-    }
-
-    return getSafeStorage({
-      ...optionObj,
-      decode: options.decode,
-      initState: fallbackState,
-    });
-  };
-
-  const rehydrate = (): void => {
-    if (hydrated) return;
-
-    const preState = store.getState() as T;
-    const callback = onRehydrateStorage?.(preState);
-    const result = runRehydration(preState);
-
-    switch (result.kind) {
-      case 'hydrated':
-        if (optionObj.storageType) {
-          lastEncodedValue = JSON.stringify({ state: result.state, version: optionObj.storageVersion });
-        }
-        baseSetState(result.state);
-        prevPersistedState = result.state;
-        hydrated = true;
-        callback?.(store.getState() as T, undefined);
-        break;
-      case 'empty':
-        prevPersistedState = preState;
-        hydrated = true;
-        callback?.(preState, undefined);
-        break;
-      case 'failed':
-        hydrated = true;
-        callback?.(undefined, result.error);
-        break;
-    }
-  };
-
-  const controls: PersistControls<T> = {
-    hasHydrated: () => hydrated,
-    rehydrate,
-  };
-
-  const persistedStore = definePersistControls(store, controls);
-
-  if (!skipHydration) {
-    rehydrate();
-  }
-
-  if (optionObj.storageType) {
-    store.pushMiddleware((nextState, next) => {
-      next(nextState);
-
-      const currentAfterUpdate = store.getState() as T;
-
-      if (!Object.is(prevPersistedState, currentAfterUpdate)) {
-        const encodedState = JSON.stringify({ state: currentAfterUpdate, version: optionObj.storageVersion });
-
-        if (encodedState !== lastEncodedValue) {
-          setStorage({ ...optionObj, value: currentAfterUpdate });
-        }
-
-        lastEncodedValue = encodedState;
-        prevPersistedState = currentAfterUpdate;
-      }
-    });
-  }
-
-  return persistedStore;
-};
-
 /**
- * Create a pipe middleware that persists store state to browser storage.
- *
- * Reads the initial value from storage on creation (unless `skipHydration`
- * is set), writes changed state back as JSON, and optionally runs migrations.
- * A `decode` function is required to validate stored values before they
- * become live state.
- *
- * Supports `localStorage`, `sessionStorage`, and cookies. Cookie writes
- * include `path=/` so they are visible across all routes. When used with
- * `debounce`, `persist` must be declared after `debounce` in the pipe chain.
- *
- * @param options - Persistence configuration. Must include a storage key,
- *   a `decode` function, and optionally `migrate`, `skipHydration`, and
- *   `onRehydrateStorage`.
- * @returns Pipe middleware registered with `@ilokesto/state/persist` metadata.
+ * Adds storage-independent asynchronous persistence with explicit restoration.
+ * Creation is side-effect free. Call rehydrate before writes are enabled;
+ * edits made before it completes require an explicit conflict policy.
+ * @param options - Entry key, lazy storage factory, required decoder and migrations.
+ * @returns Middleware adding persistence controls to the created store.
+ * @example
+ * const store = pipe.use(persist({
+ *   key: 'editor', storage: indexedDBStorage({ database: 'editor' }), decode: decodeEditor,
+ * })).create(initialEditor);
+ * await store.persist.rehydrate();
+ * await store.persist.flush();
  */
 export function persist<DecodedState, const Steps extends readonly MigrationFn[]>(
   options: SafePersistConfig<DecodedState, Steps>,
 ): SafeCurriedPersist<DecodedState>;
-
 export function persist<DecodedState, const Steps extends readonly MigrationFn[]>(
   options: SafePersistConfig<DecodedState, Steps>,
 ): object {
   return definePipeableMiddleware(
-    <State>(initialState: State | Store<State>) =>
-      applyPersist<State>(
-        initialState,
-        options as unknown as SafePersistConfig<State, readonly MigrationFn[]>,
-      ),
+    (initialState: DecodedState | Store<DecodedState>) => {
+      const store = getStore(initialState);
+      const controls = createPersistRuntime(store, options);
+      Object.defineProperty(store, 'persist', {
+        configurable: false, enumerable: true, value: controls, writable: false,
+      });
+      return store as PersistStore<DecodedState>;
+    },
     {
-      adds: [persistCapability],
-      after: ['@ilokesto/state/debounce'],
-      before: [],
-      conflicts: [],
-      duplicate: 'reject',
-      id: '@ilokesto/state/persist',
-      requires: [],
+      adds: [persistCapability], after: ['@ilokesto/state/debounce'], before: [],
+      conflicts: [], duplicate: 'reject', id: '@ilokesto/state/persist', requires: [],
     } as const,
   );
 }

@@ -6,17 +6,24 @@ export { history, HistoryConfigurationError } from './history.js';
 export type { HistoryControls, HistoryOptions, HistoryStore } from './history.js';
 export { logger } from './logger.js';
 export { persist } from './persist/index.js';
+export { jsonStorage } from './persist/storage/jsonStorage.js';
+export { cookieStorage } from './persist/storage/cookieStorage.js';
+export type { CookieStorageOptions } from './persist/storage/cookieStorage.js';
+export { indexedDBStorage } from './persist/storage/indexedDBStorage.js';
+export type { IndexedDBStorageOptions } from './persist/storage/indexedDBStorage.js';
 export type {
-  OnRehydrateStorage,
-  OnRehydrateStorageCallback,
+  PersistedValue, PersistStorage, PersistStorageFactory,
+} from './persist/storage/PersistStorage.js';
+export { PersistError } from './persist/Persist.js';
+export type {
+  PersistConflictPolicy,
   PersistControls,
   PersistDecoder,
   PersistDecoderStateDiagnostic,
   PersistMigration,
+  PersistRehydrateOptions,
+  PersistStatus,
   PersistStore,
   SafePersistConfig,
-  SafePersistCookieConfig,
-  SafePersistLocalConfig,
-  SafePersistSessionConfig,
 } from './persist/Persist.js';
 export { validate } from './validate.js';

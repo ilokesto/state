@@ -20,7 +20,7 @@ Framework adapters answer “how does this state become reactive in my UI?” Ut
 
 ```ts lineNumbers
 import { create } from '@ilokesto/state/react';
-import { logger, persist } from '@ilokesto/state/middleware';
+import { jsonStorage, logger, persist } from '@ilokesto/state/middleware';
 import { pipe } from '@ilokesto/state/utils';
 
 type PreferencesState = { theme: 'system' | 'light' | 'dark' };
@@ -33,14 +33,18 @@ const decodePreferences = (value: unknown): PreferencesState | null => {
 };
 
 const preferencesStore = pipe
-  .use(persist({ local: 'preferences', decode: decodePreferences }))
+  .use(persist({ key: 'preferences', storage: jsonStorage(() => window.localStorage), decode: decodePreferences }))
   .use(logger({ collapsed: true }))
   .create<PreferencesState>({ theme: 'system' });
 
 export const usePreferences = create(preferencesStore);
+
+export async function restorePreferences() {
+  await preferencesStore.persist.rehydrate();
+}
 ```
 
-The component still uses the normal adapter API. The utility layer only prepares the store passed into `create`.
+The component still uses the normal adapter API. Call `restorePreferences()` from client startup or an effect, handle errors, and enable editing after restoration. The utility layer only prepares the store passed into `create`; creating it performs no storage I/O.
 
 ## Installation notes
 

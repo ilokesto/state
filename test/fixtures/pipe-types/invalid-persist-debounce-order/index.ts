@@ -1,3 +1,4 @@
+import { jsonStorage } from '../../../../src/middleware';
 import { debounce, persist } from '../../../../src/middleware';
 import { pipe } from '../../../../src/utils/pipe';
 
@@ -14,7 +15,7 @@ const decodeCounter = (value: unknown): CounterState | null => {
 };
 
 const unsafeOrder = pipe
-  .use(persist({ decode: decodeCounter, local: 'persist-before-debounce' }))
+  .use(persist({ decode: decodeCounter, key: 'persist-before-debounce', storage: jsonStorage(() => localStorage)}))
   .use(debounce(25));
 
 unsafeOrder;

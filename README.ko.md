@@ -253,7 +253,7 @@ console.log(currentCount);
 <!-- pipe-example:builder-basics -->
 ```ts
 import { create } from '@ilokesto/state/react';
-import { logger, persist } from '@ilokesto/state/middleware';
+import { jsonStorage, logger, persist } from '@ilokesto/state/middleware';
 import { pipe } from '@ilokesto/state/utils';
 
 const decodeCounter = (value: unknown): { readonly count: number } | null => {
@@ -264,10 +264,14 @@ const decodeCounter = (value: unknown): { readonly count: number } | null => {
 
 const counterStore = pipe
   .use(logger({ timestamp: true }))
-  .use(persist({ local: 'counter', decode: decodeCounter }))
+  .use(persist({ key: 'counter', storage: jsonStorage(() => window.localStorage), decode: decodeCounter }))
   .create({ count: 0 });
 
 export const useCounter = create(counterStore);
+
+export async function restoreCounter() {
+  await counterStore.persist.rehydrate();
+}
 ```
 
 `.create()`는 일반 상태만 받습니다. 기존 `Store`는 받을 수 없습니다.
@@ -329,15 +333,15 @@ dispose(counterStore);
 
 ### 안전한 영속성
 
-신뢰 경계를 넘는 영속 데이터에는 `decode`를 전달하세요. 안전한 영속성은 parse, migrate,
-decode 순서로 동작합니다. 저장된 payload를 파싱하고, 이전 버전 payload를 현재 버전으로
-migrate한 뒤, 그 결과에 `decode`를 호출합니다. 잘못된 payload, 실패한 migration, 실패한 decode,
-그리고 미래 버전은 초기 상태로 돌아갑니다. 성공한 migration은 현재 버전으로 다시 저장됩니다.
-현재 버전 payload는 다시 쓰지 않고 decode합니다.
+`persist`는 `key`, 저장소 팩토리, `decode`가 필수입니다. 생성 시에는 저장소 I/O가 없습니다.
+클라이언트 시작 코드나 effect에서 `await store.persist.rehydrate()`를 명시적으로 호출하세요.
+복원은 저장 형식 검사, migration, decode, 검증을 거쳐 즉시 commit합니다.
+잘못된 데이터, migration 실패, 미래 버전은 현재 메모리와 저장값을 보존한 채 복원을 거부합니다.
+성공한 migration은 현재 버전으로 저장을 예약하며 현재 버전의 데이터는 다시 쓰지 않고 decode합니다.
 
 <!-- pipe-example:safe-persist-pipe -->
 ```ts
-import { persist } from '@ilokesto/state/middleware';
+import { indexedDBStorage, persist } from '@ilokesto/state/middleware';
 import { pipe } from '@ilokesto/state/utils';
 
 type CounterState = { readonly count: number };
@@ -350,17 +354,59 @@ const decodeCounter = (value: unknown): CounterState | null => {
 };
 
 const counterStore = pipe
-  .use(persist({ local: 'counter', decode: decodeCounter }))
+  .use(persist({
+    key: 'counter',
+    storage: indexedDBStorage({ database: 'my-app-state' }),
+    decode: decodeCounter,
+  }))
   .create<CounterState>({ count: 0 });
+
+await counterStore.persist.rehydrate();
+counterStore.setState({ count: 1 });
+await counterStore.persist.flush();
 ```
 
 `decode`는 필수입니다. 저장된 값을 검증 없이 신뢰하지 않습니다.
+
+IndexedDB는 base64 변환 없이 structured clone으로 `File`, `Blob`, `Map`, `Set`,
+`Date`, `ArrayBuffer`를 보존합니다. `jsonStorage(() => window.localStorage)`와
+`jsonStorage(() => window.sessionStorage)`는 JSON 값만 지원하며 `cookieStorage({ path: '/' })`도
+JSON 기반입니다. IndexedDB 실패 시 다른 어댑터로 자동 전환하지 않습니다.
+헬퍼 반환값은 추가 `() =>` 없이 직접 전달하세요.
+
+이번 영속화 API는 **호환성을 깨지만 patch로 출시하는 변경**입니다.
+[이슈 #102](https://github.com/ilokesto/ilokesto/issues/102)의 v2 수정 릴리스에 한정된 명시적 예외입니다.
+
+| 이전 API | 대체 API |
+| --- | --- |
+| `local`, `session`, `cookie` 옵션 | `key` + `jsonStorage(...)` 또는 `cookieStorage(...)` |
+| 자동 복원 / `skipHydration` | 명시적 `await store.persist.rehydrate()` |
+| `hasHydrated()` / `onRehydrateStorage` | `getStatus()` / `subscribe(listener)` |
+| 동기 `rehydrate()` / `clearStorage()` | 반환된 Promise 대기 |
+| 업데이트 즉시 저장 완료로 가정 | `await store.persist.flush()` |
+
+복원 완료 전 편집은 충돌이 됩니다. `rehydrate({ conflict: 'keep-current' })` 또는
+`rehydrate({ conflict: 'use-stored' })`로 명시적으로 선택하세요. 깊은 병합은 없습니다.
+`getStatus()`와 `subscribe()`로 복원, 저장, 대기 작업, 오류를 관찰합니다.
+`clearStorage()`는 이전 쓰기 뒤에 해당 키만 삭제하며 메모리는 유지합니다.
+
+팩토리는 스토어마다 독립적인 인스턴스를 만듭니다. `dispose(store)`는 해당 스토어의 대기 작업과
+소유 연결만 정리합니다. 종료 전 저장 보장이 필요하면 먼저 `flush()`를 기다리세요.
+IndexedDB 저장 완료는 request 성공이 아니라 transaction 완료 기준입니다.
+`flush()`는 호출 시점의 저장 대상만 기다리고 debounce 타이머를 앞당기지 않습니다.
+
+[영속화 마이그레이션 가이드](docs/advanced/persist-migrations.ko.mdx)를 참고하세요.
+빌드 후 `node packages/state/examples/persist-lifecycle.mjs`를 실행하면 사용자 정의 저장소 팩토리로
+복원, 저장, 명시적 충돌 해결을 확인할 수 있습니다.
 
 `.use()`에 전달하는 모든 미들웨어는 사용자 미들웨어를 포함해 `definePipeableMiddleware`로 등록되어야 합니다. 메타데이터에는 `id`가 필요하며, 같은 ID는 기본적으로 거부됩니다. 반복이 의도된 경우에만 모든 항목에 `duplicate: 'allow'`를 설정하세요.
 
 `before: ['id']`는 이 미들웨어가 더 앞에 선언되어 바깥쪽이 되어야 함을 뜻합니다. `after: ['id']`는 더 뒤에 선언되어 안쪽이 되어야 함을 뜻합니다. 대상 미들웨어가 없으면 관계는 무시됩니다. 파이프는 존재하는 관계의 오류와 순환을 거부하며, 미들웨어 순서를 자동으로 바꾸지 않습니다.
 
-둘을 함께 사용할 때 안전한 체인은 `pipe.use(debounce(...)).use(persist(...))`입니다. 반대 순서인 `pipe.use(persist(...)).use(debounce(...))`는 `MIDDLEWARE_ORDER`로 거부됩니다.
+`debounce()`는 `persist()`보다 먼저 선언하세요. 반대 순서는 계속 `MIDDLEWARE_ORDER`로 거부됩니다.
+영속화는 지연된 commit을 포함한 실제 commit을 관찰합니다.
+복원은 시간 제어 미들웨어를 우회하고 새로운 history 기준점이 됩니다.
+`history()`와 `debounce()`/`throttle()`의 조합 제한은 유지됩니다.
 
 기능(capability)은 미들웨어가 Store에 추가한 API를 이후 미들웨어와 최종 Store에서 보이게 합니다. `requires`는 `.use()`를 호출할 때 이미 사용할 수 있어야 하므로, 앞선 바깥 미들웨어가 나중의 안쪽 미들웨어가 제공하는 기능을 요구할 수 없습니다. `adds`는 즉시 바깥에서 안쪽으로 향하는 방향으로 기능을 제공합니다.
 

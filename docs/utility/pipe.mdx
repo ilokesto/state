@@ -19,7 +19,7 @@ The root `pipe` object exposes only `.use()`. Each `.use()` returns a builder th
 
 ```ts lineNumbers
 import { create } from '@ilokesto/state/react';
-import { logger, persist } from '@ilokesto/state/middleware';
+import { jsonStorage, logger, persist } from '@ilokesto/state/middleware';
 import { pipe } from '@ilokesto/state/utils';
 
 type CounterState = { count: number };
@@ -31,14 +31,18 @@ const decodeCounter = (value: unknown): CounterState | null => {
 };
 
 const counterStore = pipe
-  .use(persist({ local: 'counter', decode: decodeCounter }))
+  .use(persist({ key: 'counter', storage: jsonStorage(() => window.localStorage), decode: decodeCounter }))
   .use(logger({ collapsed: true, diff: true }))
   .create<CounterState>({ count: 0 });
 
 export const useCounter = create(counterStore);
+
+export async function restoreCounter() {
+  await counterStore.persist.rehydrate();
+}
 ```
 
-Middleware setup runs from the first `.use()` to the last. During updates, the first registered middleware is outermost. Order matters, and `pipe` validates the declared order without rearranging it.
+Middleware setup runs from the first `.use()` to the last. During updates, the first registered middleware is outermost. Order matters, and `pipe` validates the declared order without rearranging it. Creation performs no persistence I/O; call `restoreCounter()` in client startup or an effect and handle errors before editing.
 
 ## Public pipe types
 
@@ -67,7 +71,7 @@ Every value passed to `.use()` must be registered with `definePipeableMiddleware
 
 `PipeConfigurationError` exposes a contextual primary `id`, related `ids`, and a code: `DUPLICATE_CAPABILITY`, `DUPLICATE_MIDDLEWARE`, `INVALID_METADATA`, `INVALID_MIDDLEWARE_RESULT`, `INVALID_STORE_INPUT`, `MISSING_CAPABILITY`, `MIDDLEWARE_CONFLICT`, `MIDDLEWARE_CYCLE`, or `MIDDLEWARE_ORDER`. The primary ID can name a middleware or a capability, and is empty when no identifier applies; `ids` contains the related contextual identifiers and can also be empty.
 
-`history()` cannot share a chain with `debounce()` or `throttle()` in either order because history needs synchronous commits; those combinations use `MIDDLEWARE_CONFLICT`. When using `debounce()` and `persist()`, declare debounce first: `pipe.use(debounce(...)).use(persist(...))`. The reverse uses `MIDDLEWARE_ORDER` because persistence would miss the deferred commit.
+`history()` cannot share a chain with `debounce()` or `throttle()` in either order because history needs synchronous commits; those combinations use `MIDDLEWARE_CONFLICT`. Declare `debounce()` before `persist()`; the reverse order remains rejected with `MIDDLEWARE_ORDER`. Persistence observes actual commits. Restoration bypasses timing middleware and establishes a new history baseline; `flush()` does not force debounce timers.
 
 ## Use with validation
 

@@ -1,3 +1,4 @@
+import { jsonStorage } from '../src/middleware';
 import { expect, spyOn, test } from 'bun:test';
 
 import { withBrowserFakes } from './helpers/browserFakes';
@@ -14,9 +15,9 @@ const decodeCounter = (value: unknown): CounterState | null => {
   return { count: value.count };
 };
 
-test('Given validate, history, persist, logger, and DevTools, when accepted and rejected updates plus undo and redo run, then only committed states are observed across the chain', () => {
+test('Given validate, history, persist, logger, and DevTools, when accepted and rejected updates plus undo and redo run, then only committed states are observed across the chain', async () => {
   // Given
-  withBrowserFakes<CounterState>((storage, connections) => {
+  await withBrowserFakes<CounterState, Promise<void>>(async (storage, connections) => {
     const errorSpy = spyOn(console, 'error').mockImplementation(() => undefined);
     const groupSpy = spyOn(console, 'group').mockImplementation(() => undefined);
     const groupEndSpy = spyOn(console, 'groupEnd').mockImplementation(() => undefined);
@@ -40,16 +41,22 @@ test('Given validate, history, persist, logger, and DevTools, when accepted and 
       const store = pipe
         .use(validate(schema))
         .use(history())
-        .use(persist({ decode: decodeCounter, local: 'history-observations' }))
+        .use(persist({ decode: decodeCounter, key: 'history-observations', storage: jsonStorage(() => localStorage) }))
         .use(logger({ timestamp: false }))
         .use(devtools('history-observations'))
         .create<CounterState>({ count: 0 });
+    await store.persist.rehydrate();
+    await store.persist.flush();
 
       // When
       store.setState({ count: 1 });
+    await store.persist.flush();
       store.setState({ count: -1 });
+    await store.persist.flush();
       store.undo();
+    await store.persist.flush();
       store.redo();
+    await store.persist.flush();
 
       // Then
       expect(store.getState()).toEqual({ count: 1 });

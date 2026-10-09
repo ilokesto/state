@@ -1,3 +1,4 @@
+import { jsonStorage } from '../../../../src/middleware';
 import type {
   PersistDecoder,
   PersistMigration,
@@ -17,7 +18,7 @@ const requiresV1: PersistMigration<V1, CounterState> = (state) => ({ count: stat
 
 const invalidConfig: SafePersistConfig<CounterState, readonly [typeof requiresV1]> = {
   decode: decodeCounter,
-  local: 'invalid-first-input',
+  key: 'invalid-first-input', storage: jsonStorage(() => localStorage),
   migrate: [requiresV1],
 };
 

@@ -1,195 +1,35 @@
-import type { MigrationFn, PersistDecoder, PersistUtils } from './Persist.js';
+import { PersistError } from './Persist.js';
+import type { MigrationFn, PersistDecoder } from './Persist.js';
 
-type PersistedPayload<T> = { state: T; version: number };
-type SafeStorageResult<State> =
-  | { readonly kind: 'empty'; readonly state: State; readonly version: number }
-  | { readonly kind: 'failed'; readonly error: unknown; readonly state: State; readonly version: number }
-  | { readonly kind: 'hydrated'; readonly state: State; readonly version: number };
-type SafeStorageOptions<State> = PersistUtils['common'] & {
-  readonly decode: PersistDecoder<State>;
-  readonly initState: State;
-  readonly migrate?: readonly MigrationFn[];
-};
-type PersistOptions<Steps extends readonly MigrationFn[]> = {
-  readonly cookie?: string;
-  readonly local?: string;
-  readonly migrate?: Steps;
-  readonly session?: string;
-};
-class PersistHydrationError extends TypeError {
-  constructor(message: string) {
-    super(message);
-    this.name = 'PersistHydrationError';
-  }
-}
-
-const readStorageValue = (
-  storageType: PersistUtils['common']['storageType'],
-  storageKey: string,
-): string | null => {
-  if (typeof window === 'undefined') return null;
-
-  if (storageType === 'local') {
-    return localStorage.getItem(storageKey);
-  }
-
-  if (storageType === 'session') {
-    return sessionStorage.getItem(storageKey);
-  }
-
-  if (storageType === 'cookie') {
-    return getCookie(storageKey);
-  }
-
-  return null;
-};
-
-const hasOwn = <Key extends PropertyKey>(
-  value: object,
-  key: Key,
-): value is Record<Key, unknown> => Object.hasOwn(value, key);
-
-const parseSafePersistedPayload = (parsed: unknown): PersistedPayload<unknown> => {
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    throw new PersistHydrationError('Persisted value must be an object');
-  }
-  if (!hasOwn(parsed, 'state') || !hasOwn(parsed, 'version')) {
-    throw new PersistHydrationError('Persisted value must contain state and version');
-  }
-  if (
-    typeof parsed.version !== 'number' ||
-    !Number.isFinite(parsed.version) ||
-    !Number.isInteger(parsed.version) ||
-    parsed.version < 0
-  ) {
-    throw new PersistHydrationError('Persisted version must be a non-negative integer');
-  }
-
-  return { state: parsed.state, version: parsed.version };
-};
-
-const readSafePersistedPayload = (
-  storageType: PersistUtils['common']['storageType'],
-  storageKey: string,
-): PersistedPayload<unknown> | null => {
-  const storedValue = readStorageValue(storageType, storageKey);
-  if (storedValue === null) return null;
-
-  return parseSafePersistedPayload(JSON.parse(storedValue));
-};
-
-const migrateSafeCandidate = (
-  payload: PersistedPayload<unknown>,
+export function decodePersisted<State>(
+  payload: unknown,
+  decode: PersistDecoder<State>,
   migrations: readonly MigrationFn[],
-): { readonly candidate: unknown; readonly migrated: boolean } => {
-  if (payload.version > migrations.length) {
-    throw new PersistHydrationError('Persisted version is newer than the configured migrations');
+): { readonly state: State; readonly migrated: boolean } | null {
+  if (payload === null) return null;
+  if (
+    typeof payload !== 'object' || Array.isArray(payload) ||
+    !Object.hasOwn(payload, 'state') || !Object.hasOwn(payload, 'version') ||
+    !('state' in payload) || !('version' in payload) ||
+    typeof payload.version !== 'number' || !Number.isSafeInteger(payload.version) ||
+    payload.version < 0 || payload.version > migrations.length
+  ) {
+    throw new PersistError('hydrate', 'INVALID_DATA', 'Invalid persisted state envelope or version');
   }
 
-  const requiredMigrations: MigrationFn[] = [];
+  const steps: MigrationFn[] = [];
   for (let index = payload.version; index < migrations.length; index += 1) {
-    if (!Object.hasOwn(migrations, index)) {
-      throw new PersistHydrationError('Persist migration chain contains a missing step');
+    const step = migrations[index];
+    if (!Object.hasOwn(migrations, index) || typeof step !== 'function') {
+      throw new PersistError('hydrate', 'INVALID_DATA', 'Invalid persistence migration chain');
     }
-    const migration = migrations[index];
-    if (typeof migration !== 'function') {
-      throw new PersistHydrationError('Persist migration chain contains a non-function step');
-    }
-    requiredMigrations.push(migration);
+    steps.push(step);
   }
-
   let candidate = payload.state;
-  for (const migration of requiredMigrations) {
-    candidate = migration(candidate);
+  for (const step of steps) candidate = step(candidate);
+  const state = decode(candidate);
+  if (state === null) {
+    throw new PersistError('hydrate', 'INVALID_DATA', 'Persist decoder rejected the stored state');
   }
-
-  return { candidate, migrated: payload.version < migrations.length };
-};
-
-export function getCookie(name: string) {
-  if (typeof document === 'undefined') return null;
-  const cookies = document.cookie.split('; ');
-  const cookie = cookies.find((c) => c.startsWith(`${name}=`));
-  if (!cookie) return null;
-
-  const separatorIndex = cookie.indexOf('=');
-  const rawValue = cookie.slice(separatorIndex + 1);
-
-  try {
-    const decodedValue = decodeURIComponent(rawValue);
-    return encodeURIComponent(decodedValue) === rawValue ? decodedValue : rawValue;
-  } catch (error) {
-    if (error instanceof URIError) return rawValue;
-    throw error;
-  }
+  return { state, migrated: payload.version < migrations.length };
 }
-
-export const getSafeStorage = <State>({
-  storageKey,
-  storageType,
-  migrate = [],
-  decode,
-  initState,
-}: SafeStorageOptions<State>): SafeStorageResult<State> => {
-  const fallback = { state: initState, version: migrate.length };
-
-  try {
-    const payload = readSafePersistedPayload(storageType, storageKey);
-    if (payload === null) return { ...fallback, kind: 'empty' };
-
-    const migrated = migrateSafeCandidate(payload, migrate);
-
-    const decoded = decode(migrated.candidate);
-    if (decoded === null) {
-      throw new PersistHydrationError('Persist decoder rejected the stored state');
-    }
-
-    if (migrated.migrated) {
-      setStorage({ storageKey, storageType, storageVersion: migrate.length, value: decoded });
-    }
-
-    return { kind: 'hydrated', state: decoded, version: migrate.length };
-  } catch (error) {
-    return { ...fallback, error, kind: 'failed' };
-  }
-};
-
-export const parseOptions = <Steps extends readonly MigrationFn[]>(
-  StorageConfig?: PersistOptions<Steps>,
-) => {
-  const storageKey = StorageConfig?.local ?? StorageConfig?.cookie ?? StorageConfig?.session ?? '';
-  const storageType = StorageConfig?.local
-    ? 'local'
-    : StorageConfig?.cookie
-      ? 'cookie'
-      : StorageConfig?.session
-        ? 'session'
-        : null;
-  const storageVersion = StorageConfig?.migrate?.length ?? 0;
-  const migrate = StorageConfig?.migrate;
-
-  return { storageKey, storageType, storageVersion, migrate } as const;
-};
-
-export const setStorage: PersistUtils['setStorage'] = ({
-  storageKey,
-  storageType,
-  storageVersion: version,
-  value: state,
-}) => {
-  const encodedState = JSON.stringify({ state, version });
-
-  try {
-    if (storageType === 'local') {
-      localStorage.setItem(storageKey, encodedState);
-    } else if (storageType === 'session') {
-      sessionStorage.setItem(storageKey, encodedState);
-    } else if (storageType === 'cookie') {
-      document.cookie = `${storageKey}=${encodeURIComponent(encodedState)}; path=/`;
-    }
-  } catch (error) {
-    if (typeof window !== 'undefined') {
-      console.error('[@ilokesto/state/persist] Failed to write to storage', error);
-    }
-  }
-};

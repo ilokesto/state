@@ -1,3 +1,4 @@
+import { jsonStorage } from '../src/middleware';
 import { expect, test } from 'bun:test';
 
 import { persist } from '../src/middleware';
@@ -23,9 +24,9 @@ const invalidPayloads = [
 ] as const;
 
 for (const [label, encoded] of invalidPayloads) {
-  test(`Given a ${label}, when safe persist reads it, then migration and decode are skipped with zero setup writes`, () => {
+  test(`Given a ${label}, when safe persist reads it, then migration and decode are skipped with zero setup writes`, async () => {
     // Given
-    withBrowserFakes<CounterState>((storage) => {
+    await withBrowserFakes<CounterState, Promise<void>>(async (storage) => {
       const key = `safe-invalid-${label}`;
       storage.setItem(key, encoded);
       storage.writes = 0;
@@ -38,12 +39,13 @@ for (const [label, encoded] of invalidPayloads) {
             decodeCalls += 1;
             return { count: 99 };
           },
-          local: key,
+          key: key, storage: jsonStorage(() => localStorage),
           migrate: [() => {
             migrationCalls += 1;
             return { count: 88 };
           }],
         })).create({ count: 7 });
+    await expect(store.persist.rehydrate()).rejects.toBeInstanceOf(Error);
 
       // Then
       expect(store.getState()).toEqual({ count: 7 });
@@ -54,9 +56,9 @@ for (const [label, encoded] of invalidPayloads) {
   });
 }
 
-test('Given an empty safe migration tuple and V1 storage, when persist hydrates, then it rejects the future version before decode', () => {
+test('Given an empty safe migration tuple and V1 storage, when persist hydrates, then it rejects the future version before decode', async () => {
   // Given
-  withBrowserFakes<CounterState>((storage) => {
+  await withBrowserFakes<CounterState, Promise<void>>(async (storage) => {
     storage.setItem('safe-empty-future', JSON.stringify({ state: { count: 5 }, version: 1 }));
     storage.writes = 0;
     let decodeCalls = 0;
@@ -67,9 +69,10 @@ test('Given an empty safe migration tuple and V1 storage, when persist hydrates,
           decodeCalls += 1;
           return { count: 5 };
         },
-        local: 'safe-empty-future',
+        key: 'safe-empty-future', storage: jsonStorage(() => localStorage),
         migrate: [],
       })).create({ count: 7 });
+    await expect(store.persist.rehydrate()).rejects.toBeInstanceOf(Error);
 
     // Then
     expect(store.getState()).toEqual({ count: 7 });
@@ -82,9 +85,9 @@ for (const [label, migrations] of [
   ['sparse', sparseMigrations],
   ['non-function', nonFunctionMigrations],
 ] as const) {
-  test(`Given ${label} required migration slots from JavaScript, when safe persist hydrates, then it rejects before decode and write`, () => {
+  test(`Given ${label} required migration slots from JavaScript, when safe persist hydrates, then it rejects before decode and write`, async () => {
     // Given
-    withBrowserFakes<CounterState>((storage) => {
+    await withBrowserFakes<CounterState, Promise<void>>(async (storage) => {
       const key = `safe-${label}-migration`;
       storage.setItem(key, JSON.stringify({ state: { count: 5 }, version: 1 }));
       storage.writes = 0;
@@ -96,9 +99,10 @@ for (const [label, migrations] of [
             decodeCalls += 1;
             return { count: 5 };
           },
-          local: key,
+          key: key, storage: jsonStorage(() => localStorage),
           migrate: migrations,
         })).create({ count: 7 });
+    await expect(store.persist.rehydrate()).rejects.toBeInstanceOf(Error);
 
       // Then
       expect(store.getState()).toEqual({ count: 7 });
@@ -108,9 +112,9 @@ for (const [label, migrations] of [
   });
 }
 
-test('Given a throwing migration, when safe persist hydrates, then decode is skipped and setup remains unchanged', () => {
+test('Given a throwing migration, when safe persist hydrates, then decode is skipped and setup remains unchanged', async () => {
   // Given
-  withBrowserFakes<CounterState>((storage) => {
+  await withBrowserFakes<CounterState, Promise<void>>(async (storage) => {
     storage.setItem('safe-migration-throw', JSON.stringify({ state: { count: 5 }, version: 0 }));
     storage.writes = 0;
     let decodeCalls = 0;
@@ -121,11 +125,12 @@ test('Given a throwing migration, when safe persist hydrates, then decode is ski
           decodeCalls += 1;
           return { count: 5 };
         },
-        local: 'safe-migration-throw',
+        key: 'safe-migration-throw', storage: jsonStorage(() => localStorage),
         migrate: [() => {
           throw new TypeError('migration failed');
         }],
       })).create({ count: 7 });
+    await expect(store.persist.rehydrate()).rejects.toBeInstanceOf(Error);
 
     // Then
     expect(store.getState()).toEqual({ count: 7 });
@@ -134,9 +139,9 @@ test('Given a throwing migration, when safe persist hydrates, then decode is ski
   });
 });
 
-test('Given a successful old migration and null decode, when safe persist hydrates, then the candidate is not rewritten', () => {
+test('Given a successful old migration and null decode, when safe persist hydrates, then the candidate is not rewritten', async () => {
   // Given
-  withBrowserFakes<CounterState>((storage) => {
+  await withBrowserFakes<CounterState, Promise<void>>(async (storage) => {
     storage.setItem('safe-old-decode-null', JSON.stringify({ state: { count: 5 }, version: 0 }));
     storage.writes = 0;
     let decodedCandidate: unknown;
@@ -148,9 +153,10 @@ test('Given a successful old migration and null decode, when safe persist hydrat
     // When
     const store = pipe.use(persist({
         decode: decodeCandidate,
-        local: 'safe-old-decode-null',
+        key: 'safe-old-decode-null', storage: jsonStorage(() => localStorage),
         migrate: [(state: unknown) => ({ candidate: state })],
       })).create({ count: 7 });
+    await expect(store.persist.rehydrate()).rejects.toBeInstanceOf(Error);
 
     // Then
     expect(decodedCandidate).toEqual({ candidate: { count: 5 } });
@@ -171,15 +177,16 @@ const decoderRejections: ReadonlyArray<
 ];
 
 for (const [label, decode] of decoderRejections) {
-  test(`Given a ${label} decoder result, when safe current persistence hydrates, then initial state remains with zero writes`, () => {
+  test(`Given a ${label} decoder result, when safe current persistence hydrates, then initial state remains with zero writes`, async () => {
     // Given
-    withBrowserFakes<CounterState>((storage) => {
+    await withBrowserFakes<CounterState, Promise<void>>(async (storage) => {
       const key = `safe-decode-${label}`;
       storage.setItem(key, JSON.stringify({ state: { count: 5 }, version: 0 }));
       storage.writes = 0;
 
       // When
-      const store = pipe.use(persist({ decode, local: key })).create({ count: 7 });
+      const store = pipe.use(persist({ decode, key: key, storage: jsonStorage(() => localStorage) })).create({ count: 7 });
+    await expect(store.persist.rehydrate()).rejects.toBeInstanceOf(Error);
 
       // Then
       expect(store.getState()).toEqual({ count: 7 });

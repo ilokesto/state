@@ -32,10 +32,10 @@ store.setState({ query: 'ilo' });
 
 ## Using with persist
 
-When both middleware are used, declare `debounce` before `persist` so persistence observes the debounced commit:
+Declare `debounce` before `persist`. Persistence observes the actual delayed commit, not the initial update request:
 
 ```ts lineNumbers
-import { debounce, persist } from '@ilokesto/state/middleware';
+import { debounce, jsonStorage, persist } from '@ilokesto/state/middleware';
 import { pipe } from '@ilokesto/state/utils';
 
 type SearchState = { readonly query: string };
@@ -47,11 +47,13 @@ const decodeSearch = (value: unknown): SearchState | null => {
 
 const store = pipe
   .use(debounce(250))
-  .use(persist({ local: 'search', decode: decodeSearch }))
+  .use(persist({ key: 'search', storage: jsonStorage(() => window.localStorage), decode: decodeSearch }))
   .create<SearchState>({ query: '' });
+
+await store.persist.rehydrate();
 ```
 
-`pipe.use(persist(...)).use(debounce(...))` is rejected because it would skip persistence for deferred commits.
+The reverse declaration order remains rejected with `MIDDLEWARE_ORDER`. Restoration commits immediately without waiting for debounce. `flush()` waits for committed save targets; it does not force a pending debounce timer to run. The restriction on `history()` with `debounce()` or `throttle()` remains.
 
 ## Function updates
 

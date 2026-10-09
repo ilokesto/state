@@ -128,7 +128,7 @@ Middleware wraps the underlying `@ilokesto/store` before the adapter is created.
 
 ```ts lineNumbers
 import { create } from '@ilokesto/state/react';
-import { logger, persist } from '@ilokesto/state/middleware';
+import { jsonStorage, logger, persist } from '@ilokesto/state/middleware';
 import { pipe } from '@ilokesto/state/utils';
 
 const decodeSearch = (value: unknown): SearchState | null => {
@@ -141,14 +141,18 @@ const decodeSearch = (value: unknown): SearchState | null => {
 };
 
 const searchStore = pipe
-  .use(persist({ local: 'search-state', decode: decodeSearch }))
+  .use(persist({ key: 'search-state', storage: jsonStorage(() => window.localStorage), decode: decodeSearch }))
   .use(logger({ collapsed: true }))
   .create<SearchState>(initialSearchState);
 
 export const useSearch = create<SearchState>(searchStore);
+
+export async function restoreSearch() {
+  await searchStore.persist.rehydrate();
+}
 ```
 
-See [Middleware](/en/state/middleware) for ordering and caveats. For plain state, validation middleware is often useful because every write is a candidate full-state replacement.
+This extends the state definitions above. Call `restoreSearch()` from client startup or an effect and handle errors before enabling editing. Creation performs no storage I/O. Await `searchStore.persist.flush()` when storage completion matters. See [Middleware](/en/state/middleware) for ordering and caveats. For plain state, validation middleware is often useful because every write is a candidate full-state replacement.
 
 ## Testing plain state
 

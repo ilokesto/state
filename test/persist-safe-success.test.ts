@@ -1,3 +1,4 @@
+import { jsonStorage, cookieStorage } from '../src/middleware';
 import { expect, test } from 'bun:test';
 
 import { persist } from '../src/middleware';
@@ -15,9 +16,9 @@ const decodeCounter = (value: unknown): CounterState | null => {
   return null;
 };
 
-test('Given current safe local, cookie, and session payloads, when persist hydrates, then each decoder supplies state without setup writes', () => {
+test('Given current safe local, cookie, and session payloads, when persist hydrates, then each decoder supplies state without setup writes', async () => {
   // Given
-  withBrowserFakes<CounterState>((localStorage, _, browserStorage) => {
+  await withBrowserFakes<CounterState, Promise<void>>(async (localStorage, _, browserStorage) => {
     const encoded = JSON.stringify({ state: { count: '4' }, version: 0 });
     localStorage.setItem('safe-current-local', encoded);
     browserStorage.sessionStorage.setItem('safe-current-session', encoded);
@@ -27,13 +28,19 @@ test('Given current safe local, cookie, and session payloads, when persist hydra
     browserStorage.cookieDocument.writes = 0;
 
     // When
-    const local = pipe.use(persist({ decode: decodeCounter, local: 'safe-current-local' })).create({ count: 0 });
+    const local = pipe.use(persist({ decode: decodeCounter, key: 'safe-current-local', storage: jsonStorage(() => localStorage) })).create({ count: 0 });
+    await local.persist.rehydrate();
+    await local.persist.flush();
     const session = pipe.use(
-      persist({ decode: decodeCounter, session: 'safe-current-session' }),
+      persist({ decode: decodeCounter, key: 'safe-current-session', storage: jsonStorage(() => sessionStorage) }),
     ).create({ count: 0 });
+    await session.persist.rehydrate();
+    await session.persist.flush();
     const cookie = pipe.use(
-      persist({ cookie: 'safe-current-cookie', decode: decodeCounter }),
+      persist({ key: 'safe-current-cookie', storage: cookieStorage(), decode: decodeCounter }),
     ).create({ count: 0 });
+    await cookie.persist.rehydrate();
+    await cookie.persist.flush();
 
     // Then
     expect(local.getState()).toEqual({ count: 4 });
@@ -45,9 +52,9 @@ test('Given current safe local, cookie, and session payloads, when persist hydra
   });
 });
 
-test('Given a safe V0 payload and two migrations, when the final candidate decodes, then setup hydrates and rewrites decoded V2 exactly once', () => {
+test('Given a safe V0 payload and two migrations, when the final candidate decodes, then setup hydrates and rewrites decoded V2 exactly once', async () => {
   // Given
-  withBrowserFakes<CounterState>((storage) => {
+  await withBrowserFakes<CounterState, Promise<void>>(async (storage) => {
     storage.setItem('safe-old', JSON.stringify({ state: { legacyCount: 3 }, version: 0 }));
     storage.writes = 0;
     const calls: string[] = [];
@@ -55,7 +62,7 @@ test('Given a safe V0 payload and two migrations, when the final candidate decod
     // When
     const store = pipe.use(persist({
       decode: decodeCounter,
-      local: 'safe-old',
+      key: 'safe-old', storage: jsonStorage(() => localStorage),
       migrate: [
         (value: unknown) => {
           calls.push('v1');
@@ -67,6 +74,8 @@ test('Given a safe V0 payload and two migrations, when the final candidate decod
         },
       ],
     })).create({ count: 0 });
+    await store.persist.rehydrate();
+    await store.persist.flush();
 
     // Then
     expect(calls).toEqual(['v1', 'v2']);
@@ -79,15 +88,18 @@ test('Given a safe V0 payload and two migrations, when the final candidate decod
   });
 });
 
-test('Given safe current hydration, when the Store later changes, then only the later state is persisted', () => {
+test('Given safe current hydration, when the Store later changes, then only the later state is persisted', async () => {
   // Given
-  withBrowserFakes<CounterState>((storage) => {
+  await withBrowserFakes<CounterState, Promise<void>>(async (storage) => {
     storage.setItem('safe-later', JSON.stringify({ state: { count: 2 }, version: 0 }));
     storage.writes = 0;
-    const store = pipe.use(persist({ decode: decodeCounter, local: 'safe-later' })).create({ count: 0 });
+    const store = pipe.use(persist({ decode: decodeCounter, key: 'safe-later', storage: jsonStorage(() => localStorage) })).create({ count: 0 });
+    await store.persist.rehydrate();
+    await store.persist.flush();
 
     // When
     store.setState({ count: 9 });
+    await store.persist.flush();
 
     // Then
     expect(storage.writes).toBe(1);
@@ -98,9 +110,9 @@ test('Given safe current hydration, when the Store later changes, then only the 
   });
 });
 
-test('Given curried persistence, when hydration runs, then eager behavior remains unchanged', () => {
+test('Given curried persistence, when hydration runs, then explicit restoration preserves migrated state', async () => {
   // Given
-  withBrowserFakes<CounterState>((storage) => {
+  await withBrowserFakes<CounterState, Promise<void>>(async (storage) => {
     storage.setItem('legacy-curried', JSON.stringify({ state: { count: 2 }, version: 0 }));
     storage.setItem('legacy-migrate', JSON.stringify({ state: { count: 3 }, version: 0 }));
     storage.writes = 0;
@@ -108,13 +120,17 @@ test('Given curried persistence, when hydration runs, then eager behavior remain
     // When
     const curried = pipe.use(persist({
       decode: decodeCounter,
-      local: 'legacy-curried',
+      key: 'legacy-curried', storage: jsonStorage(() => localStorage),
     })).create<CounterState>({ count: 0 });
+    await curried.persist.rehydrate();
+    await curried.persist.flush();
     const migrated = pipe.use(persist({
       decode: decodeCounter,
-      local: 'legacy-migrate',
+      key: 'legacy-migrate', storage: jsonStorage(() => localStorage),
       migrate: [(state: unknown) => ({ count: (state as CounterState).count + 1 })],
     })).create({ count: 0 });
+    await migrated.persist.rehydrate();
+    await migrated.persist.flush();
 
     // Then
     expect(curried.getState()).toEqual({ count: 2 });

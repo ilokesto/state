@@ -87,7 +87,7 @@ export const pipeTypeFixtureCases = {
   },
   'invalid-persist-session-migrate': {
     diagnosticCount: 1,
-    expectedMarkers: ['session'],
+    expectedMarkers: ['PersistStorage'],
     kind: 'invalid',
   },
   'invalid-root-create': {

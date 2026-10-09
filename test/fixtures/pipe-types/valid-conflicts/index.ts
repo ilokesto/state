@@ -1,3 +1,4 @@
+import { jsonStorage } from '../../../../src/middleware';
 import { debounce, devtools, history, logger, persist, throttle, validate } from '../../../../src/middleware';
 import { definePipeableMiddleware } from '../../../../src/utils/pipe/metadata';
 import type {
@@ -18,7 +19,7 @@ const debounceMiddleware = debounce();
 const throttleMiddleware = throttle();
 const devtoolsMiddleware = devtools('fixture');
 const loggerMiddleware = logger();
-const persistMiddleware = persist({ decode: () => null, local: 'fixture' });
+const persistMiddleware = persist({ decode: () => null, key: 'fixture', storage: jsonStorage(() => localStorage)});
 const validateMiddleware = validate({
   '~standard': {
     validate: (value: unknown) => ({ value }),

@@ -1,3 +1,4 @@
+import { jsonStorage } from '../../../../src/middleware';
 import type {
   PersistDecoder,
   PersistMigration,
@@ -14,7 +15,7 @@ const toCounter: PersistMigration<unknown, CounterState> = () => ({ count: 0 });
 const invalidConfig: SafePersistConfig<CounterState, readonly [typeof toCounter]> = {
   decode: decodeCounter,
   migrate: [toCounter],
-  session: 'invalid-session-migration',
+  key: 'invalid-session-migration', storage: jsonStorage(() => sessionStorage)(),
 };
 
 invalidConfig;

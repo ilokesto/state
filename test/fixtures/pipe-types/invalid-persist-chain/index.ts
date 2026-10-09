@@ -1,3 +1,4 @@
+import { jsonStorage } from '../../../../src/middleware';
 import type {
   PersistDecoder,
   PersistMigration,
@@ -25,7 +26,7 @@ const invalidConfig: SafePersistConfig<
   readonly [typeof toV1, typeof requiresV2]
 > = {
   decode: decodeCounter,
-  local: 'invalid-chain',
+  key: 'invalid-chain', storage: jsonStorage(() => localStorage),
   migrate: [toV1, requiresV2],
 };
 

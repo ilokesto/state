@@ -1,5 +1,6 @@
 import type { Store } from '@ilokesto/store';
 import { getStore } from '../lib/getStore.js';
+import { registerStateValidation } from '../lib/stateValidation.js';
 import { definePipeableMiddleware } from '../utils/pipe/metadata.js';
 import type { PipeableMiddleware } from '../utils/pipe/metadata.js';
 import type { PipeMiddleware, PipeMiddlewareMetadata } from '../utils/pipe/types.js';
@@ -76,29 +77,30 @@ const applyValidate = <T>(
 ): Store<T> => {
   const store = getStore(initialState);
 
+  const validateCandidate = (resolvedState: T): StandardSchemaResult<T> => {
+    const result = schema['~standard'].validate(resolvedState);
+
+    if (isPromiseLike(result)) {
+      const issues = [{ message: 'Async Standard Schema is not supported in validate middleware.' }];
+      onError(issues);
+      return { issues };
+    }
+
+    if ('issues' in result) {
+      onError(result.issues);
+      return result;
+    }
+    return result;
+  };
+  registerStateValidation(store, validateCandidate);
+
   store.pushMiddleware((nextState: StoreSetStateAction<T>, next) => {
     const resolvedState =
       typeof nextState === 'function'
         ? (nextState as (prev: Readonly<T>) => T)(store.getState() as T)
         : nextState;
-
-    const result = schema['~standard'].validate(resolvedState);
-
-    if (isPromiseLike(result)) {
-      onError([
-        {
-          message: 'Async Standard Schema is not supported in validate middleware.',
-        },
-      ]);
-      return;
-    }
-
-    if ('issues' in result) {
-      onError(result.issues);
-      return;
-    }
-
-    next(result.value);
+    const result = validateCandidate(resolvedState);
+    if ('value' in result) next(() => result.value);
   });
 
   return store;

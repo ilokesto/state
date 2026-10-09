@@ -147,7 +147,7 @@ Reducer actions become state updates that continue through the same store middle
 
 ```ts lineNumbers
 import { create } from '@ilokesto/state/react';
-import { devtools, logger, persist } from '@ilokesto/state/middleware';
+import { devtools, jsonStorage, logger, persist } from '@ilokesto/state/middleware';
 import { pipe } from '@ilokesto/state/utils';
 
 const isCartItem = (value: unknown): value is CartItem => {
@@ -164,15 +164,19 @@ const decodeCart = (value: unknown): CartState | null => {
 };
 
 const cartStore = pipe
-  .use(persist({ local: 'cart', decode: decodeCart }))
+  .use(persist({ key: 'cart', storage: jsonStorage(() => window.localStorage), decode: decodeCart }))
   .use(logger({ collapsed: true, diff: true }))
   .use(devtools('cart'))
   .create<CartState>(initialCartState);
 
 export const useCart = create<CartState, CartAction>(reduceCart, cartStore);
+
+export async function restoreCart() {
+  await cartStore.persist.rehydrate();
+}
 ```
 
-Put validation before expensive side effects if invalid states should be rejected before they are persisted or sent to DevTools. See [Middleware](/en/state/middleware) for details.
+This extends the state and reducer definitions above. Call `restoreCart()` from client startup or an effect and handle errors before enabling cart actions. Await `cartStore.persist.flush()` when saving must finish. Persistence observes actual commits, including reducer updates; rejected validation does not produce a saved value. See [Middleware](/en/state/middleware) for details.
 
 ## Testing reducer state
 

@@ -93,13 +93,13 @@ export function restoreBrowserGlobal(
   Object.defineProperty(globalThis, name, descriptor);
 }
 
-export function withBrowserFakes<State>(
+export function withBrowserFakes<State, Result = void>(
   action: (
     storage: MemoryStorage,
     connections: FakeDevtoolsConnection<State>[],
     browserStorage: BrowserStorageFakes,
-  ) => void,
-): void {
+  ) => Result,
+): Result {
   const documentDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'document');
   const localStorageDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
   const sessionStorageDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'sessionStorage');
@@ -109,6 +109,13 @@ export function withBrowserFakes<State>(
   const cookieDocument = new MemoryCookieDocument();
   const connections: FakeDevtoolsConnection<State>[] = [];
   let hasFakeWindow = false;
+  let asynchronous = false;
+  const restore = (): void => {
+    if (hasFakeWindow) restoreBrowserGlobal('window', windowDescriptor);
+    restoreBrowserGlobal('document', documentDescriptor);
+    restoreBrowserGlobal('localStorage', localStorageDescriptor);
+    restoreBrowserGlobal('sessionStorage', sessionStorageDescriptor);
+  };
 
   try {
     Object.defineProperty(globalThis, 'localStorage', {
@@ -150,19 +157,26 @@ export function withBrowserFakes<State>(
         },
       });
       hasFakeWindow = true;
-      action(storage, connections, {
+      const result = action(storage, connections, {
         cookieDocument,
         localStorage: storage,
         sessionStorage,
       });
+      if (result instanceof Promise) {
+        asynchronous = true;
+        return result.finally(restore) as Result;
+      }
+      return result;
     } finally {
-      if (hasFakeWindow) {
+      if (hasFakeWindow && !asynchronous) {
         restoreBrowserGlobal('window', windowDescriptor);
       }
     }
   } finally {
-    restoreBrowserGlobal('document', documentDescriptor);
-    restoreBrowserGlobal('localStorage', localStorageDescriptor);
-    restoreBrowserGlobal('sessionStorage', sessionStorageDescriptor);
+    if (!asynchronous) {
+      restoreBrowserGlobal('document', documentDescriptor);
+      restoreBrowserGlobal('localStorage', localStorageDescriptor);
+      restoreBrowserGlobal('sessionStorage', sessionStorageDescriptor);
+    }
   }
 }

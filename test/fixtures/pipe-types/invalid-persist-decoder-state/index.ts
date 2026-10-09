@@ -1,3 +1,4 @@
+import { jsonStorage } from '../../../../src/middleware';
 import { persist } from '../../../../src/middleware';
 import type { PersistDecoder, SafePersistConfig } from '../../../../src/middleware';
 import { pipe } from '../../../../src/utils/pipe';
@@ -18,11 +19,11 @@ const decodeExtendedCounter: PersistDecoder<ExtendedCounterState> = () => ({
 });
 const safeConfig: SafePersistConfig<ExtendedCounterState> = {
   decode: decodeExtendedCounter,
-  local: 'safe-config-variable',
+  key: 'safe-config-variable', storage: jsonStorage(() => localStorage),
 };
 
 const rejectedCurriedInline = pipe
-  .use(persist({ decode: decodeCounter, local: 'curried-inline' }))
+  .use(persist({ decode: decodeCounter, key: 'curried-inline', storage: jsonStorage(() => localStorage)}))
   .create<ExtendedCounterState>({ count: 0, label: 'extra' });
 const rejectedCurriedVariable = pipe
   .use(persist(safeConfig))
