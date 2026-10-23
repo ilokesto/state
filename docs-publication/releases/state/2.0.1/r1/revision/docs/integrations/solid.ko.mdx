@@ -1,0 +1,63 @@
+---
+title: "Solid 연동"
+description: "Solid accessor와 reactive owner에서 @ilokesto/state를 사용합니다."
+---
+
+# Solid 연동
+
+Solid adapter는 component 또는 `createRoot` 같은 reactive owner 안에서 사용하세요. `@ilokesto/state/solid`에서 import합니다.
+
+## Plain state accessor
+
+```tsx lineNumbers
+import { createRoot } from 'solid-js';
+import { create } from '@ilokesto/state/solid';
+
+const useCounter = create({ count: 0, label: 'Clicks' });
+
+function Counter() {
+  const { state: count, setState } = useCounter((state) => state.count);
+  const { state: label } = useCounter((state) => state.label);
+
+  return <button onClick={() => setState((prev) => ({ ...prev, count: prev.count + 1 }))}>{label()}: {count()}</button>;
+}
+
+createRoot(() => useCounter((state) => state.count));
+```
+
+plain state는 `{ state: Accessor<S>, setState }`를 반환합니다.
+
+## Reducer accessor
+
+```tsx lineNumbers
+import { create } from '@ilokesto/state/solid';
+
+type Action = { type: 'increment' } | { type: 'reset' };
+
+const reduce = (state: { count: number }, action: Action) => {
+  if (action.type === 'increment') return { count: state.count + 1 };
+  if (action.type === 'reset') return { count: 0 };
+  return state;
+};
+
+const useCounter = create(reduce, { count: 0 });
+
+function Counter() {
+  const { state, dispatch } = useCounter((state) => state.count);
+  return <button onClick={() => dispatch({ type: 'increment' })}>{state()}</button>;
+}
+```
+
+## Reactive owner 밖에서 사용하기
+
+```ts lineNumbers
+const count = useCounter.readOnly((state) => state.count);
+const dispatch = useCounter.writeOnly();
+dispatch({ type: 'reset' });
+```
+
+## 주의할 점
+
+- subscribed accessor는 `getOwner()`가 존재해야 합니다.
+- adapter는 Solid `from`과 `createMemo`를 사용하므로 owner cleanup은 Solid가 담당합니다.
+- Solid ownership 밖에서는 snapshot에는 `readOnly()`, command에는 `writeOnly()`를 사용하세요.

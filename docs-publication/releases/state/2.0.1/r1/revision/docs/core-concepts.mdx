@@ -1,0 +1,36 @@
+---
+title: "Core concepts"
+description: "How @ilokesto/state connects Store<T> to framework lifecycles."
+---
+
+# Core concepts
+
+`@ilokesto/state` has one central idea: create or reuse a `Store<T>`, then expose it through a framework-shaped API.
+
+## Store first
+
+Every adapter calls the same internal `getStore` path. If you pass a `Store<T>`, it reuses that store. If you pass an initial value, it creates a new `Store<T>`.
+
+## Plain state vs reducer state
+
+Plain state uses `setState`. Reducer state uses `dispatch`, where an action is converted to the next state by your reducer before the store update continues.
+
+```ts lineNumbers
+type Action = { type: 'increment' };
+const reduce = (state: { count: number }, action: Action) =>
+  action.type === 'increment' ? { count: state.count + 1 } : state;
+
+const useCounter = create(reduce, { count: 0 });
+```
+
+## Selectors
+
+Adapters accept selectors so a component can receive only the part it needs. Every adapter uses the same one-level `shallow` comparison; React also memoizes snapshots through `useSyncExternalStore`.
+
+## Middleware pipeline
+
+Middleware is attached to the underlying store. Reducer support uses an internal middleware inserted before other update handling, so dispatched actions become state updates.
+
+## Lifecycle boundaries
+
+Reactive reads must run where the framework can own cleanup: React hooks inside components, Vue inside `setup` or `effectScope`, Solid inside a reactive owner such as `createRoot`, and Angular inside an injection context or with `DestroyRef`. Svelte exposes a Svelte store object whose subscriptions return cleanup.

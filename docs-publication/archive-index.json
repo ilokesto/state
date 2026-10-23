@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "entries": [
+    {
+      "name": "@ilokesto/state",
+      "version": "2.0.0",
+      "channel": "latest",
+      "revision": 1,
+      "releaseCommit": "ecd9709b76d1976ec86865314e85b916f220c818",
+      "docsCommit": "fc8bd4755137b75767284dbe84a0774185dfbdde",
+      "snapshot": "docs-publication/releases/state/2.0.0/r1",
+      "receiptSha256": "a7c88aa46b2f0870eee76a5ea76d881cea9344da224307b47df2e8aaeb26eb03"
+    },
+    {
+      "name": "@ilokesto/state",
+      "version": "2.0.0",
+      "channel": "latest",
+      "revision": 2,
+      "releaseCommit": "ecd9709b76d1976ec86865314e85b916f220c818",
+      "docsCommit": "e0e50ec2ec4f4d487b6c9f35ea9ee2f243684c5c",
+      "snapshot": "docs-publication/releases/state/2.0.0/r2",
+      "receiptSha256": "2bc6c9c7b8e311147011712e44025941c268cce2fe40c5410a1c2504959a7032"
+    },
+    {
+      "name": "@ilokesto/state",
+      "version": "2.0.1",
+      "channel": "latest",
+      "revision": 1,
+      "releaseCommit": "e97069d019f2147f1f82201a2ac5b2c84f80c898",
+      "docsCommit": "e97069d019f2147f1f82201a2ac5b2c84f80c898",
+      "snapshot": "docs-publication/releases/state/2.0.1/r1",
+      "receiptSha256": "c05fa7cb81eda020d2e7a6c93ada51a3f52f63a2c1c1b91995b258ec0b966911"
+    }
+  ]
+}

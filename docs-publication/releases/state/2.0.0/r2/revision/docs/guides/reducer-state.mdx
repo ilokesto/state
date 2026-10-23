@@ -1,0 +1,216 @@
+---
+title: "Reducer state guide"
+description: "Model named transitions with reducer actions and dispatch."
+---
+
+# Reducer state guide
+
+Reducer state is the pattern to use when a feature has a vocabulary of named transitions. Instead of letting every component decide how to rewrite the object, components dispatch actions and one reducer decides the next state.
+
+This is useful for carts, editors, multi-step flows, optimistic operations, undo-like state, or any state where “what happened” is more important than “which object did we replace it with”.
+
+## When to choose reducer state
+
+Choose reducer state when one or more of these are true:
+
+- Several UI events should share the same transition logic.
+- The state update should be named: `addItem`, `submit`, `rollback`, `reset`.
+- You want tests to cover action-to-state behavior directly.
+- Middleware logs should show meaningful action names.
+- The next state depends on both current state and a payload.
+- You want to prevent arbitrary object replacement from most UI code.
+
+If the feature only needs a few direct setters, start with [plain state](/en/state/guides/plain-state). You can migrate later by turning writer helpers into actions.
+
+## Define state and actions together
+
+Reducer state works best when the action union documents the only supported transitions.
+
+```ts lineNumbers
+type CartItem = { id: string; quantity: number };
+
+type CartState = {
+  items: CartItem[];
+  coupon: string | null;
+};
+
+type CartAction =
+  | { type: 'addItem'; id: string }
+  | { type: 'removeItem'; id: string }
+  | { type: 'setCoupon'; coupon: string | null }
+  | { type: 'reset' };
+
+const initialCartState: CartState = {
+  items: [],
+  coupon: null,
+};
+```
+
+Keep actions as plain objects. `@ilokesto/state` reducer overloads expect object actions with a `type` property in the framework adapters.
+
+## Write a pure reducer
+
+The reducer receives the previous state and an action, then returns the next state. Keep it deterministic: no timers, network calls, random IDs, or direct storage access inside the reducer.
+
+```ts lineNumbers
+function reduceCart(state: CartState, action: CartAction): CartState {
+  switch (action.type) {
+    case 'addItem': {
+      const existing = state.items.find((item) => item.id === action.id);
+
+      if (existing) {
+        return {
+          ...state,
+          items: state.items.map((item) =>
+            item.id === action.id ? { ...item, quantity: item.quantity + 1 } : item,
+          ),
+        };
+      }
+
+      return {
+        ...state,
+        items: [...state.items, { id: action.id, quantity: 1 }],
+      };
+    }
+    case 'removeItem':
+      return {
+        ...state,
+        items: state.items.filter((item) => item.id !== action.id),
+      };
+    case 'setCoupon':
+      return { ...state, coupon: action.coupon };
+    case 'reset':
+      return initialCartState;
+    default:
+      return state;
+  }
+}
+```
+
+Because the reducer is a plain function, it is easy to test without rendering any framework component.
+
+## Create the adapter
+
+Pass the reducer as the first argument and initial state or an existing `Store` as the second argument.
+
+```tsx lineNumbers
+import { create } from '@ilokesto/state/react';
+
+export const useCart = create<CartState, CartAction>(reduceCart, initialCartState);
+```
+
+React returns `[selection, dispatch]`. Vue, Solid, and Angular return objects with reactive `state` plus `dispatch`. Svelte returns a readable store with `dispatch`, `select`, `readOnly`, and `writeOnly`.
+
+## Dispatch from components
+
+Components should select what they render and dispatch named actions for changes.
+
+```tsx lineNumbers
+function AddToCartButton({ id }: { id: string }) {
+  const [count, dispatch] = useCart((state) =>
+    state.items.find((item) => item.id === id)?.quantity ?? 0,
+  );
+
+  return (
+    <button onClick={() => dispatch({ type: 'addItem', id })}>
+      Add ({count})
+    </button>
+  );
+}
+```
+
+Avoid building next state in the component. If the component computes the full object itself, reducer state loses its purpose.
+
+## Dispatch outside lifecycle code
+
+Use `writeOnly()` to get a dispatch function for command modules, service callbacks, tests, or event listeners that are outside the framework lifecycle.
+
+```ts lineNumbers
+const dispatchCart = useCart.writeOnly();
+
+export function clearCartAfterCheckout() {
+  dispatchCart({ type: 'reset' });
+}
+```
+
+Use `readOnly` for a synchronous snapshot, for example when building a checkout payload.
+
+```ts lineNumbers
+export function getCheckoutItems() {
+  return useCart.readOnly((state) => state.items);
+}
+```
+
+## Compose with middleware
+
+Reducer actions become state updates that continue through the same store middleware pipeline. Logging and DevTools are especially useful here because the underlying store carries the current action name through the update pipeline.
+
+```ts lineNumbers
+import { create } from '@ilokesto/state/react';
+import { devtools, logger, persist } from '@ilokesto/state/middleware';
+import { pipe } from '@ilokesto/state/utils';
+
+const isCartItem = (value: unknown): value is CartItem => {
+  return typeof value === 'object' && value !== null
+    && 'id' in value && typeof value.id === 'string'
+    && 'quantity' in value && typeof value.quantity === 'number';
+};
+
+const decodeCart = (value: unknown): CartState | null => {
+  if (typeof value !== 'object' || value === null) return null;
+  if (!('items' in value) || !Array.isArray(value.items) || !value.items.every(isCartItem)) return null;
+  if (!('coupon' in value) || (value.coupon !== null && typeof value.coupon !== 'string')) return null;
+  return { items: value.items, coupon: value.coupon };
+};
+
+const cartStore = pipe
+  .use(persist({ local: 'cart', decode: decodeCart }))
+  .use(logger({ collapsed: true, diff: true }))
+  .use(devtools('cart'))
+  .create<CartState>(initialCartState);
+
+export const useCart = create<CartState, CartAction>(reduceCart, cartStore);
+```
+
+Put validation before expensive side effects if invalid states should be rejected before they are persisted or sent to DevTools. See [Middleware](/en/state/middleware) for details.
+
+## Testing reducer state
+
+Test the reducer directly for transition rules, then use the adapter only for integration behavior.
+
+```ts lineNumbers
+it('increments an existing item', () => {
+  const prev: CartState = { items: [{ id: 'book', quantity: 1 }], coupon: null };
+
+  expect(reduceCart(prev, { type: 'addItem', id: 'book' })).toEqual({
+    items: [{ id: 'book', quantity: 2 }],
+    coupon: null,
+  });
+});
+```
+
+For adapter-level tests, dispatch through `writeOnly()` and assert with `readOnly()`.
+
+```ts lineNumbers
+useCart.writeOnly()({ type: 'reset' });
+useCart.writeOnly()({ type: 'addItem', id: 'book' });
+
+expect(useCart.readOnly((state) => state.items)).toEqual([{ id: 'book', quantity: 1 }]);
+```
+
+## Migration from plain state
+
+A common migration path is:
+
+1. Keep the existing state shape.
+2. Move repeated writer helpers into an action union.
+3. Implement a reducer with the same logic.
+4. Replace component calls from `setState(...)` to `dispatch({ type: ... })`.
+5. Keep `readOnly` selectors and middleware composition largely the same.
+
+## Common mistakes
+
+- **Putting side effects in the reducer.** Run side effects before dispatching or in code that reacts to state changes; keep the reducer pure.
+- **Making actions too generic.** `{ type: 'set', state }` is usually plain state wearing reducer clothes.
+- **Letting components calculate next state.** Components should dispatch intent; reducers should calculate the transition.
+- **Forgetting reset behavior in tests.** Module-level adapters share one store instance, so tests should reset explicitly.

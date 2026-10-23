@@ -1,0 +1,198 @@
+---
+title: "Lifecycle reads and writes"
+description: "Use subscriptions, snapshots, and writers in the right runtime context."
+---
+
+# Lifecycle reads and writes
+
+`@ilokesto/state` adapters expose two different ways to interact with state:
+
+- **Reactive adapter calls** for component or framework lifecycle code.
+- **`readOnly` / `writeOnly` helpers** for synchronous work outside that lifecycle.
+
+This guide explains where each one belongs. The main rule is simple: subscribe where the framework can clean up, and use snapshots or writers everywhere else.
+
+## The three access patterns
+
+| Pattern | Use it for | Subscribes? | Cleanup owner |
+| --- | --- | --- | --- |
+| `useStore(selector)` / adapter call | Rendering selected state in a component | Yes | React/Vue/Solid/Angular/Svelte lifecycle |
+| `readOnly(selector?)` | Reading current state in module code, guards, tests, services | No | No cleanup needed |
+| `writeOnly()` | Updating state from module code, events, callbacks, tests | No | No cleanup needed |
+
+Reactive adapter calls are intentionally lifecycle-bound. Vue composables need an active scope, Solid accessors need an owner, Angular signals need an injection context or `DestroyRef`, and React hooks must be called from React render/custom hooks.
+
+## Use reactive calls inside components
+
+When UI should update after state changes, call the adapter inside the framework’s normal lifecycle.
+
+```tsx lineNumbers
+import { create } from '@ilokesto/state/react';
+
+type SessionState = { user: { id: string; name: string } | null };
+
+export const useSession = create<SessionState>({ user: null });
+
+export function UserBadge() {
+  const [user] = useSession((state) => state.user);
+
+  return user ? <span>{user.name}</span> : <span>Guest</span>;
+}
+```
+
+The component subscribes to store changes and rerenders when its selected snapshot changes. This is the right path for visible UI.
+
+## Use `readOnly` for synchronous snapshots
+
+`readOnly` reads the current state immediately and returns the selected value. It does not subscribe, so it is safe in router guards, request builders, command modules, tests, and plain event callbacks.
+
+```ts lineNumbers
+const readSession = useSession.readOnly;
+
+export function requireUserId() {
+  const userId = readSession((state) => state.user?.id);
+
+  if (!userId) {
+    throw new Error('Login required');
+  }
+
+  return userId;
+}
+```
+
+Because `readOnly` is a snapshot, it will not rerun this function after the state changes. Call it again whenever you need a fresh value.
+
+## Use `writeOnly` for lifecycle-free updates
+
+`writeOnly()` returns the writer for the adapter without creating a subscription.
+
+```ts lineNumbers
+const writeSession = useSession.writeOnly();
+
+export function logout() {
+  writeSession({ user: null });
+}
+```
+
+For reducer state, `writeOnly()` returns `dispatch` instead of `setState`.
+
+```ts lineNumbers
+type AuthAction = { type: 'login'; user: { id: string; name: string } } | { type: 'logout' };
+
+const useAuth = create(
+  (state: SessionState, action: AuthAction): SessionState => {
+    if (action.type === 'login') return { user: action.user };
+    if (action.type === 'logout') return { user: null };
+    return state;
+  },
+  { user: null },
+);
+
+const dispatchAuth = useAuth.writeOnly();
+
+dispatchAuth({ type: 'logout' });
+```
+
+## Router guard example
+
+Router guards normally run outside the component render lifecycle. They should read a snapshot and either continue, redirect, or throw.
+
+```ts lineNumbers
+export function canEnterSettings() {
+  return useSession.readOnly((state) => Boolean(state.user));
+}
+
+export function settingsRedirect() {
+  if (canEnterSettings()) return null;
+  return '/login';
+}
+```
+
+Do not call a React hook, Vue composable, Solid accessor creator, or Angular signal factory in a guard unless your framework explicitly provides the required lifecycle context.
+
+## Network callback example
+
+Network callbacks often need to update state after a promise resolves. Use `writeOnly()` so the callback does not depend on a component still being mounted.
+
+```ts lineNumbers
+const writeSessionState = useSession.writeOnly();
+
+export async function refreshCurrentUser() {
+  const response = await fetch('/api/me');
+
+  if (response.status === 401) {
+    writeSessionState({ user: null });
+    return;
+  }
+
+  const user = (await response.json()) as { id: string; name: string };
+  writeSessionState({ user });
+}
+```
+
+If the callback belongs to a component and should be cancelled on unmount, keep the cancellation in the framework layer. The store writer itself is lifecycle-free.
+
+## Manual subscriptions
+
+Framework adapters subscribe for you in components. If you need a manual subscription, use the underlying API that the adapter exposes only where it is available and make cleanup explicit.
+
+Svelte stores expose `subscribe` directly. Angular adapter results also expose `subscribe`. For framework-neutral subscriptions, create or reuse an `@ilokesto/store` instance and subscribe to that store before passing it into `create`.
+
+```ts lineNumbers
+import { Store } from '@ilokesto/store';
+import { create } from '@ilokesto/state/react';
+
+const sessionStore = new Store<SessionState>({ user: null });
+export const useSessionFromStore = create(sessionStore);
+
+const unsubscribe = sessionStore.subscribe(() => {
+  console.log('session changed', sessionStore.getState());
+});
+
+unsubscribe();
+```
+
+If you subscribe manually, you own `unsubscribe`. Do not hide long-lived subscriptions in modules unless they are truly application-wide.
+
+## SSR and initial state
+
+`readOnly` reads the current store value in the current runtime. React's adapter uses the store initial state as the server snapshot for `useSyncExternalStore`. To avoid hydration surprises, create stores with the same initial state on server and client, or hydrate explicitly before rendering subscribed UI.
+
+For persisted state, helper and store creation perform no browser access or storage I/O. Pass `jsonStorage(() => window.localStorage)` to defer browser access, not `jsonStorage(window.localStorage)`. Both server and client start from the initial state.
+
+Call the async `store.persist.rehydrate()` in a client effect and handle rejection. Subscribe to `store.persist.subscribe()` and read `getStatus()` to distinguish pending restoration, success, conflict, and errors. Gate editing until hydration succeeds or offer an explicit conflict policy. There is no `skipHydration` option. See the [persist middleware docs](/en/state/middleware/persist) for lifecycle and ownership details.
+
+## Testing pattern
+
+Tests that only need state behavior can avoid rendering frameworks entirely.
+
+```ts lineNumbers
+const write = useSession.writeOnly();
+
+beforeEach(() => {
+  write({ user: null });
+});
+
+it('stores the current user', () => {
+  write({ user: { id: 'u1', name: 'Ada' } });
+
+  expect(useSession.readOnly((state) => state.user?.name)).toBe('Ada');
+});
+```
+
+Render framework components only when you need to verify subscription and UI behavior.
+
+## Decision checklist
+
+- Does the caller render UI from state? Use the framework adapter call.
+- Is the caller outside framework lifecycle? Use `readOnly` or `writeOnly`.
+- Should code rerun when state changes? Use a subscription or a component, not `readOnly`.
+- Does a callback outlive a component? Use `writeOnly()` and handle cancellation separately.
+- Did you subscribe manually? Store and call `unsubscribe`.
+
+## Common mistakes
+
+- **Using `readOnly` as if it were reactive.** It is a snapshot read. Call it again or subscribe if you need updates.
+- **Calling lifecycle-bound adapters in plain modules.** Vue, Solid, Angular, and React intentionally reject or violate lifecycle rules outside their contexts.
+- **Forgetting test isolation.** Module-level stores keep state between tests unless you reset them.
+- **Subscribing manually without cleanup.** A forgotten `unsubscribe` is a leak.

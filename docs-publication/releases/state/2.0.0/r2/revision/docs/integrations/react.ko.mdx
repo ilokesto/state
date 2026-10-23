@@ -1,0 +1,80 @@
+---
+title: "React 연동"
+description: "React 컴포넌트와 hook에서 @ilokesto/state를 사용합니다."
+---
+
+# React 연동
+
+React component가 `@ilokesto/store` 기반 상태를 구독해야 할 때 React adapter를 사용하세요. root package가 아니라 `@ilokesto/state/react`에서 import합니다.
+
+## Adapter type
+
+`UseState`와 `UseReducer`는 plain-state와 reducer `create()` overload가 반환하는 hook을 나타냅니다. public API가 이 hook type을 받을 때 같은 React subpath에서 import하세요.
+
+```ts lineNumbers
+import type { UseReducer, UseState } from '@ilokesto/state/react';
+```
+
+## Plain state hook
+
+plain state는 작은 React state hook처럼 `[selection, setState]`를 반환합니다.
+
+```tsx lineNumbers
+import { create } from '@ilokesto/state/react';
+
+type CounterState = { count: number; label: string };
+
+const useCounter = create<CounterState>({ count: 0, label: 'Clicks' });
+
+export function CounterButton() {
+  const [count, setCounter] = useCounter((state) => state.count);
+  const [label] = useCounter((state) => state.label);
+
+  return (
+    <button onClick={() => setCounter((prev) => ({ ...prev, count: prev.count + 1 }))}>
+      {label}: {count}
+    </button>
+  );
+}
+```
+
+selector는 tuple 첫 번째 값으로 받을 값을 결정합니다. writer는 여전히 전체 state를 업데이트하므로 object update는 immutable하게 작성하세요.
+
+## Reducer hook
+
+reducer state는 같은 `create(reduce, initialState)` overload를 사용합니다. tuple writer는 `dispatch`가 됩니다.
+
+```tsx lineNumbers
+import { create } from '@ilokesto/state/react';
+
+type Action = { type: 'increment' } | { type: 'reset' };
+
+const reduce = (state: { count: number }, action: Action) => {
+  if (action.type === 'increment') return { count: state.count + 1 };
+  if (action.type === 'reset') return { count: 0 };
+  return state;
+};
+
+const useCounter = create(reduce, { count: 0 });
+
+function ReducerCounter() {
+  const [count, dispatch] = useCounter((state) => state.count);
+  return <button onClick={() => dispatch({ type: 'increment' })}>{count}</button>;
+}
+```
+
+## React 생명주기 밖에서 사용하기
+
+`readOnly()`와 `writeOnly()`는 hook function에 붙어 있습니다. hook을 호출하면 안 되는 module, service callback, test, event bus에서 사용하세요.
+
+```ts lineNumbers
+const readCount = useCounter.readOnly((state) => state.count);
+const dispatch = useCounter.writeOnly();
+dispatch({ type: 'reset' });
+```
+
+## 주의할 점
+
+- 반환된 function은 내부적으로 `useSyncExternalStore`를 쓰는 React hook입니다. component 또는 custom hook 안에서만 호출하세요.
+- `getServerSnapshot`은 store initial state에서 시작하므로 SSR hydration에서는 server/client 초기 상태를 맞추세요.
+- selector는 pure하고 cheap하게 유지하세요. React가 snapshot을 memoize해도 비싼 selector는 render/snapshot 작업 중 실행됩니다.

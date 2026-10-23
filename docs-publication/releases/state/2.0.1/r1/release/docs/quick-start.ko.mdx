@@ -1,0 +1,65 @@
+---
+title: "빠른 시작"
+description: "@ilokesto/state를 설치하고 첫 프레임워크 어댑터를 만듭니다."
+---
+
+# 빠른 시작
+
+패키지와 실제로 쓰는 프레임워크 peer만 설치하세요. 프레임워크 peer는 optional이라 React 프로젝트가 Vue, Svelte, Solid, Angular를 모두 설치할 필요는 없습니다.
+
+```bash lineNumbers
+pnpm add @ilokesto/state react
+```
+
+이 가이드는 React를 사용합니다. 다른 프레임워크라면 해당 peer를 설치하고 아래의 맞는 어댑터 페이지를 사용하세요. `@ilokesto/store`는 패키지 dependency이므로 애플리케이션이 직접 import할 때만 따로 설치하면 됩니다.
+
+## 1. React subpath에서 import하기
+
+프레임워크 어댑터는 subpath export입니다. 패키지 root에서 `create`를 import하지 마세요.
+
+```tsx lineNumbers
+import { create } from '@ilokesto/state/react';
+```
+
+## 2. plain state를 만들고 렌더링하기
+
+다음 완전한 컴포넌트를 React 애플리케이션에 추가하고 `<ThemeButton />`을 렌더링하세요.
+
+```tsx lineNumbers
+import { create } from '@ilokesto/state/react';
+
+const useTheme = create<{ mode: 'light' | 'dark' }>({ mode: 'light' });
+
+export function ThemeButton() {
+  const [mode, setTheme] = useTheme((state) => state.mode);
+
+  return (
+    <button
+      type="button"
+      onClick={() => setTheme({ mode: mode === 'light' ? 'dark' : 'light' })}
+    >
+      Theme: {mode}
+    </button>
+  );
+}
+```
+
+처음에는 버튼에 **Theme: light**가 표시됩니다. 클릭할 때마다 **Theme: light**와 **Theme: dark**가 번갈아 표시됩니다.
+
+## 3. plain state와 reducer state 중 고르기
+
+이 예제는 UI가 작은 값을 직접 교체하므로 plain state를 사용합니다. Setter와 selector는 [plain state 가이드](/ko/state/guides/plain-state)에서 이어서 확인하세요. `login`, `addItem`, `reset`처럼 전이에 이름 있는 action이 필요하면 [reducer state 가이드](/ko/state/guides/reducer-state)를 선택하세요.
+
+Route guard, service, test처럼 React 밖에서 실행되는 코드에서는 hook을 호출하지 말고 어댑터의 `readOnly()`와 `writeOnly()`를 사용하세요. [생명주기 밖 읽기와 쓰기 가이드](/ko/state/guides/lifecycle-reads-writes)에서 두 패턴을 설명합니다.
+
+## 4. 사용하는 어댑터 페이지로 이동하기
+
+- [React](/ko/state/integrations/react)
+- [Vue](/ko/state/integrations/vue)
+- [Svelte](/ko/state/integrations/svelte)
+- [Solid](/ko/state/integrations/solid)
+- [Angular](/ko/state/integrations/angular)
+
+각 integration 페이지는 반환 형태, 생명주기 owner, reducer 형태, 비반응형 접근 방법을 보여 줍니다. 정확한 import와 optional peer dependency는 [패키지 표면 레퍼런스](/ko/state/reference/package-surface)를 확인하세요.
+
+> 상태를 한 번 만들고 명시적으로 연결하려면 root `createStore`/`createReducer`와 프레임워크 `bind`/`bindReducer`도 사용할 수 있습니다. [이전 가이드](/ko/state/advanced/migration)를 확인하세요.

@@ -1,0 +1,40 @@
+---
+title: "Selector semantics"
+description: "How selectors and snapshots behave across adapters."
+---
+
+# Selector semantics
+
+Selectors are adapter-level projection functions. They receive snapshots and do not change the underlying store state; they decide what a reactive reader receives. Object state is `Readonly<T>`, while callable state remains exact `T`, preserving arbitrary generic and overloaded signatures and its declared own-property modifiers. Full-state reactive results and lifecycle-free `readOnly()` snapshots use the same contract. Plain-state writers retain mutable next-state and updater contracts, while reducer writers accept typed actions.
+
+## Shared shallow comparison
+
+All adapters (React, Vue, Solid, Svelte, Angular) use the same one-level `shallow` comparison to decide whether a selector result should trigger a notification. This mirrors the zustand v5 pattern.
+
+| Value type | Comparison |
+|---|---|
+| Primitives | `Object.is` |
+| Plain objects | Shallow — first-level keys/values compared via `Object.is` |
+| Arrays | Shallow — element-by-element via `Object.is` |
+| `Map` / `Set` | Entries/values compared via `Object.is` |
+| `Date` | `getTime()` equality |
+| `RegExp` | `source` and `flags` equality |
+| Other built-ins (Error, Promise, class instances without enumerable own properties) | Reference equality (`Object.is`) |
+
+An update that changes the store but leaves the selected value shallow-equal does not notify the framework consumer. A relevant update notifies the consumer exactly once.
+
+## React snapshots
+
+React uses `useSyncExternalStore`. Its snapshot getter applies the selector and reuses the previous selection when the result is shallow-equal. The server snapshot selects from the store's initial state, preserving hydration semantics.
+
+## Vue, Solid, and Angular
+
+Vue stores the latest state in a shallow ref and exposes a `ComputedRef`. Solid uses `createSignal` to expose an `Accessor`. Angular stores a signal snapshot and returns a computed `Signal`.
+
+## Svelte
+
+Svelte `select` creates a readable store that runs the selector for each subscription update.
+
+## Caveat
+
+Selectors should be cheap and pure. If a selector allocates a new object every time, some adapters may still notify or recompute even when the semantic value feels unchanged. Define selectors at module scope or wrap them in `useCallback` to keep their identity stable.

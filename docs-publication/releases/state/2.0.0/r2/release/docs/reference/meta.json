@@ -1,0 +1,10 @@
+{
+  "title": "Reference",
+  "defaultOpen": true,
+  "pages": [
+    "package-surface",
+    "vanilla",
+    "create",
+    "read-write"
+  ]
+}

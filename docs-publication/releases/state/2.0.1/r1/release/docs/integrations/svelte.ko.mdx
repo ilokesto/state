@@ -1,0 +1,65 @@
+---
+title: "Svelte 연동"
+description: "@ilokesto/state를 Svelte readable/writable store로 사용합니다."
+---
+
+# Svelte 연동
+
+Svelte adapter는 Svelte store 기대에 맞는 store object를 반환합니다. `@ilokesto/state/svelte`에서 import합니다.
+
+## Plain writable store
+
+```svelte lineNumbers
+<script lang="ts">
+  import { create } from '@ilokesto/state/svelte';
+
+  const counter = create({ count: 0, label: 'Clicks' });
+  const count = counter.select((state) => state.count);
+  const increment = () => counter.update((state) => ({ ...state, count: state.count + 1 }));
+</script>
+
+<button on:click={increment}>
+  {$count}
+</button>
+```
+
+plain state는 writable이며 `set`, `update`, `setState`, `select`, `writeOnly`, `readOnly`를 포함합니다.
+
+## Reducer readable store
+
+```svelte lineNumbers
+<script lang="ts">
+  import { create } from '@ilokesto/state/svelte';
+
+  type Action = { type: 'increment' } | { type: 'reset' };
+  
+  const reduce = (state: { count: number }, action: Action) => {
+    if (action.type === 'increment') return { count: state.count + 1 };
+    if (action.type === 'reset') return { count: 0 };
+    return state;
+  };
+
+  const counter = create(reduce, { count: 0 });
+  const count = counter.select((state) => state.count);
+</script>
+
+<button on:click={() => counter.dispatch({ type: 'increment' })}>
+  {$count}
+</button>
+```
+
+reducer state는 write가 `dispatch`를 통해 일어나야 하므로 readable입니다.
+
+## 컴포넌트 밖에서 사용하기
+
+```ts lineNumbers
+const current = counter.readOnly((state) => state.count);
+const setCounter = counter.writeOnly();
+setCounter((state) => ({ ...state, count: state.count + 1 }));
+```
+
+## 주의할 점
+
+- `subscribe`는 Svelte 기대에 맞게 현재 state로 subscriber를 즉시 호출합니다.
+- `select`는 하나의 projection을 위한 readable store를 만듭니다.
+- reducer mode에서는 `dispatch`를 선호하세요. direct writable method는 노출되지 않습니다.

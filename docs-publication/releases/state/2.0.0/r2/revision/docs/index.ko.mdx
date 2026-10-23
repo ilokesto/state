@@ -1,0 +1,51 @@
+---
+title: "State"
+description: "@ilokesto/state의 프레임워크 어댑터, 미들웨어, 유틸리티 공식 문서입니다."
+---
+
+# State
+
+`@ilokesto/state`는 `@ilokesto/store`를 프레임워크 생명주기에 연결합니다. 상태 모델은 작게 유지하고, React, Vue, Svelte, Solid, Angular마다 알맞은 `create()` 반환 형태를 제공합니다.
+
+<PackageDemo name="state" lang="ko" />
+
+```tsx lineNumbers
+import { create } from '@ilokesto/state/react';
+
+const useCounter = create({ count: 0 });
+
+function Counter() {
+  const [count, setCounter] = useCounter((state) => state.count);
+  return <button onClick={() => setCounter((state) => ({ count: state.count + 1 }))}>{count}</button>;
+}
+```
+
+하나의 작은 store 모델을 두고 React, Vue, Svelte, Solid, Angular에서 각 프레임워크에 맞는 반환 형태로 쓰고 싶을 때 사용하세요.
+
+## 설치
+
+```package-install
+@ilokesto/state
+```
+
+사용하는 프레임워크 peer만 함께 설치하세요. 예를 들어 `react`, `vue`, `svelte`, `solid-js`, `@angular/core` 중 실제 adapter에 필요한 것만 설치하면 됩니다. `@ilokesto/state/adaptor`의 `adaptor`를 사용할 때만 `immer`를 추가하세요.
+
+
+## State와 Store 중 고르기
+
+프레임워크 컴포넌트가 공유 상태에 반응해야 하거나 reducer, 영속화, 검증, DevTools, history, 시간 기반 middleware가 필요하면 `@ilokesto/state`를 선택하세요. 순수 TypeScript 코드가 값 하나를 소유하고 구독과 정리를 직접 연결할 수 있다면 더 작은 [`@ilokesto/store`](/ko/store)를 선택하세요.
+
+State는 `@ilokesto/store`를 대체하지 않고 같은 store 모델을 만들거나 감쌉니다. 비동기 서버 캐시, 정규화된 엔티티 계층, 프레임워크 자체를 설명하는 튜토리얼은 아닙니다.
+
+## 어디서 시작할까
+
+- **첫 결과 만들기:** [빠른 시작](/ko/state/quick-start)에서 React 테마 전환 버튼을 만들고 무엇을 클릭하고 확인할지 알아봅니다.
+- **모델 고르기:** [핵심 개념](/ko/state/core-concepts), [Plain state](/ko/state/guides/plain-state), [Reducer state](/ko/state/guides/reducer-state)에서 직접 업데이트와 이름 있는 action을 비교합니다.
+- **프레임워크 연결하기:** Integrations에서 React, Vue, Svelte, Solid, Angular 중 사용하는 어댑터를 고르세요.
+- **Store 구성하기:** [Middleware](/ko/state/middleware)와 [Utility](/ko/state/utility)에서 검증, 영속화, 조합, Immer 스타일 업데이트를 다룹니다.
+- **계약 확인하기:** Reference에서 [패키지 표면](/ko/state/reference/package-surface), [`create`](/ko/state/reference/create), [프레임워크 독립 생성과 연결](/ko/state/reference/vanilla), [생명주기 없는 읽기와 쓰기](/ko/state/reference/read-write)를 확인합니다.
+- **문제 해결하기:** [문제 해결](/ko/state/troubleshooting)은 import와 생명주기 오류부터 다룹니다.
+
+## 버전과 소스 기준
+
+사이트 버전 선택기가 이 문서에서 다루는 정확한 패키지 릴리스를 표시합니다. API 레퍼런스는 root `createStore`/`createReducer`, 프레임워크 `bind`/`bindReducer`, 순서가 보장되는 알림 기반을 포함해 해당 릴리스에 포함된 패키지 표면을 설명합니다. 이전 메이저에서 바뀐 내용은 [2.0 이전 가이드](/ko/state/advanced/migration)를 확인하세요.

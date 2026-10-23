@@ -1,0 +1,90 @@
+---
+title: "상태 생성과 프레임워크 연결"
+description: "상태를 한 번 만들고 지원하는 프레임워크에 명시적으로 연결합니다."
+---
+
+# 상태 생성과 프레임워크 연결
+
+루트 `@ilokesto/state`는 프레임워크 런타임을 불러오지 않습니다.
+서비스나 모듈에서 상태를 만들고 `bind`로 프레임워크에 연결하세요.
+
+## 일반 상태
+
+```ts
+import { createStore } from '@ilokesto/state';
+import { bind } from '@ilokesto/state/react';
+
+const counter = createStore({ count: 0 });
+const useCounter = bind(counter);
+
+counter.update(previous => ({ count: previous.count + 1 }));
+counter.set({ count: 0 });
+```
+
+`createStore(initialState)`는 항상 새로운 Store를 만듭니다. Store와 같은
+메서드를 가진 객체를 전달해도 기존 저장소로 판단하지 않고 값으로 저장합니다.
+반면 `bind(store)`는 구조적 `StoreApi<T>`를 명시적으로 받아 새 저장소를 만들지
+않습니다. 외부 구현을 전달할 때도 Store의 동작 계약을 지켜야 합니다.
+
+`set(value)`는 함수도 호출하지 않고 값으로 교체합니다. `update(updater)`는
+다음 값을 계산합니다. 둘 다 `setState(valueOrUpdater)`와 같은 미들웨어 경로를
+거칩니다. Store 메서드는 프로토타입 메서드이므로 콜백으로 넘길 때 수신 객체를
+유지하거나 명시적으로 바인딩하세요.
+
+## 리듀서 상태
+
+```ts
+import { createReducer } from '@ilokesto/state';
+import { bindReducer } from '@ilokesto/state/react';
+
+type Action = { readonly type: 'add'; readonly amount: number };
+const counter = createReducer(
+  (value: number, action: Action) => value + action.amount,
+  0,
+);
+const useCounter = bindReducer(counter);
+
+counter.dispatch({ type: 'add', amount: 2 });
+counter.store.set(10);
+```
+
+`createReducer(reducer, initialStateOrStore)`는 `{ store, dispatch }` 형태의
+`ReducerState<T, Action>`을 반환합니다. 값 또는 pipe로 만든 저장소를 포함한
+기존 Store 인스턴스를 받습니다. 같은 리듀서 참조는 저장소를 재사용할 수 있지만,
+한 저장소에 다른 리듀서를 등록하면 거부됩니다. 바인딩은 리듀서를 재등록하지
+않습니다. 직접 저장소에 쓰면 리듀서를 우회하고, 액션을 dispatch하면 기존
+미들웨어 메타데이터와 실행 순서를 유지합니다.
+
+## 프레임워크 바인딩
+
+`react`, `vue`, `solid`, `svelte`, `angular`는 모두 `bind`와 `bindReducer`를
+내보냅니다. 반환값과 생명주기 규칙은 기존 `create`와 같습니다. React는 hook,
+Vue는 composable, Solid는 accessor 생성 함수, Angular는 signal 생성 함수,
+Svelte는 store를 반환합니다.
+
+```ts
+import { createStore } from '@ilokesto/state';
+import { bind as bindReact } from '@ilokesto/state/react';
+import { bind as bindSvelte } from '@ilokesto/state/svelte';
+
+const shared = createStore({ count: 0 });
+const useShared = bindReact(shared);
+const sharedSvelte = bindSvelte(shared);
+```
+
+사용하는 프레임워크 어댑터만 import하세요. `create(value)`와
+`create(reducer, valueOrStore)`도 같은 기반을 사용하는 편의 생성 함수로
+계속 동작합니다. 상태를 공유할 때는 생성과 연결을 분리하는 방식을 권장합니다.
+
+## 조합과 정리 책임
+
+루트는 `pipe`, `definePipeableMiddleware`, `PipeConfigurationError`,
+`dispose`도 내보냅니다. 미들웨어 생성 함수는 `@ilokesto/state/middleware`에,
+선택적인 Immer 어댑터는 `@ilokesto/state/adaptor`에 있습니다.
+
+`dispose(store)`는 미들웨어 자원을 해제하며 저장소 자체를 파괴하지 않습니다.
+프레임워크 구독은 해당 생명주기가 정리합니다. 직접 만든 구독은 반환된 해제
+함수를 호출해야 합니다.
+
+바뀐 알림 동작은 [메이저 마이그레이션 안내](/ko/state/advanced/migration)를
+참고하세요.

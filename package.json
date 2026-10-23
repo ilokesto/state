@@ -3,17 +3,32 @@
   "version": "2.0.1",
   "scripts": {
     "build": "rm -rf dist && tsc",
-    "pretest": "pnpm --filter @ilokesto/store run build && pnpm run build",
+    "pretest": "pnpm run build",
     "test": "pnpm run test:dist",
-    "test:dist": "bun test",
+    "test:dist": "bun test test/",
     "test:browser": "node --test e2e/*.browser.mjs",
     "test:typecheck": "pnpm build && tsc --noEmit -p test/tsconfig.json",
-    "typecheck": "tsc --noEmit"
+    "test:tooling": "node --test --test-concurrency=2 tests/tooling/*.test.mjs",
+    "typecheck": "tsc --noEmit",
+    "docs:prepare": "pnpm build",
+    "docs:dev": "pnpm docs:prepare && pnpm --dir website dev",
+    "docs:build": "pnpm docs:prepare && pnpm --dir website build",
+    "docs:typecheck": "pnpm docs:prepare && pnpm --dir website typecheck",
+    "docs:test": "pnpm --dir website test",
+    "docs:start": "pnpm --dir website start",
+    "docs:publication:verify": "node scripts/docs-publication.mjs verify && node scripts/docs-runtime.mjs verify",
+    "docs:publication:capture": "node scripts/docs-publication.mjs capture",
+    "docs:publication:promote": "node scripts/docs-publication.mjs promote",
+    "migrate:verify": "node scripts/verify-migration.mjs",
+    "release:verify": "node scripts/release-verify.mjs",
+    "changeset": "changeset",
+    "changeset:status": "changeset status",
+    "version-packages": "changeset version && pnpm install --lockfile-only"
   },
+  "packageManager": "pnpm@10.17.1",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ilokesto/ilokesto.git",
-    "directory": "packages/state"
+    "url": "git+https://github.com/ilokesto/state.git"
   },
   "homepage": "https://ilokesto.ayden94.com/en/state",
   "type": "module",
@@ -89,7 +104,7 @@
   "author": "Jeong Jinho <wpfekdml@me.com>",
   "license": "MIT",
   "dependencies": {
-    "@ilokesto/store": "workspace:^"
+    "@ilokesto/store": "^2.0.1"
   },
   "peerDependencies": {
     "@angular/core": "^17.0.0 || ^18.0.0 || ^19.0.0 || ^20.0.0 || ^21.0.0",
@@ -119,8 +134,14 @@
       "optional": true
     }
   },
+  "pnpm": {
+    "overrides": {
+      "mdast-util-to-markdown": "2.1.2"
+    }
+  },
   "devDependencies": {
     "@angular/core": "^21.2.8",
+    "@changesets/cli": "2.31.1",
     "@playwright/test": "^1.61.1",
     "@types/bun": "^1.3.14",
     "@types/node": "^22.19.1",
@@ -130,6 +151,7 @@
     "solid-js": "^1.9.12",
     "svelte": "^5.55.3",
     "typescript": "^6.0.2",
-    "vue": "^3.5.32"
+    "vue": "^3.5.32",
+    "yaml": "2.8.2"
   }
 }

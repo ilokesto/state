@@ -1,0 +1,187 @@
+---
+title: "persist"
+description: "store state를 localStorage, sessionStorage, cookie에 저장합니다."
+---
+
+# persist
+
+`persist`는 browser storage에서 initial value를 읽고, 변경된 state를 JSON으로 다시 쓰며, 지원되는 storage type에서는 migration을 실행합니다.
+
+## Signature
+
+```ts lineNumbers
+persist<DecodedState, const Steps extends readonly MigrationFn[]>(
+  options: SafePersistConfig<DecodedState, Steps>,
+): PipeMiddleware<DecodedState>
+```
+
+`persist(options)`는 `pipe.use(...)`에 등록할 middleware를 반환합니다. 등록한 뒤 `.create(initialState)`로 store를 만드세요. Storage에서 읽은 값을 live state로 사용하기 전에 검증하도록 `decode`가 필수입니다.
+
+## Local storage 예제
+
+```ts lineNumbers
+import { persist } from '@ilokesto/state/middleware';
+import { pipe } from '@ilokesto/state/utils';
+
+type ThemeState = { theme: 'light' | 'dark' };
+
+const decodeTheme = (value: unknown): ThemeState | null => {
+  if (typeof value !== 'object' || value === null) return null;
+  if (!('theme' in value) || (value.theme !== 'light' && value.theme !== 'dark')) return null;
+  return { theme: value.theme };
+};
+
+const store = pipe
+  .use(persist({ local: 'theme', decode: decodeTheme }))
+  .create<ThemeState>({ theme: 'light' });
+```
+
+## debounce와 함께 사용하기
+
+두 middleware를 함께 사용할 때는 persistence가 debounced commit을 관찰하도록 `debounce`를 `persist`보다 먼저 선언하세요.
+
+```ts lineNumbers
+import { debounce, persist } from '@ilokesto/state/middleware';
+import { pipe } from '@ilokesto/state/utils';
+
+type ThemeState = { readonly theme: 'light' | 'dark' };
+
+const decodeTheme = (value: unknown): ThemeState | null => {
+  if (typeof value !== 'object' || value === null || !('theme' in value)) return null;
+  return value.theme === 'light' || value.theme === 'dark' ? { theme: value.theme } : null;
+};
+
+const store = pipe
+  .use(debounce(250))
+  .use(persist({ local: 'theme', decode: decodeTheme }))
+  .create<ThemeState>({ theme: 'light' });
+```
+
+`pipe.use(persist(...)).use(debounce(...))`는 지연된 commit의 persistence를 건너뛰므로 `MIDDLEWARE_ORDER`로 거부됩니다. Pipe는 선언 순서를 유지하며 자동으로 재정렬하지 않습니다.
+
+## Session과 cookie storage
+
+```ts lineNumbers
+type SessionState = { token: string | null };
+type ConsentState = { accepted: boolean };
+
+const decodeSession = (value: unknown): SessionState | null => {
+  if (typeof value !== 'object' || value === null || !('token' in value)) return null;
+  return typeof value.token === 'string' || value.token === null ? { token: value.token } : null;
+};
+
+const decodeConsent = (value: unknown): ConsentState | null => {
+  if (typeof value !== 'object' || value === null || !('accepted' in value)) return null;
+  return typeof value.accepted === 'boolean' ? { accepted: value.accepted } : null;
+};
+
+const sessionStore = pipe
+  .use(persist({ session: 'session', decode: decodeSession }))
+  .create<SessionState>({ token: null });
+
+const cookieStore = pipe
+  .use(persist({ cookie: 'cookie-consent', decode: decodeConsent }))
+  .create<ConsentState>({ accepted: false });
+```
+
+## Migration 예제
+
+```ts lineNumbers
+import type { PersistMigration } from '@ilokesto/state/middleware';
+
+type SettingsV1 = { theme: string };
+type SettingsState = { theme: string; count: number };
+
+const toV1: PersistMigration<unknown, SettingsV1> = (old) => ({
+  theme: typeof old === 'string' ? old : 'light',
+});
+const toCurrent: PersistMigration<SettingsV1, SettingsState> = (old) => ({
+  ...old,
+  count: 0,
+});
+const decodeSettings = (value: unknown): SettingsState | null => {
+  if (typeof value !== 'object' || value === null) return null;
+  if (!('theme' in value) || typeof value.theme !== 'string') return null;
+  if (!('count' in value) || typeof value.count !== 'number') return null;
+  return { theme: value.theme, count: value.count };
+};
+
+const settings = pipe
+  .use(persist({
+    local: 'settings',
+    migrate: [toV1, toCurrent],
+    decode: decodeSettings,
+  }))
+  .create<SettingsState>({ theme: 'light', count: 0 });
+```
+
+## Storage format과 주의점
+
+- 값은 `{ state, version }` JSON으로 저장됩니다.
+- `version`은 migration array 길이를 기준으로 합니다.
+- migration은 `local`과 `cookie`에서 실행되고 `session`에서는 실행되지 않습니다.
+- storage read 실패는 현재 live state를 유지하고 `onRehydrateStorage`에 전달됩니다. write 실패는 browser에서 catch 후 log됩니다.
+- cookie write는 `document.cookie = key=value; path=/` assignment를 사용하여 모든 route에서 cookie가 보이도록 합니다. 고급 cookie attribute가 필요하면 helper 밖에서 설정하세요.
+
+## SSR과 hydration
+
+`persist`는 서버에서 평가해도 안전합니다. `window`나 `document`가 없는 환경에서 storage 읽기는 `null`을 반환하므로 store는 initial state를 유지합니다.
+
+기본적으로 `persist`는 eager hydration을 사용합니다 — store 생성 시점에 storage를 읽고 영속값을 적용합니다. client-only SPA에서는 문제가 없지만, Next.js App Router 같은 SSR 환경에서는 eager hydration이 React hydration mismatch를 발생시킵니다. 서버는 initial state로 렌더하지만 클라이언트는 영속값으로 렌더하기 때문입니다.
+
+### `skipHydration`과 수동 `rehydrate()`
+
+`skipHydration: true`를 전달해 hydration을 지연시킵니다. `store.persist.rehydrate()`을 명시적으로 호출하기 전까지 store는 서버와 클라이언트 모두에서 initial state를 유지합니다.
+
+```ts lineNumbers
+import { persist } from '@ilokesto/state/middleware';
+import { pipe } from '@ilokesto/state/utils';
+
+type CounterState = { count: number };
+
+const decodeCounter = (value: unknown): CounterState | null => {
+  if (typeof value !== 'object' || value === null) return null;
+  if (!('count' in value) || typeof value.count !== 'number') return null;
+  return { count: value.count };
+};
+
+const counterStore = pipe
+  .use(persist({ local: 'counter', decode: decodeCounter, skipHydration: true }))
+  .create<CounterState>({ count: 0 });
+
+// React client component에서:
+useEffect(() => {
+  counterStore.persist.rehydrate();
+}, []);
+```
+
+### `hasHydrated()`
+
+`store.persist.hasHydrated()`로 hydration 완료 후에만 렌더해야 하는 UI를 게이트할 수 있습니다.
+
+```ts lineNumbers
+const hydrated = counterStore.persist.hasHydrated();
+```
+
+### `onRehydrateStorage`
+
+`onRehydrateStorage`를 전달해 eager 또는 manual hydration을 관찰할 수 있습니다. factory는 storage를 읽기 전에 실행되며 hydration 직전의 live state를 받습니다. factory가 반환한 callback은 hydration 시도가 끝난 뒤 정확히 한 번 실행됩니다.
+
+성공 시 callback은 hydrated state와 `undefined`를 받습니다. storage가 비어 있는 경우도 성공이며 hydration 직전의 live state를 유지합니다. storage read, parsing, migration, decoding 실패 시에도 live state를 유지하고 callback에는 `undefined`와 원래 error가 전달됩니다. post callback 안에서는 `store.persist.hasHydrated()`가 이미 `true`입니다. post callback 자체가 throw하면 그 exception은 그대로 전파되며 같은 callback의 error 인자로 다시 전달되지 않습니다.
+
+```ts lineNumbers
+const themeStore = pipe
+  .use(persist({
+    local: 'theme',
+    decode: decodeTheme,
+    skipHydration: true,
+    onRehydrateStorage: (state) => (rehydratedState, error) => {
+      if (error) {
+        console.error('Rehydration failed', error);
+        return;
+      }
+      console.log('Rehydrated from', state, 'to', rehydratedState);
+    },
+  }))
+  .create<ThemeState>({ theme: 'light' });
+```

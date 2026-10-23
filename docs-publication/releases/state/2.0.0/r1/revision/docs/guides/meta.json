@@ -1,0 +1,9 @@
+{
+  "title": "Guides",
+  "defaultOpen": true,
+  "pages": [
+    "plain-state",
+    "reducer-state",
+    "lifecycle-reads-writes"
+  ]
+}

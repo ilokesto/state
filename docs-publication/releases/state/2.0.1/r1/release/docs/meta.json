@@ -1,0 +1,23 @@
+{
+  "title": "State",
+  "root": true,
+  "pages": [
+    "index",
+    "---Getting Started---",
+    "quick-start",
+    "core-concepts",
+    "---Reference---",
+    "...reference",
+    "---Middleware---",
+    "...middleware",
+    "---Utility---",
+    "...utility",
+    "---Guides---",
+    "...guides",
+    "---Integrations---",
+    "...integrations",
+    "---Advanced---",
+    "...advanced",
+    "troubleshooting"
+  ]
+}

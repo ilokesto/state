@@ -1,0 +1,45 @@
+---
+title: "logger"
+description: "개발 중 state update를 로그로 확인합니다."
+---
+
+# logger
+
+`logger`는 state update를 console group으로 감싸서 보여줍니다. store 모양을 잡거나 reducer action 흐름을 디버깅할 때 유용합니다.
+
+## Signature
+
+```ts lineNumbers
+logger(options?: LoggerOptions): PipeAnyMiddleware
+
+type LoggerOptions = {
+  collapsed?: boolean;
+  diff?: boolean;
+  timestamp?: boolean;
+};
+```
+
+## 예제
+
+```ts lineNumbers
+import { logger } from '@ilokesto/state/middleware';
+import { pipe } from '@ilokesto/state/utils';
+
+const store = pipe
+  .use(logger({ collapsed: true, diff: true, timestamp: true }))
+  .create({ count: 0 });
+
+store.setState((state) => ({ count: state.count + 1 }));
+```
+
+## 로그에 포함되는 것
+
+- reducer middleware가 action name을 제공했다면 update title에 표시됩니다.
+- 이전 state,
+- 다음 state,
+- 선택적인 timestamp,
+- object key 기준의 best-effort JSON diff.
+
+## 실무 메모
+
+`logger`는 `process.env.NODE_ENV === "production"`일 때 건너뜁니다. diff output은 JSON serialization 기반의 debugging 정보이며 공식 patch 형식이 아닙니다. application logic의 입력으로 쓰지 말고 흐름을 확인하는 용도로 사용하세요.

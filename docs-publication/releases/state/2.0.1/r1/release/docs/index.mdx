@@ -1,0 +1,51 @@
+---
+title: "State"
+description: "Official docs for @ilokesto/state framework adapters, middleware, and utilities."
+---
+
+# State
+
+`@ilokesto/state` connects `@ilokesto/store` to framework lifecycles. It gives each framework a small `create()` adapter while keeping the underlying state model framework-neutral.
+
+<PackageDemo name="state" lang="en" />
+
+```tsx lineNumbers
+import { create } from '@ilokesto/state/react';
+
+const useCounter = create({ count: 0 });
+
+function Counter() {
+  const [count, setCounter] = useCounter((state) => state.count);
+  return <button onClick={() => setCounter((state) => ({ count: state.count + 1 }))}>{count}</button>;
+}
+```
+
+Use this package when you want one small store model with adapter-specific return shapes for React, Vue, Svelte, Solid, or Angular.
+
+## Install
+
+```package-install
+@ilokesto/state
+```
+
+Install the framework peer you use, such as `react`, `vue`, `svelte`, `solid-js`, or `@angular/core`. Install `immer` only when you use `adaptor` from `@ilokesto/state/adaptor`.
+
+
+## Choose State or Store
+
+Choose `@ilokesto/state` when framework components should react to shared state, or when you need reducers, persistence, validation, DevTools, history, or timed middleware. Choose the smaller [`@ilokesto/store`](/en/store) when plain TypeScript code should own a value and you are prepared to connect subscriptions and cleanup yourself.
+
+State does not replace `@ilokesto/store`; it creates or wraps the same store model. It is not an async server cache, a normalized entity layer, or a framework tutorial.
+
+## Where to start
+
+- **First result:** [Quick start](/en/state/quick-start) creates a React theme toggle and explains what to click and observe.
+- **Choose a model:** [Core concepts](/en/state/core-concepts), [Plain state](/en/state/guides/plain-state), and [Reducer state](/en/state/guides/reducer-state) explain direct updates versus named actions.
+- **Connect your framework:** choose React, Vue, Svelte, Solid, or Angular under Integrations.
+- **Build the store:** [Middleware](/en/state/middleware) and [Utility](/en/state/utility) cover validation, persistence, composition, and Immer-style updates.
+- **Look up contracts:** Reference covers the [package surface](/en/state/reference/package-surface), [`create`](/en/state/reference/create), [vanilla construction and binding](/en/state/reference/vanilla), and [lifecycle-free reads and writes](/en/state/reference/read-write).
+- **Resolve problems:** [Troubleshooting](/en/state/troubleshooting) starts with import and lifecycle errors.
+
+## Version and source basis
+
+The site version selector identifies the exact package release documented here. The API reference describes the package surface shipped for that release, including root `createStore`/`createReducer`, framework `bind`/`bindReducer`, and the ordered notification foundation. For changes from the previous major, see the [2.0 migration guide](/en/state/advanced/migration).

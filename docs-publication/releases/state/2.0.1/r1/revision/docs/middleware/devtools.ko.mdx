@@ -1,0 +1,36 @@
+---
+title: "devtools"
+description: "개발 환경에서 state update를 Redux DevTools extension에 연결합니다."
+---
+
+# devtools
+
+`devtools`는 store를 Redux DevTools browser extension과 연결합니다. current state로 extension을 초기화하고, update를 보내며, 일부 DevTools dispatch message를 처리합니다.
+
+## Signature
+
+```ts lineNumbers
+devtools(name: string): PipeAnyMiddleware
+```
+
+## 예제
+
+```ts lineNumbers
+import { devtools, logger } from '@ilokesto/state/middleware';
+import { pipe } from '@ilokesto/state/utils';
+
+const store = pipe
+  .use(devtools('counter'))
+  .use(logger())
+  .create({ count: 0 });
+```
+
+## 지원하는 DevTools action
+
+- `RESET`: original initial state 또는 전달된 store initial state로 reset한 뒤 DevTools를 다시 초기화합니다.
+- `COMMIT`: current state로 DevTools를 다시 초기화합니다.
+- `ROLLBACK`: DevTools state payload를 parse해서 store state로 설정합니다.
+
+## Production과 browser 주의점
+
+`devtools`는 `process.env.NODE_ENV === "production"`일 때 비활성화됩니다. 또한 `window.__REDUX_DEVTOOLS_EXTENSION__`가 필요하므로 browser-only development aid입니다.

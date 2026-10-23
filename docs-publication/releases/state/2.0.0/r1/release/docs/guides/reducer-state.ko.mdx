@@ -1,0 +1,216 @@
+---
+title: "Reducer state 가이드"
+description: "reducer action과 dispatch로 이름 있는 transition을 모델링합니다."
+---
+
+# Reducer state 가이드
+
+Reducer state는 feature에 이름 있는 transition vocabulary가 있을 때 사용하는 패턴입니다. 모든 component가 object를 직접 다시 쓰게 하지 않고, component는 action을 dispatch하고 하나의 reducer가 next state를 결정합니다.
+
+Cart, editor, multi-step flow, optimistic operation, undo-like state처럼 “어떤 object로 바뀌었나”보다 “무슨 일이 일어났나”가 더 중요한 state에 잘 맞습니다.
+
+## 언제 reducer state를 고르나
+
+다음 중 하나 이상이 맞으면 reducer state를 선택하세요.
+
+- 여러 UI event가 같은 transition logic을 공유해야 합니다.
+- update에 이름이 필요합니다: `addItem`, `submit`, `rollback`, `reset`.
+- test가 action-to-state behavior를 직접 검증해야 합니다.
+- middleware log에 의미 있는 action name이 남아야 합니다.
+- next state가 current state와 payload 모두에 의존합니다.
+- 대부분의 UI code에서 arbitrary object replacement를 막고 싶습니다.
+
+몇 개의 직접 setter만 필요하다면 [Plain state](/ko/state/guides/plain-state)로 시작하세요. 나중에 writer helper를 action으로 바꾸며 옮길 수 있습니다.
+
+## state와 action을 함께 정의하기
+
+Reducer state는 action union이 지원되는 transition을 문서화할 때 가장 읽기 좋습니다.
+
+```ts lineNumbers
+type CartItem = { id: string; quantity: number };
+
+type CartState = {
+  items: CartItem[];
+  coupon: string | null;
+};
+
+type CartAction =
+  | { type: 'addItem'; id: string }
+  | { type: 'removeItem'; id: string }
+  | { type: 'setCoupon'; coupon: string | null }
+  | { type: 'reset' };
+
+const initialCartState: CartState = {
+  items: [],
+  coupon: null,
+};
+```
+
+Action은 plain object로 유지하세요. Framework adapter의 reducer overload는 `type` property가 있는 object action을 기대합니다.
+
+## 순수 reducer 작성하기
+
+Reducer는 previous state와 action을 받아 next state를 반환합니다. Timer, network call, random ID, direct storage access 같은 side effect는 reducer 안에 넣지 마세요.
+
+```ts lineNumbers
+function reduceCart(state: CartState, action: CartAction): CartState {
+  switch (action.type) {
+    case 'addItem': {
+      const existing = state.items.find((item) => item.id === action.id);
+
+      if (existing) {
+        return {
+          ...state,
+          items: state.items.map((item) =>
+            item.id === action.id ? { ...item, quantity: item.quantity + 1 } : item,
+          ),
+        };
+      }
+
+      return {
+        ...state,
+        items: [...state.items, { id: action.id, quantity: 1 }],
+      };
+    }
+    case 'removeItem':
+      return {
+        ...state,
+        items: state.items.filter((item) => item.id !== action.id),
+      };
+    case 'setCoupon':
+      return { ...state, coupon: action.coupon };
+    case 'reset':
+      return initialCartState;
+    default:
+      return state;
+  }
+}
+```
+
+Reducer는 plain function이므로 framework component를 render하지 않고도 쉽게 test할 수 있습니다.
+
+## adapter 만들기
+
+첫 번째 인자로 reducer를, 두 번째 인자로 initial state 또는 기존 `Store`를 넘깁니다.
+
+```tsx lineNumbers
+import { create } from '@ilokesto/state/react';
+
+export const useCart = create<CartState, CartAction>(reduceCart, initialCartState);
+```
+
+React는 `[selection, dispatch]`를 반환합니다. Vue, Solid, Angular는 reactive `state`와 `dispatch`를 가진 object를 반환합니다. Svelte는 `dispatch`, `select`, `readOnly`, `writeOnly`를 가진 readable store를 반환합니다.
+
+## component에서 dispatch하기
+
+Component는 자신이 render할 값을 선택하고, 변경에는 이름 있는 action을 dispatch합니다.
+
+```tsx lineNumbers
+function AddToCartButton({ id }: { id: string }) {
+  const [count, dispatch] = useCart((state) =>
+    state.items.find((item) => item.id === id)?.quantity ?? 0,
+  );
+
+  return (
+    <button onClick={() => dispatch({ type: 'addItem', id })}>
+      Add ({count})
+    </button>
+  );
+}
+```
+
+Component에서 next state object를 직접 만들지 마세요. Component가 full object를 계산하면 reducer state의 장점이 사라집니다.
+
+## lifecycle 밖에서 dispatch하기
+
+Framework lifecycle 밖의 command module, service callback, test, event listener에서는 `writeOnly()`로 dispatch function을 얻으세요.
+
+```ts lineNumbers
+const dispatchCart = useCart.writeOnly();
+
+export function clearCartAfterCheckout() {
+  dispatchCart({ type: 'reset' });
+}
+```
+
+Checkout payload를 만들 때처럼 synchronous snapshot이 필요하면 `readOnly`를 사용하세요.
+
+```ts lineNumbers
+export function getCheckoutItems() {
+  return useCart.readOnly((state) => state.items);
+}
+```
+
+## middleware와 조합하기
+
+Reducer action은 state update로 변환된 뒤 같은 store middleware pipeline을 통과합니다. Logger와 DevTools는 특히 유용합니다. Underlying store가 update pipeline 동안 현재 action name을 들고 있기 때문입니다.
+
+```ts lineNumbers
+import { create } from '@ilokesto/state/react';
+import { devtools, logger, persist } from '@ilokesto/state/middleware';
+import { pipe } from '@ilokesto/state/utils';
+
+const isCartItem = (value: unknown): value is CartItem => {
+  return typeof value === 'object' && value !== null
+    && 'id' in value && typeof value.id === 'string'
+    && 'quantity' in value && typeof value.quantity === 'number';
+};
+
+const decodeCart = (value: unknown): CartState | null => {
+  if (typeof value !== 'object' || value === null) return null;
+  if (!('items' in value) || !Array.isArray(value.items) || !value.items.every(isCartItem)) return null;
+  if (!('coupon' in value) || (value.coupon !== null && typeof value.coupon !== 'string')) return null;
+  return { items: value.items, coupon: value.coupon };
+};
+
+const cartStore = pipe
+  .use(persist({ local: 'cart', decode: decodeCart }))
+  .use(logger({ collapsed: true, diff: true }))
+  .use(devtools('cart'))
+  .create<CartState>(initialCartState);
+
+export const useCart = create<CartState, CartAction>(reduceCart, cartStore);
+```
+
+Invalid state를 persist나 DevTools로 보내기 전에 막아야 한다면 validation을 비싼 side effect보다 앞에 두세요. 자세한 내용은 [Middleware](/ko/state/middleware)를 보세요.
+
+## Reducer state 테스트하기
+
+Transition rule은 reducer를 직접 test하고, adapter는 integration behavior만 검증하세요.
+
+```ts lineNumbers
+it('increments an existing item', () => {
+  const prev: CartState = { items: [{ id: 'book', quantity: 1 }], coupon: null };
+
+  expect(reduceCart(prev, { type: 'addItem', id: 'book' })).toEqual({
+    items: [{ id: 'book', quantity: 2 }],
+    coupon: null,
+  });
+});
+```
+
+Adapter-level test에서는 `writeOnly()`로 dispatch하고 `readOnly()`로 assert합니다.
+
+```ts lineNumbers
+useCart.writeOnly()({ type: 'reset' });
+useCart.writeOnly()({ type: 'addItem', id: 'book' });
+
+expect(useCart.readOnly((state) => state.items)).toEqual([{ id: 'book', quantity: 1 }]);
+```
+
+## Plain state에서 옮기기
+
+일반적인 migration 순서는 다음과 같습니다.
+
+1. 기존 state shape은 유지합니다.
+2. 반복되는 writer helper를 action union으로 옮깁니다.
+3. 같은 logic을 reducer로 구현합니다.
+4. Component call을 `setState(...)`에서 `dispatch({ type: ... })`로 바꿉니다.
+5. `readOnly` selector와 middleware composition은 대부분 그대로 둡니다.
+
+## 자주 하는 실수
+
+- **reducer 안에 side effect 넣기.** Side effect는 dispatch 전이나 state change에 반응하는 코드에서 처리하고 reducer는 순수하게 유지하세요.
+- **action이 너무 generic함.** `{ type: 'set', state }`는 대부분 reducer처럼 보이는 plain state입니다.
+- **component가 next state를 계산함.** Component는 intent를 dispatch하고 transition 계산은 reducer가 해야 합니다.
+- **test에서 reset을 잊음.** Module-level adapter는 하나의 store instance를 공유하므로 test에서 명시적으로 reset하세요.

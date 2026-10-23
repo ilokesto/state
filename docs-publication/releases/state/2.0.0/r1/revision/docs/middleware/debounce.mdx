@@ -1,0 +1,66 @@
+---
+title: "debounce"
+description: "Delay rapid updates and apply the latest accumulated state."
+---
+
+# debounce
+
+`debounce` collects rapid update requests and applies them after a wait window. It is useful for text inputs, resize-driven values, or other high-frequency updates where intermediate states do not need to notify immediately.
+
+## Signature
+
+```ts lineNumbers
+debounce(wait?: number): PipeAnyMiddleware
+```
+
+`wait` is measured in milliseconds and defaults to `300`. When supplied, it must be a finite non-negative number; `0` is valid. Invalid waits throw `RangeError` before middleware or timer setup.
+
+## Example
+
+```ts lineNumbers
+import { debounce } from '@ilokesto/state/middleware';
+import { pipe } from '@ilokesto/state/utils';
+
+const store = pipe
+  .use(debounce(250))
+  .create({ query: '' });
+
+store.setState({ query: 'i' });
+store.setState({ query: 'il' });
+store.setState({ query: 'ilo' });
+```
+
+## Using with persist
+
+When both middleware are used, declare `debounce` before `persist` so persistence observes the debounced commit:
+
+```ts lineNumbers
+import { debounce, persist } from '@ilokesto/state/middleware';
+import { pipe } from '@ilokesto/state/utils';
+
+type SearchState = { readonly query: string };
+
+const decodeSearch = (value: unknown): SearchState | null => {
+  if (typeof value !== 'object' || value === null || !('query' in value)) return null;
+  return typeof value.query === 'string' ? { query: value.query } : null;
+};
+
+const store = pipe
+  .use(debounce(250))
+  .use(persist({ local: 'search', decode: decodeSearch }))
+  .create<SearchState>({ query: '' });
+```
+
+`pipe.use(persist(...)).use(debounce(...))` is rejected because it would skip persistence for deferred commits.
+
+## Function updates
+
+Function updates are kept in order and replayed against an accumulated current state when the timer fires. That means updater functions still compose with one another inside the debounce window.
+
+## Timing caveat
+
+Until the timer fires, `getState()` still returns the previous committed state. Do not use `debounce` for state where every intermediate write must be immediately observable. `history()` cannot share this pipe chain because history requires synchronous commits.
+
+## Cleanup
+
+`debounce` owns its pending timer. When the store is no longer needed, call `dispose(store)` from `@ilokesto/state/middleware` to cancel it. Disposal is scoped to that store and is safe to repeat. It still attempts every registered cleanup after a failure, then throws an `AggregateError` containing each original thrown value when any cleanup fails.

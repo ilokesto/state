@@ -1,0 +1,166 @@
+---
+title: "adaptor"
+description: "Use Immer draft syntax for object state updates."
+---
+
+# adaptor
+
+`adaptor` wraps Immer `produce` for `@ilokesto/state` object updates.
+
+```ts lineNumbers
+adaptor<T extends object>(fn: (draft: Draft<T>) => void): (state: T) => T
+```
+
+Use it when immutable object updates are correct but verbose. Instead of returning a deeply copied object by hand, write changes against a draft and let Immer produce the next immutable value.
+
+## Install Immer
+
+`immer` is an optional peer dependency. Install it only if you use `adaptor`.
+
+```bash lineNumbers
+pnpm add immer
+```
+
+Then import `adaptor` from its dedicated subpath.
+
+```ts lineNumbers
+import { adaptor } from '@ilokesto/state/adaptor';
+```
+
+## Basic usage
+
+```tsx lineNumbers
+import { create } from '@ilokesto/state/react';
+import { adaptor } from '@ilokesto/state/adaptor';
+
+type TodoState = {
+  items: Array<{ id: string; title: string; done: boolean }>;
+};
+
+const useTodos = create<TodoState>({ items: [] });
+
+function CompleteButton({ id }: { id: string }) {
+  const [, setTodos] = useTodos((state) => state.items);
+
+  return (
+    <button
+      onClick={() =>
+        setTodos(adaptor((draft) => {
+          const item = draft.items.find((item) => item.id === id);
+          if (item) item.done = true;
+        }))
+      }
+    >
+      Complete
+    </button>
+  );
+}
+```
+
+The function passed to `adaptor` mutates a draft, not the actual store state. The returned updater is passed to `setState`.
+
+## When adaptor helps
+
+`adaptor` is useful when the immutable update would otherwise be noisy.
+
+```ts lineNumbers
+setProject(adaptor((draft) => {
+  draft.columns[columnId].cards.push(cardId);
+  draft.cards[cardId] = { id: cardId, title, done: false };
+}));
+```
+
+Without draft syntax, the same update might require copying several nested objects and arrays. Draft syntax keeps the intent visible.
+
+## When not to use adaptor
+
+Avoid `adaptor` when it makes the update less clear.
+
+```ts lineNumbers
+// Prefer this for simple replacements.
+setTheme({ mode: 'dark' });
+
+// Prefer this for primitive state.
+setCount((count) => count + 1);
+```
+
+`adaptor` is constrained to object state. For strings, numbers, booleans, and other primitive state, use a direct next value or an updater function.
+
+## Use with plain state
+
+`adaptor` is most commonly used with plain state because plain state writers accept `setState` updater functions.
+
+```ts lineNumbers
+const useProfile = create({
+  name: '',
+  contacts: [{ type: 'email', value: '' }],
+});
+
+const updateProfile = useProfile.writeOnly();
+
+updateProfile(adaptor((draft) => {
+  draft.contacts[0].value = 'hello@example.com';
+}));
+```
+
+The adapter still notifies subscribers through the normal store update pipeline.
+
+## Use with middleware
+
+`adaptor` creates the next state before middleware finishes the write. Validation, persistence, logging, and DevTools still see the produced state.
+
+```ts lineNumbers
+import { logger, validate } from '@ilokesto/state/middleware';
+import { adaptor } from '@ilokesto/state/adaptor';
+import { pipe } from '@ilokesto/state/utils';
+
+const store = pipe
+  .use(validate(tagsSchema))
+  .use(logger({ diff: true }))
+  .create({ tags: [] as string[] });
+
+const useTags = create(store);
+const writeTags = useTags.writeOnly();
+
+writeTags(adaptor((draft) => {
+  draft.tags.push('docs');
+}));
+```
+
+If validation rejects the produced state, the update is not committed.
+
+## Reducer state and adaptor
+
+Reducer writers dispatch actions, so `adaptor` is not passed directly to `dispatch`. If you want draft syntax in reducer state, use Immer inside the reducer instead, or keep plain state with named writer helpers.
+
+```ts lineNumbers
+// Plain state: adaptor is passed to setState.
+setProfile(adaptor((draft) => {
+  draft.name = 'Ada';
+}));
+
+// Reducer state: dispatch an action instead.
+dispatchProfile({ type: 'rename', name: 'Ada' });
+```
+
+## Testing adaptor updates
+
+Because `adaptor` returns a normal updater, you can test through the adapter API.
+
+```ts lineNumbers
+const write = useTodos.writeOnly();
+
+write({ items: [{ id: 'a', title: 'Read docs', done: false }] });
+write(adaptor((draft) => {
+  draft.items[0].done = true;
+}));
+
+expect(useTodos.readOnly((state) => state.items[0].done)).toBe(true);
+```
+
+## Common mistakes
+
+- **Using `adaptor` without installing `immer`.** `immer` is optional, so projects that use `adaptor` must install it.
+- **Passing `adaptor` to reducer `dispatch`.** Reducer adapters expect actions; use draft syntax inside the reducer or switch to plain state.
+- **Using it for primitive state.** `adaptor` is for object state.
+- **Mutating state outside the draft callback.** Only mutate the `draft` value passed to `adaptor`.

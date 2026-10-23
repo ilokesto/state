@@ -1,0 +1,45 @@
+---
+title: "logger"
+description: "Log state updates during development."
+---
+
+# logger
+
+`logger` adds console groups around state updates. It is useful while shaping a store or debugging reducer actions.
+
+## Signature
+
+```ts lineNumbers
+logger(options?: LoggerOptions): PipeAnyMiddleware
+
+type LoggerOptions = {
+  collapsed?: boolean;
+  diff?: boolean;
+  timestamp?: boolean;
+};
+```
+
+## Example
+
+```ts lineNumbers
+import { logger } from '@ilokesto/state/middleware';
+import { pipe } from '@ilokesto/state/utils';
+
+const store = pipe
+  .use(logger({ collapsed: true, diff: true, timestamp: true }))
+  .create({ count: 0 });
+
+store.setState((state) => ({ count: state.count + 1 }));
+```
+
+## What gets logged
+
+- update title with the action name when reducer middleware supplied one,
+- previous state,
+- next state,
+- optional timestamp,
+- optional shallow-ish JSON diff for object keys.
+
+## Practical notes
+
+`logger` is skipped when `process.env.NODE_ENV === "production"`. The diff output is best-effort debugging information based on JSON serialization, not a formal patch. Use it to inspect flow, not to drive application logic.

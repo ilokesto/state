@@ -1,0 +1,41 @@
+---
+title: "throttle"
+description: "Pass the leading update and drop updates until the throttle window ends."
+---
+
+# throttle
+
+`throttle` uses leading-drop behavior: the first update passes through immediately, then later updates are dropped until the wait window ends. Dropped updates are not queued or retried.
+
+## Signature
+
+```ts lineNumbers
+throttle(wait?: number): PipeAnyMiddleware
+```
+
+`wait` is measured in milliseconds and defaults to `300`. When supplied, it must be a finite non-negative number.
+
+## Example
+
+{/* state-example:throttle-disposal */}
+```ts
+import { dispose, throttle } from '@ilokesto/state/middleware';
+import { pipe } from '@ilokesto/state/utils';
+
+const store = pipe
+  .use(throttle(250))
+  .create({ count: 0 });
+
+store.setState({ count: 1 });
+store.setState({ count: 2 }); // dropped during the wait window
+
+dispose(store);
+```
+
+## Cleanup ownership
+
+`throttle` owns the pending timer for the store it prepares. Call `dispose(store)` when that specific store is no longer needed to cancel the timer and reopen the gate. Disposal is scoped to the supplied store, does not invalidate it or unsubscribe consumers, and is safe to call repeatedly. It still attempts every registered cleanup after a failure, then throws an `AggregateError` containing each original thrown value when any cleanup fails.
+
+## Composition constraints
+
+`history()` cannot share a chain with `throttle()` because history records only successful synchronous commits. Either declaration order is rejected with `PipeConfigurationError` code `MIDDLEWARE_CONFLICT`; pipe preserves the declared order instead of rearranging middleware.

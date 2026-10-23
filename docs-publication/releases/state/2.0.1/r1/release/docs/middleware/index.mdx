@@ -1,0 +1,74 @@
+---
+title: "Middleware introduction"
+description: "How @ilokesto/state middleware is composed and when each helper fits."
+---
+
+# Middleware introduction
+
+`@ilokesto/state/middleware` provides small wrappers around `@ilokesto/store` middleware. Each helper returns registered pipe middleware. Pass that value to `pipe.use(...)`, add more middleware with additional `.use()` calls, then create a store from plain state with `.create(initialState)`.
+
+The public composition API is builder-only. `pipe` is not callable, and middleware helpers do not expose an immediate `initialState` or existing-`Store<T>` construction mode.
+
+## When middleware runs
+
+Middleware runs inside the underlying store update pipeline before the final state is applied. Reducer adapters also use the store middleware pipeline: dispatched actions are converted into next state before the rest of the update continues.
+
+## Composition with `pipe`
+
+```ts lineNumbers
+import { jsonStorage, logger, persist, validate } from '@ilokesto/state/middleware';
+import { pipe } from '@ilokesto/state/utils';
+
+const schema = {
+  '~standard': {
+    version: 1,
+    vendor: 'app',
+    validate(value: unknown) {
+      return typeof value === 'object' && value !== null
+        && 'count' in value && typeof value.count === 'number'
+        ? { value: { count: value.count } }
+        : { issues: [{ message: 'State must contain a numeric count' }] };
+    },
+  },
+} as const;
+
+const decodeCounter = (value: unknown): { count: number } | null => {
+  const result = schema['~standard'].validate(value);
+  return 'value' in result ? result.value : null;
+};
+
+const store = pipe
+  .use(validate(schema))
+  .use(logger({ collapsed: true, diff: true }))
+  .use(persist({ key: 'counter', storage: jsonStorage(() => window.localStorage), decode: decodeCounter }))
+  .create({ count: 0 });
+
+await store.persist.rehydrate();
+```
+
+## Available middleware
+
+| Middleware | Use it for | Key caveat |
+|---|---|---|
+| [`logger`](/en/state/middleware/logger) | Development-time state update logs | Disabled in production; diff is debug output. |
+| [`validate`](/en/state/middleware/validate) | Synchronous Standard Schema validation | Async schema results are rejected. |
+| [`debounce`](/en/state/middleware/debounce) | Delaying and coalescing rapid updates | Reads before the timer fires still see previous state. |
+| [`history`](/en/state/middleware/history) | Undo and redo for synchronous changes | Cannot share a chain with debounce or throttle. |
+| [`throttle`](/en/state/middleware/throttle) | Leading-edge rate limiting | Updates during the wait window are dropped. |
+| [`devtools`](/en/state/middleware/devtools) | Redux DevTools inspection | Browser extension dependent; disabled in production. |
+| [`persist`](/en/state/middleware/persist) | Async persistence through a storage factory | Restore explicitly; await `flush()` for saving guarantees. |
+| `dispose(store)` | Release middleware-owned resources | Call it when the store is no longer needed. |
+
+## Ordering advice
+
+Put logger after validation when logs should describe only accepted updates. Persistence observes actual commits: rejected updates are not saved, and delayed commits are saved when they occur. Declare `debounce` before `persist`; the reverse order remains rejected with `MIDDLEWARE_ORDER`. Restoration validates and commits immediately without passing through debounce or throttle.
+
+`history()` records only successful synchronous commits, so it cannot share a pipe chain with `debounce()` or `throttle()` in either declaration order. Those combinations are rejected with `MIDDLEWARE_CONFLICT`; pipe never reorders a chain to make it valid.
+
+## Store disposal
+
+Timer-based middleware and middleware with external subscriptions register cleanup on the store they prepare. Call `dispose(store)` from `@ilokesto/state/middleware` when that specific store is no longer needed. It cancels pending debounce or throttle work and releases middleware-owned resources such as DevTools subscriptions. Disposal does not unsubscribe consumers or invalidate the Store; it is scoped to the supplied store, is safe to call repeatedly, and runs a newly registered cleanup only on a later call.
+
+Disposal attempts every registered cleanup even when one throws. If one or more cleanups throw, `dispose` rethrows an `AggregateError` whose `errors` contain the original errors or other thrown values.
+
+Persistence disposal is terminal for that store's persistence controls. It cleans up only the adapter instance owned by that store, even when another store uses the same factory. Await `store.persist.flush()` before disposal if saving must finish; disposal alone makes no saving guarantee.

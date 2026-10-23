@@ -1,0 +1,50 @@
+---
+title: "history"
+description: "Add synchronous undo and redo controls to a piped store."
+---
+
+# history
+
+`history` records successful synchronous state changes and adds undo/redo controls to the prepared store.
+
+## Signature
+
+```ts lineNumbers
+history(options?: HistoryOptions): PipeAnyMiddleware
+
+type HistoryOptions = {
+  readonly limit?: number;
+};
+```
+
+`limit` is the maximum number of undo entries and defaults to `300`. It must be a finite non-negative integer. Use `HistoryStore<State>` when an API accepts a store with the controls, and `HistoryControls` when it accepts only the controls.
+
+## Example
+
+{/* state-example:history-controls */}
+```ts
+import { history } from '@ilokesto/state/middleware';
+import type { HistoryStore } from '@ilokesto/state/middleware';
+import { pipe } from '@ilokesto/state/utils';
+
+const store: HistoryStore<{ count: number }> = pipe
+  .use(history({ limit: 20 }))
+  .create({ count: 0 });
+
+store.setState({ count: 1 });
+store.undo();
+store.redo();
+store.clearHistory();
+```
+
+`undo()` and `redo()` apply the recorded state through the store, so compatible middleware can observe the replay. Replayed states are not recorded again. `canUndo()` and `canRedo()` report whether a replay is available; `clearHistory()` removes entries without changing current state.
+
+## Composition constraints
+
+History needs a synchronous commit boundary. It cannot share a pipe chain with `debounce()` or `throttle()` in either declaration order. Those combinations throw `PipeConfigurationError` with code `MIDDLEWARE_CONFLICT`; pipe does not reorder middleware to make the chain valid.
+
+History middleware itself does not own timers or subscriptions. If the same store also uses middleware that registers cleanup, call `dispose(store)` when that store is no longer needed. See [Middleware](/en/state/middleware) for ownership and idempotency details.
+
+## Control collisions
+
+History adds `undo`, `redo`, `canUndo`, `canRedo`, and `clearHistory` as immutable store properties. If the store already has one of those properties, setup throws `HistoryConfigurationError` with code `CONTROL_COLLISION` before installing controls.

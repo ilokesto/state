@@ -1,0 +1,103 @@
+---
+title: "Utility"
+description: "Compose middleware with pipe and write Immer-style object updates with adaptor."
+---
+
+# Utility
+
+`@ilokesto/state/utils` exports the pipe helpers that are not tied to a framework adapter. The separate `@ilokesto/state/adaptor` subpath exports the Immer-backed update helper:
+
+- [`pipe`](/en/state/utility/pipe) creates an `@ilokesto/store` instance and applies registered middleware in order.
+- [`definePipeableMiddleware`](/en/state/utility/pipe#custom-middleware) registers custom middleware metadata for `pipe.use(...)`.
+- [`PipeConfigurationError`](/en/state/utility/pipe#configuration-errors) reports invalid runtime pipe configurations.
+- [`adaptor`](/en/state/utility/adaptor) wraps Immer `produce` so object updates can be written with draft mutation syntax.
+
+Use Utility pages when you are building the store before connecting it to React, Vue, Svelte, Solid, or Angular.
+
+## Why utilities are separate from adapters
+
+Framework adapters answer “how does this state become reactive in my UI?” Utilities answer “how do I prepare or write the state itself?” That separation lets the same store setup be reused across multiple frameworks or outside UI code.
+
+```ts lineNumbers
+import { create } from '@ilokesto/state/react';
+import { logger, persist } from '@ilokesto/state/middleware';
+import { pipe } from '@ilokesto/state/utils';
+
+type PreferencesState = { theme: 'system' | 'light' | 'dark' };
+
+const decodePreferences = (value: unknown): PreferencesState | null => {
+  if (typeof value !== 'object' || value === null || !('theme' in value)) return null;
+  return value.theme === 'system' || value.theme === 'light' || value.theme === 'dark'
+    ? { theme: value.theme }
+    : null;
+};
+
+const preferencesStore = pipe
+  .use(persist({ local: 'preferences', decode: decodePreferences }))
+  .use(logger({ collapsed: true }))
+  .create<PreferencesState>({ theme: 'system' });
+
+export const usePreferences = create(preferencesStore);
+```
+
+The component still uses the normal adapter API. The utility layer only prepares the store passed into `create`.
+
+## Installation notes
+
+`pipe` only needs `@ilokesto/state` and its dependency on `@ilokesto/store`.
+
+`adaptor` uses `immer`, which is an optional peer dependency. Install it only if you use `adaptor`.
+
+```bash lineNumbers
+pnpm add immer
+```
+
+## Choose the right utility
+
+| Utility | Use it when | Avoid it when |
+| --- | --- | --- |
+| [`pipe`](/en/state/utility/pipe) | You want to create a store and apply registered middleware left-to-right. | You already own a `Store<T>` and want to mutate that exact instance manually. |
+| [`definePipeableMiddleware`](/en/state/utility/pipe#custom-middleware) | You are exposing custom middleware to a pipe chain. | The middleware is only used outside `pipe`. |
+| [`adaptor`](/en/state/utility/adaptor) | Object updates are easier to express as draft mutations. | State is primitive, or you do not want to install `immer`. |
+
+## Typical composition flow
+
+1. Define initial state.
+2. Compose middleware with `pipe` if the state needs persistence, logging, validation, debouncing, or DevTools.
+3. Pass the resulting store to a framework adapter’s `create`.
+4. Use `adaptor` inside `setState` calls only where draft syntax improves readability.
+
+```tsx lineNumbers
+import { create } from '@ilokesto/state/react';
+import { validate } from '@ilokesto/state/middleware';
+import { adaptor } from '@ilokesto/state/adaptor';
+import { pipe } from '@ilokesto/state/utils';
+
+const profileStore = pipe
+  .use(validate(profileSchema))
+  .create({ name: '', tags: [] as string[] });
+
+const useProfile = create(profileStore);
+
+function AddTagButton({ tag }: { tag: string }) {
+  const [, setProfile] = useProfile((state) => state.tags);
+
+  return (
+    <button
+      onClick={() =>
+        setProfile(adaptor((draft) => {
+          draft.tags.push(tag);
+        }))
+      }
+    >
+      Add tag
+    </button>
+  );
+}
+```
+
+## Related pages
+
+- [Middleware](/en/state/middleware) explains the middleware functions that `pipe` commonly composes.
+- [Plain state guide](/en/state/guides/plain-state) shows when `setState`-style updates are enough.
+- [Reducer state guide](/en/state/guides/reducer-state) shows when named actions are a better fit.

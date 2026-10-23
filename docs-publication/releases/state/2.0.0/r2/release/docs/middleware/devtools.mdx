@@ -1,0 +1,36 @@
+---
+title: "devtools"
+description: "Connect state updates to the Redux DevTools extension in development."
+---
+
+# devtools
+
+`devtools` integrates a store with the Redux DevTools browser extension. It initializes the extension with current state, sends updates, and handles selected DevTools dispatch messages.
+
+## Signature
+
+```ts lineNumbers
+devtools(name: string): PipeAnyMiddleware
+```
+
+## Example
+
+```ts lineNumbers
+import { devtools, logger } from '@ilokesto/state/middleware';
+import { pipe } from '@ilokesto/state/utils';
+
+const store = pipe
+  .use(devtools('counter'))
+  .use(logger())
+  .create({ count: 0 });
+```
+
+## Supported DevTools actions
+
+- `RESET`: resets to the original initial state or the passed store initial state, then re-initializes DevTools.
+- `COMMIT`: re-initializes DevTools with the current state.
+- `ROLLBACK`: parses the DevTools state payload and sets the store state.
+
+## Production and browser caveats
+
+`devtools` is disabled when `process.env.NODE_ENV === "production"`. It also requires `window.__REDUX_DEVTOOLS_EXTENSION__`, so it is a browser-only development aid.

@@ -1,7 +1,12 @@
 .DS_Store
-.git*
+.migration/
+docs/
+docs-publication/
+website/
+scripts/
+test/
+e2e/
+examples/
 node_modules/
-src/
-vite.config.ts
-tsconfig.json
-stats.htmldocs/
+AGENTS.md
+OWNERSHIP.json

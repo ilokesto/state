@@ -1,0 +1,36 @@
+---
+title: "Read and write APIs"
+description: "readOnly, writeOnly, subscribe, and lifecycle-safe usage."
+---
+
+# Read and write APIs
+
+`readOnly` and `writeOnly` exist for code that should not create a framework subscription.
+
+## `readOnly()`
+
+`readOnly()` synchronously reads from the underlying store. Full object-state reads return `Readonly<T>` and selectors receive it. Callable state remains exact `T`, preserving arbitrary generic and overloaded signatures and its own-property modifiers as declared. You can pass a selector.
+
+```ts lineNumbers
+const current = useCounter.readOnly();
+const count = useCounter.readOnly((state) => state.count);
+```
+
+Use it in event handlers, router guards, one-off effects, or tests. It does not make a component reactive.
+
+## `writeOnly()`
+
+`writeOnly()` returns the writer without subscribing. In plain state it writes next state; in reducer state it dispatches actions.
+
+```ts lineNumbers
+const setCounter = useCounter.writeOnly();
+setCounter((state) => ({ count: state.count + 1 }));
+```
+
+## `subscribe`
+
+Angular exposes `subscribe` in its result and adapter object. Svelte exposes `subscribe` as the standard Svelte store method. Other adapters subscribe internally for reactive reads.
+
+## Caveat
+
+Do not call reactive adapter functions outside their lifecycle owner just to read current state. Use `readOnly()` instead; Vue, Solid, and Angular intentionally throw helpful lifecycle errors for that case.

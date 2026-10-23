@@ -1,0 +1,51 @@
+---
+title: "Package surface"
+description: "Entry points, peer dependencies, and the root entrypoint caveat."
+---
+
+# Package surface
+
+The public entrypoint paths are defined by `state/package.json` exports. The symbols available on those paths differ between the currently versioned `@ilokesto/state@1.0.4` and the pending-major workspace source; the table marks that boundary.
+
+## Entry point matrix
+
+| Import | Purpose |
+|---|---|
+| `@ilokesto/state` | **Pending major:** framework-neutral `Store`, `createStore`, `createReducer`, `pipe`, `definePipeableMiddleware`, `PipeConfigurationError`, and `dispose`, plus their public state contracts. The current npm version does not provide these root runtime APIs. |
+| `@ilokesto/state/react` | React `create()` adapter and `UseState`, `UseReducer` types. |
+| `@ilokesto/state/vue` | Vue `create()` adapter and `UseState`, `UseReducer` types. |
+| `@ilokesto/state/svelte` | Svelte `create()` adapter and `UseState`, `UseReducer` types. |
+| `@ilokesto/state/solid` | Solid `create()` adapter and `UseState`, `UseReducer` types. |
+| `@ilokesto/state/angular` | Angular `create()` adapter and `AngularOptions`, `UseState`, `UseReducer` types. |
+| `@ilokesto/state/middleware` | Registered middleware, store disposal, and middleware types. |
+| `@ilokesto/state/utils` | The pipe builder, custom-middleware registration, configuration errors, and pipe types. |
+| `@ilokesto/state/adaptor` | `adaptor`; requires the optional `immer` peer. |
+| `@ilokesto/state/package.json` | Package metadata export for tooling that needs this package manifest. |
+
+## Middleware exports
+
+`@ilokesto/state/middleware` exports `debounce`, `throttle`, `devtools`, `dispose`, `history`, `HistoryConfigurationError`, `logger`, `persist`, and `validate`.
+
+Its public types are `HistoryControls`, `HistoryOptions`, `HistoryStore`, `OnRehydrateStorage`, `OnRehydrateStorageCallback`, `PersistControls`, `PersistDecoder`, `PersistDecoderStateDiagnostic`, `PersistMigration`, `PersistStore`, `SafePersistConfig`, `SafePersistCookieConfig`, `SafePersistLocalConfig`, and `SafePersistSessionConfig`.
+
+## Utility exports
+
+`@ilokesto/state/utils` exports `pipe`, `definePipeableMiddleware`, and `PipeConfigurationError`.
+
+Its public types are `Pipe`, `PipeAnyMiddleware`, `PipeBuilder`, `PipeCapability`, `PipeConfigurationErrorCode`, `PipeDuplicatePolicy`, `PipeMiddleware`, `PipeMiddlewareConflictDiagnostic`, and `PipeMiddlewareMetadata`.
+
+## Root entrypoint caveat
+
+For `@ilokesto/state@1.0.4`, import runtime APIs from subpaths. The root construction exports shown above belong to the pending major and are not available merely because you installed the current npm version. In either version, framework adapter APIs such as `create` and `bind` come from a framework subpath, never the root.
+
+```ts lineNumbers
+// Available from the framework subpath
+import { create } from '@ilokesto/state/react';
+import { logger } from '@ilokesto/state/middleware';
+```
+
+After adopting the pending major, use `createStore` or `createReducer` from the root and connect the result with `bind` or `bindReducer` from a framework subpath. See [Vanilla state and binding](/en/state/reference/vanilla) and the [migration guide](/en/state/advanced/migration).
+
+## Peer dependencies
+
+Framework peers are optional: install only the adapter framework you use. `immer` is optional and only needed when you use `adaptor` from `@ilokesto/state/adaptor`.

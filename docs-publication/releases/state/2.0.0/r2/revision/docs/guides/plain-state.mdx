@@ -1,0 +1,173 @@
+---
+title: "Plain state guide"
+description: "Design small shared state with setState-style updates."
+---
+
+# Plain state guide
+
+Plain state is the simplest `@ilokesto/state` pattern: keep one value in a store and replace it with `setState`. Use it when the next state can be described directly from the previous state, without naming every transition as a domain action.
+
+Good examples are UI preferences, filters, lightweight form drafts, modals, selected IDs, wizard progress, and other state that is shared by more than one component but does not deserve a full reducer yet.
+
+## When to choose plain state
+
+Choose plain state when most of these are true:
+
+- The state shape is small and easy to read as an object.
+- Updates are local to the UI feature: set a query, toggle a flag, reset a page.
+- You do not need a strict action log or action union type.
+- The same state should be readable from components and from non-component code.
+- Validation, persistence, logging, or debouncing can be added as middleware later.
+
+Prefer [reducer state](/en/state/guides/reducer-state) when the update vocabulary is part of the domain, when multiple screens must dispatch the same named transition, or when tests should assert actions rather than raw object replacements.
+
+## Start with the state shape
+
+Write the state type as the public contract of the feature. Keep derived values out of the store when they can be computed from selectors.
+
+```ts lineNumbers
+type SearchState = {
+  query: string;
+  page: number;
+  pageSize: number;
+  sort: 'relevance' | 'newest';
+};
+
+const initialSearchState: SearchState = {
+  query: '',
+  page: 1,
+  pageSize: 20,
+  sort: 'relevance',
+};
+```
+
+A good plain-state shape is boring: serializable, explicit, and not tied to one component instance. If the state contains framework objects, class instances, or disposable resources, keep those outside the store and store only the stable IDs or flags.
+
+## Create the adapter hook or store
+
+Import from the framework subpath you use. The root package does not export `create`.
+
+```tsx lineNumbers
+import { create } from '@ilokesto/state/react';
+
+const useSearch = create<SearchState>(initialSearchState);
+```
+
+React returns `[selection, setState]`. Vue, Solid, and Angular return objects with a reactive `state` plus `setState`. Svelte returns a Svelte-compatible store with `set`, `update`, `setState`, and `select`.
+
+## Select narrowly
+
+Select the smallest value a component needs. This keeps component code clear and avoids coupling unrelated UI to the full state object.
+
+```tsx lineNumbers
+function SearchInput() {
+  const [query, setSearch] = useSearch((state) => state.query);
+
+  return (
+    <input
+      value={query}
+      onChange={(event) =>
+        setSearch((prev) => ({
+          ...prev,
+          query: event.currentTarget.value,
+          page: 1,
+        }))
+      }
+    />
+  );
+}
+```
+
+The selector controls the value returned to the component. The writer still updates the full state, so write complete object updates or updater functions that return the full next state.
+
+## Extract named writers when update logic repeats
+
+Plain state does not mean every component should inline object-spread logic. If an update appears in more than one place, create a small writer function near the store.
+
+```ts lineNumbers
+const writeSearch = useSearch.writeOnly();
+
+export function setQuery(query: string) {
+  writeSearch((prev) => ({ ...prev, query, page: 1 }));
+}
+
+export function setSort(sort: SearchState['sort']) {
+  writeSearch((prev) => ({ ...prev, sort, page: 1 }));
+}
+
+export function resetSearch() {
+  writeSearch(initialSearchState);
+}
+```
+
+This gives you most of the readability of actions while keeping the store in plain-state mode. If the named writers grow into a large command surface, that is a signal to move to reducer state.
+
+## Read outside a component
+
+Use `readOnly` for synchronous snapshots in route guards, request builders, tests, or utility modules. It does not subscribe.
+
+```ts lineNumbers
+export function buildSearchUrl() {
+  const { query, page, pageSize, sort } = useSearch.readOnly();
+  const params = new URLSearchParams({
+    q: query,
+    page: String(page),
+    size: String(pageSize),
+    sort,
+  });
+
+  return `/api/search?${params}`;
+}
+```
+
+Use `writeOnly()` when non-component code needs to update the state without creating a framework lifecycle subscription.
+
+## Add middleware without changing component code
+
+Middleware wraps the underlying `@ilokesto/store` before the adapter is created. Components keep calling the same adapter API.
+
+```ts lineNumbers
+import { create } from '@ilokesto/state/react';
+import { logger, persist } from '@ilokesto/state/middleware';
+import { pipe } from '@ilokesto/state/utils';
+
+const decodeSearch = (value: unknown): SearchState | null => {
+  if (typeof value !== 'object' || value === null) return null;
+  if (!('query' in value) || typeof value.query !== 'string') return null;
+  if (!('page' in value) || typeof value.page !== 'number') return null;
+  if (!('pageSize' in value) || typeof value.pageSize !== 'number') return null;
+  if (!('sort' in value) || (value.sort !== 'relevance' && value.sort !== 'newest')) return null;
+  return { query: value.query, page: value.page, pageSize: value.pageSize, sort: value.sort };
+};
+
+const searchStore = pipe
+  .use(persist({ local: 'search-state', decode: decodeSearch }))
+  .use(logger({ collapsed: true }))
+  .create<SearchState>(initialSearchState);
+
+export const useSearch = create<SearchState>(searchStore);
+```
+
+See [Middleware](/en/state/middleware) for ordering and caveats. For plain state, validation middleware is often useful because every write is a candidate full-state replacement.
+
+## Testing plain state
+
+In unit tests, prefer `writeOnly()` and `readOnly()` over mounting a component when you only need to test state behavior.
+
+```ts lineNumbers
+const write = useSearch.writeOnly();
+
+write({ ...initialSearchState, query: 'docs' });
+expect(useSearch.readOnly((state) => state.query)).toBe('docs');
+
+write(initialSearchState);
+```
+
+Reset the store between tests if the adapter is module-level. Module-level stores are shared singletons by design.
+
+## Common mistakes
+
+- **Mutating previous state in place.** Return a new object from updater functions. If you want Immer-style mutation syntax, use [`adaptor`](/en/state/utility/adaptor).
+- **Selecting the whole state everywhere.** It works, but components become harder to reason about. Prefer narrow selectors.
+- **Calling reactive adapter functions outside lifecycle scope.** Use `readOnly` and `writeOnly` in module code instead.
+- **Letting writer helpers become a hidden reducer.** When helper names become the feature vocabulary, consider reducer state.

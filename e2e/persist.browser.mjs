@@ -6,7 +6,8 @@ import { fileURLToPath } from 'node:url';
 import { after, afterEach, before, beforeEach, test } from 'node:test';
 import { chromium } from '@playwright/test';
 
-const packages = new URL('../../', import.meta.url);
+const root = new URL('../', import.meta.url);
+const installedStore = new URL('node_modules/@ilokesto/store/', root);
 const document = `<!doctype html><html><head>
 <script type="importmap">{"imports":{"@ilokesto/store":"/store/dist/index.js"}}</script>
 </head><body></body></html>`;
@@ -28,7 +29,11 @@ before(async () => {
       return;
     }
     try {
-      const content = await readFile(fileURLToPath(new URL(`.${pathname}`, packages)));
+      // Own build output plus the registry-installed @ilokesto/store payload; no sibling checkout.
+      const target = pathname.startsWith('/state/')
+        ? new URL(`.${pathname.slice('/state'.length)}`, root)
+        : new URL(`.${pathname.slice('/store'.length)}`, installedStore);
+      const content = await readFile(fileURLToPath(target));
       response.writeHead(200, { 'content-type': 'text/javascript' }).end(content);
     } catch (error) {
       response.writeHead(error.code === 'ENOENT' ? 404 : 500).end();

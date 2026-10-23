@@ -1,0 +1,103 @@
+---
+title: "Persist migrations"
+description: "Migrate to storage factories and an explicit asynchronous persistence lifecycle."
+---
+
+# Persist migrations
+
+The persistence redesign is a **breaking API change shipped as a patch**, by the explicit v2 correction decision in [issue #102](https://github.com/ilokesto/ilokesto/issues/102). This is an exception for this release, not a general semver policy change.
+
+## Old and new APIs
+
+| Before | After |
+| --- | --- |
+| `{ local: key, decode }` | `{ key, storage: jsonStorage(() => window.localStorage), decode }` |
+| `{ session: key, decode }` | `{ key, storage: jsonStorage(() => window.sessionStorage), decode }` |
+| `{ cookie: key, decode }` | `{ key, storage: cookieStorage({ path: '/' }), decode }` |
+| JSON conversion for files | `storage: indexedDBStorage({ database: 'my-app-state' })` |
+| Eager hydration / `skipHydration: true` | No creation-time I/O; explicitly `await store.persist.rehydrate()` |
+| `hasHydrated()` | `getStatus().hydration === 'hydrated'` |
+| `onRehydrateStorage` | `subscribe(listener)` plus rejected-operation handling |
+| Synchronous restoration and deletion | `await rehydrate()` and `await clearStorage()` |
+| Assuming a committed state is saved | `await flush()` before reporting saved or disposing |
+
+Import adapters from `@ilokesto/state/middleware`. Each helper already returns a factory; do not wrap it in another `() =>`. Only `jsonStorage` receives a getter, so browser globals remain unevaluated until activation.
+
+## Upgrade an existing JSON store
+
+Keep the same storage and key to read existing `{ state, version }` data. Cookies retain the existing encoding. Switching to IndexedDB does not automatically copy data from another storage.
+
+This complete browser-module example reads the existing `settings` key, applies migrations, validates the result, and waits for any migration write to finish.
+
+```ts lineNumbers
+import { dispose, jsonStorage, persist } from '@ilokesto/state/middleware';
+import type { PersistMigration } from '@ilokesto/state/middleware';
+import { pipe } from '@ilokesto/state/utils';
+
+type SettingsV1 = { theme: string };
+type SettingsState = { theme: string; count: number };
+
+const toV1: PersistMigration<unknown, SettingsV1> = (old) => ({
+  theme: typeof old === 'string' ? old : 'light',
+});
+const toCurrent: PersistMigration<SettingsV1, SettingsState> = (old) => ({
+  ...old,
+  count: 0,
+});
+const decodeSettings = (value: unknown): SettingsState | null => {
+  if (typeof value !== 'object' || value === null) return null;
+  if (!('theme' in value) || typeof value.theme !== 'string') return null;
+  if (!('count' in value) || typeof value.count !== 'number') return null;
+  return { theme: value.theme, count: value.count };
+};
+
+const settingsStore = pipe
+  .use(persist({
+    key: 'settings',
+    storage: jsonStorage(() => window.localStorage),
+    migrate: [toV1, toCurrent],
+    decode: decodeSettings,
+  }))
+  .create<SettingsState>({ theme: 'light', count: 0 });
+
+try {
+  await settingsStore.persist.rehydrate();
+  await settingsStore.persist.flush();
+} finally {
+  dispose(settingsStore);
+}
+```
+
+All adapters, including session storage, now use the same migration pipeline. Migration functions run from the stored version index through the remaining array, then `decode` and registered state validation run before the restored commit. The data version is the migration array length. It is separate from IndexedDB's schema `version` and the store's internal commit sequence.
+
+Invalid envelopes, future data versions, failed migration, or rejected decode preserve both the live state and stored value and reject restoration. A successful migration queues a rewrite; await `flush()` for its completion. Current-version data is decoded without a rewrite.
+
+## Resolve edits before restoration
+
+By default, editing before restoration finishes rejects with `PersistError.code === 'CONFLICT'` and leaves memory and storage intact. Offer the user two explicit choices:
+
+- `await store.persist.rehydrate({ conflict: 'keep-current' })` keeps current edits and queues them for saving.
+- `await store.persist.rehydrate({ conflict: 'use-stored' })` discards pending current edits and applies the validated stored state.
+
+There is no deep merge. `flush()` before successful hydration rejects with `NOT_HYDRATED`, so it cannot silently overwrite unread data.
+
+After building, run this example from the workspace root:
+
+```bash
+node packages/state/examples/persist-lifecycle.mjs
+```
+
+It uses a metadata-free async storage factory, restores a saved counter, resolves both conflict policies, clears just its key while retaining memory, and disposes independently owned instances. The program verifies the resulting values without timers or sleeps.
+
+## Files, completion, and cleanup
+
+- IndexedDB preserves native `File`, `Blob`, `Map`, `Set`, `Date`, and `ArrayBuffer` with structured clone. File names, MIME types, and contents survive without base64 encoding.
+- JSON adapters are limited to JSON-representable values. `Date.toJSON()` becomes a string; `Map`, `Set`, `Blob`, and other unsupported values reject instead of silently losing their contents. There is no automatic IndexedDB-to-localStorage fallback.
+- Create and revoke preview `blob:` URLs in the UI from restored blobs; never persist the URLs.
+- A successful IndexedDB write means the transaction completed, not just that its request succeeded. Clone, quota, and transaction errors remain observable failures.
+- `flush()` waits for its call-time target, not future edits, and never forces a state debounce timer. Failed writes retain pending state and retry on a new commit or `flush()`.
+- `clearStorage()` deletes only its key after earlier writes and preserves memory. Waiting flush operations superseded by clearing reject with `CLEARED`.
+- `dispose(store)` owns only that store's adapter and pending work. Reusing a factory does not share connections or cleanup ownership. Await `flush()` first when saving before disposal is required; disposal does not undo a completed transaction.
+- Restoration is an immediate validated commit and a new history baseline. The restriction on `history()` together with `debounce()` or `throttle()` remains.
+
+See [persist](/en/state/middleware/persist) for the complete status, error, adapter, and SSR contracts.

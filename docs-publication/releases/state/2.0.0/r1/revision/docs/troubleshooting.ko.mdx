@@ -1,0 +1,44 @@
+---
+title: "문제 해결"
+description: "@ilokesto/state에서 자주 만나는 문제와 해결법입니다."
+---
+
+# 문제 해결
+
+## root import에서 `create`가 undefined입니다
+
+프레임워크 subpath에서 편의 함수 `create`를 import하세요.
+
+```ts lineNumbers
+import { create } from '@ilokesto/state/react';
+```
+
+프레임워크 subpath는 `bind`도 내보내고 root는 `createStore`와 `createReducer`를 내보냅니다. 이전 메이저에서 바뀐 내용은 [이전 가이드](/ko/state/advanced/migration)를 확인하세요.
+
+## Vue가 setup 또는 effectScope 안에서 실행하라고 합니다
+
+adapter는 `setup` 또는 active `effectScope` 안에서 호출하세요. Vue 밖의 synchronous read에는 `readOnly()`를 사용하세요.
+
+## Solid가 reactive owner가 필요하다고 합니다
+
+adapter는 component 또는 `createRoot` 안에서 호출하세요. non-reactive service code에서는 `readOnly()`와 `writeOnly()`를 사용하세요.
+
+## Angular가 injection context를 요구합니다
+
+`inject(DestroyRef)`가 동작하는 곳에서 호출하거나 `{ destroyRef }`를 명시적으로 넘기세요.
+
+## `validate`가 async schema를 받지 않습니다
+
+validate middleware는 async Standard Schema result를 지원하지 않습니다. validation을 synchronous하게 유지하거나 `setState` 전에 검증하세요.
+
+## Redux DevTools에 update가 보이지 않습니다
+
+`devtools`는 production에서 비활성화되며 browser extension이 있어야 동작합니다.
+
+## persisted state가 migrate되지 않았습니다
+
+`persist` migration은 `local`과 `cookie`에서 실행되고 `session`에서는 실행되지 않습니다. 저장된 `{ state, version }` payload와 migration array 길이를 확인하세요.
+
+## `adaptor`를 import하거나 사용할 수 없습니다
+
+optional peer dependency인 `immer`를 설치하고, `@ilokesto/state/adaptor`에서 `adaptor`를 import한 뒤 object state에서 사용하세요.

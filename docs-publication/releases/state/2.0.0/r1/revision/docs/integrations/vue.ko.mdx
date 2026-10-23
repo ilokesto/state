@@ -1,0 +1,68 @@
+---
+title: "Vue 연동"
+description: "Vue setup과 effectScope에서 @ilokesto/state를 사용합니다."
+---
+
+# Vue 연동
+
+Vue adapter는 `setup()` 또는 active `effectScope` 안에서 사용하세요. `@ilokesto/state/vue`에서 import합니다.
+
+## Plain state composable
+
+plain state는 `{ state: ComputedRef<S>, setState }`를 반환합니다.
+
+```ts lineNumbers
+import { create } from '@ilokesto/state/vue';
+
+const useCounter = create({ count: 0, label: 'Clicks' });
+
+export default {
+  setup() {
+    const { state: count, setState } = useCounter((state) => state.count);
+    const { state: label } = useCounter((state) => state.label);
+    const increment = () => setState((prev) => ({ ...prev, count: prev.count + 1 }));
+
+    return { count, label, increment };
+  },
+};
+```
+
+`state`는 `ComputedRef`입니다. template에서는 자연스럽게 unwrap되고, script code에서는 `state.value`로 읽을 수 있습니다.
+
+## Reducer composable
+
+```ts lineNumbers
+import { create } from '@ilokesto/state/vue';
+
+type Action = { type: 'increment' } | { type: 'reset' };
+
+const reduce = (state: { count: number }, action: Action) => {
+  if (action.type === 'increment') return { count: state.count + 1 };
+  if (action.type === 'reset') return { count: 0 };
+  return state;
+};
+
+const useCounter = create(reduce, { count: 0 });
+
+export function useCounterActions() {
+  const { state, dispatch } = useCounter((state) => state.count);
+  const increment = () => dispatch({ type: 'increment' });
+  return { count: state, increment };
+}
+```
+
+## Vue scope 밖에서 사용하기
+
+Vue reactive call은 `setup()`/`effectScope` 밖에서 의도적으로 error를 던집니다. module code에서는 sync helper를 사용하세요.
+
+```ts lineNumbers
+const count = useCounter.readOnly((state) => state.count);
+const dispatch = useCounter.writeOnly();
+dispatch({ type: 'reset' });
+```
+
+## 주의할 점
+
+- reactive read는 `getCurrentScope()`가 존재해야 합니다.
+- cleanup은 `onScopeDispose`에 등록됩니다. subscribed read를 Vue scope 밖에서 우회하지 마세요.
+- one-time read에는 `readOnly()`를 사용하세요. 이 값은 reactive하지 않습니다.

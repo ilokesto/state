@@ -1,0 +1,66 @@
+---
+title: "Angular"
+description: "Use @ilokesto/state with Angular signals and DestroyRef cleanup."
+---
+
+# Angular
+
+Use the Angular adapter where Angular can provide cleanup through an injection context or explicit `DestroyRef`. Import from `@ilokesto/state/angular`.
+
+## Plain state signal
+
+```ts lineNumbers
+import { Component, DestroyRef, inject } from '@angular/core';
+import { create } from '@ilokesto/state/angular';
+
+const useCounter = create({ count: 0, label: 'Clicks' });
+
+@Component({ selector: 'counter-view', template: `<button (click)="inc()">{{ label() }}: {{ count() }}</button>` })
+export class CounterView {
+  private destroyRef = inject(DestroyRef);
+  private countResult = useCounter((state) => state.count, { destroyRef: this.destroyRef });
+  private labelResult = useCounter((state) => state.label, { destroyRef: this.destroyRef });
+
+  count = this.countResult.state;
+  label = this.labelResult.state;
+  inc = () => this.countResult.setState((state) => ({ ...state, count: state.count + 1 }));
+}
+```
+
+Plain state returns `{ state: Signal<S>, setState, subscribe }`.
+
+## Reducer signal
+
+```ts lineNumbers
+import { create } from '@ilokesto/state/angular';
+
+type Action = { type: 'increment' } | { type: 'reset' };
+
+const reduce = (state: { count: number }, action: Action) => {
+  if (action.type === 'increment') return { count: state.count + 1 };
+  if (action.type === 'reset') return { count: 0 };
+  return state;
+};
+
+const useCounter = create(reduce, { count: 0 });
+
+export class ReducerCounter {
+  private result = useCounter((state) => state.count);
+  count = this.result.state;
+  increment = () => this.result.dispatch({ type: 'increment' });
+}
+```
+
+## Outside Angular lifecycle
+
+```ts lineNumbers
+const count = useCounter.readOnly((state) => state.count);
+const dispatch = useCounter.writeOnly();
+dispatch({ type: 'reset' });
+```
+
+## Caveats
+
+- Without `{ destroyRef }`, the adapter calls `inject(DestroyRef)` and therefore needs an injection context.
+- Cleanup is registered with `destroyRef.onDestroy(unsubscribe)`.
+- The adapter result exposes `subscribe` for low-level integration, but prefer signals for templates.

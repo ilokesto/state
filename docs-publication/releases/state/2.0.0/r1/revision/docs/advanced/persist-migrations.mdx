@@ -1,0 +1,56 @@
+---
+title: "Persist migrations"
+description: "Storage types, versioning, and migration caveats for persist."
+---
+
+# Persist migrations
+
+`persist` serializes `{ state, version }` to browser storage. The version is the length of the migration array.
+
+## Storage types
+
+- `{ local: key }` uses `localStorage`.
+- `{ session: key }` uses `sessionStorage`.
+- `{ cookie: key }` uses `document.cookie`.
+
+## Migrations
+
+Migration functions run from the stored version index until the latest migration. The result is written back with the new version.
+
+```ts lineNumbers
+import { persist } from '@ilokesto/state/middleware';
+import type { PersistMigration } from '@ilokesto/state/middleware';
+import { pipe } from '@ilokesto/state/utils';
+
+type SettingsV1 = { theme: string };
+type SettingsState = { theme: string; count: number };
+
+const toV1: PersistMigration<unknown, SettingsV1> = (old) => ({
+  theme: typeof old === 'string' ? old : 'light',
+});
+const toCurrent: PersistMigration<SettingsV1, SettingsState> = (old) => ({
+  ...old,
+  count: 0,
+});
+const decodeSettings = (value: unknown): SettingsState | null => {
+  if (typeof value !== 'object' || value === null) return null;
+  if (!('theme' in value) || typeof value.theme !== 'string') return null;
+  if (!('count' in value) || typeof value.count !== 'number') return null;
+  return { theme: value.theme, count: value.count };
+};
+
+const settingsStore = pipe
+  .use(persist({
+    local: 'settings',
+    migrate: [toV1, toCurrent],
+    decode: decodeSettings,
+  }))
+  .create<SettingsState>({ theme: 'light', count: 0 });
+```
+
+## Caveats
+
+- Migrations are only attempted for `local` and `cookie` storage.
+- `session` storage does not accept `migrate` in the public type.
+- Values are JSON parsed and stringified; non-JSON state should be adapted before persistence.
+- Browser storage failures are caught and logged only when `window` exists.

@@ -1,0 +1,50 @@
+---
+title: "history"
+description: "piped store에 동기 undo와 redo control을 추가합니다."
+---
+
+# history
+
+`history`는 성공한 동기 state 변경을 기록하고 준비된 store에 undo/redo control을 추가합니다.
+
+## Signature
+
+```ts lineNumbers
+history(options?: HistoryOptions): PipeAnyMiddleware
+
+type HistoryOptions = {
+  readonly limit?: number;
+};
+```
+
+`limit`은 undo entry의 최대 개수이며 기본값은 `300`입니다. 유한한 0 이상의 정수여야 합니다. Control이 있는 store를 받는 API에는 `HistoryStore<State>`를, control만 받는 API에는 `HistoryControls`를 사용하세요.
+
+## 예제
+
+{/* state-example:history-controls */}
+```ts
+import { history } from '@ilokesto/state/middleware';
+import type { HistoryStore } from '@ilokesto/state/middleware';
+import { pipe } from '@ilokesto/state/utils';
+
+const store: HistoryStore<{ count: number }> = pipe
+  .use(history({ limit: 20 }))
+  .create({ count: 0 });
+
+store.setState({ count: 1 });
+store.undo();
+store.redo();
+store.clearHistory();
+```
+
+`undo()`와 `redo()`는 기록한 state를 store에 적용하므로 호환되는 middleware는 replay를 관찰할 수 있습니다. Replay된 state는 다시 기록하지 않습니다. `canUndo()`와 `canRedo()`는 가능한 replay가 있는지 보고하고, `clearHistory()`는 current state를 바꾸지 않고 entry를 제거합니다.
+
+## 조합 제약
+
+History에는 동기 commit 경계가 필요합니다. 선언 순서와 관계없이 `debounce()` 또는 `throttle()`과 같은 pipe chain에 둘 수 없습니다. 이 조합은 `MIDDLEWARE_CONFLICT` code의 `PipeConfigurationError`를 던지며, pipe는 chain을 유효하게 만들기 위해 middleware 순서를 바꾸지 않습니다.
+
+History middleware 자체는 timer나 subscription을 소유하지 않습니다. 같은 store가 cleanup을 등록하는 middleware도 사용한다면 해당 store가 더 이상 필요 없을 때 `dispose(store)`를 호출하세요. 소유권과 idempotency는 [Middleware](/ko/state/middleware)를 참고하세요.
+
+## Control 충돌
+
+History는 `undo`, `redo`, `canUndo`, `canRedo`, `clearHistory`를 변경할 수 없는 store property로 추가합니다. Store에 이 property 중 하나가 이미 있으면 control을 설치하기 전에 `CONTROL_COLLISION` code의 `HistoryConfigurationError`를 던집니다.

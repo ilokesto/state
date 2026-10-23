@@ -1,0 +1,51 @@
+---
+title: "패키지 표면"
+description: "Entrypoint, peer dependency, root entrypoint 주의점입니다."
+---
+
+# 패키지 표면
+
+Public entrypoint 경로는 `state/package.json`의 exports가 기준입니다. 각 경로에서 사용할 수 있는 symbol은 현재 버전이 적용된 `@ilokesto/state@1.0.4`와 다음 major용 workspace source가 다르므로 아래 표에서 그 경계를 표시합니다.
+
+## Entrypoint 표
+
+| Import | Purpose |
+|---|---|
+| `@ilokesto/state` | **다음 major 예정:** 프레임워크 독립적인 `Store`, `createStore`, `createReducer`, `pipe`, `definePipeableMiddleware`, `PipeConfigurationError`, `dispose`와 공개 상태 계약을 내보냅니다. 현재 npm 버전은 이 root runtime API를 제공하지 않습니다. |
+| `@ilokesto/state/react` | React `create()` adapter와 `UseState`, `UseReducer` type입니다. |
+| `@ilokesto/state/vue` | Vue `create()` adapter와 `UseState`, `UseReducer` type입니다. |
+| `@ilokesto/state/svelte` | Svelte `create()` adapter와 `UseState`, `UseReducer` type입니다. |
+| `@ilokesto/state/solid` | Solid `create()` adapter와 `UseState`, `UseReducer` type입니다. |
+| `@ilokesto/state/angular` | Angular `create()` adapter와 `AngularOptions`, `UseState`, `UseReducer` type입니다. |
+| `@ilokesto/state/middleware` | 등록된 middleware, store disposal, middleware type입니다. |
+| `@ilokesto/state/utils` | pipe builder, custom middleware 등록, configuration error, pipe type입니다. |
+| `@ilokesto/state/adaptor` | `adaptor`; optional `immer` peer가 필요합니다. |
+| `@ilokesto/state/package.json` | 이 패키지 manifest가 필요한 tooling을 위한 package metadata export입니다. |
+
+## Middleware export
+
+`@ilokesto/state/middleware`는 `debounce`, `throttle`, `devtools`, `dispose`, `history`, `HistoryConfigurationError`, `logger`, `persist`, `validate`를 export합니다.
+
+Public type은 `HistoryControls`, `HistoryOptions`, `HistoryStore`, `OnRehydrateStorage`, `OnRehydrateStorageCallback`, `PersistControls`, `PersistDecoder`, `PersistDecoderStateDiagnostic`, `PersistMigration`, `PersistStore`, `SafePersistConfig`, `SafePersistCookieConfig`, `SafePersistLocalConfig`, `SafePersistSessionConfig`입니다.
+
+## Utility export
+
+`@ilokesto/state/utils`는 `pipe`, `definePipeableMiddleware`, `PipeConfigurationError`를 export합니다.
+
+Public type은 `Pipe`, `PipeAnyMiddleware`, `PipeBuilder`, `PipeCapability`, `PipeConfigurationErrorCode`, `PipeDuplicatePolicy`, `PipeMiddleware`, `PipeMiddlewareConflictDiagnostic`, `PipeMiddlewareMetadata`입니다.
+
+## Root entrypoint 주의점
+
+`@ilokesto/state@1.0.4`에서는 runtime API를 subpath에서 import하세요. 위에 표시한 root 생성 export는 다음 major에 속하며 현재 npm 버전을 설치하는 것만으로는 사용할 수 없습니다. 어느 버전이든 `create`, `bind` 같은 프레임워크 adapter API는 root가 아니라 프레임워크 subpath에서 가져옵니다.
+
+```ts lineNumbers
+// 프레임워크 subpath에서 사용 가능
+import { create } from '@ilokesto/state/react';
+import { logger } from '@ilokesto/state/middleware';
+```
+
+다음 major를 채택한 뒤에는 root의 `createStore` 또는 `createReducer`로 상태를 만들고 프레임워크 subpath의 `bind` 또는 `bindReducer`로 연결하세요. [프레임워크 독립 상태와 연결](/ko/state/reference/vanilla), [이전 가이드](/ko/state/advanced/migration)를 참고하세요.
+
+## Peer dependencies
+
+프레임워크 peer는 optional입니다. 실제로 쓰는 어댑터의 프레임워크만 설치하세요. `immer`는 `@ilokesto/state/adaptor`의 `adaptor`를 사용할 때만 필요합니다.

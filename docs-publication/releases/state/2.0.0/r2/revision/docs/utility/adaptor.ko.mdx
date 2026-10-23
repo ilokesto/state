@@ -1,0 +1,166 @@
+---
+title: "adaptor"
+description: "Object state update에 Immer draft syntax를 사용합니다."
+---
+
+# adaptor
+
+`adaptor`는 `@ilokesto/state` object update를 위해 Immer `produce`를 감쌉니다.
+
+```ts lineNumbers
+adaptor<T extends object>(fn: (draft: Draft<T>) => void): (state: T) => T
+```
+
+Immutable object update가 맞지만 코드가 장황해질 때 사용하세요. 깊은 object를 직접 복사해 반환하는 대신 draft에 변경을 작성하면 Immer가 다음 immutable value를 만들어 줍니다.
+
+## Immer 설치
+
+`immer`는 optional peer dependency입니다. `adaptor`를 사용할 때만 설치하세요.
+
+```bash lineNumbers
+pnpm add immer
+```
+
+그리고 전용 subpath에서 `adaptor`를 import합니다.
+
+```ts lineNumbers
+import { adaptor } from '@ilokesto/state/adaptor';
+```
+
+## 기본 사용법
+
+```tsx lineNumbers
+import { create } from '@ilokesto/state/react';
+import { adaptor } from '@ilokesto/state/adaptor';
+
+type TodoState = {
+  items: Array<{ id: string; title: string; done: boolean }>;
+};
+
+const useTodos = create<TodoState>({ items: [] });
+
+function CompleteButton({ id }: { id: string }) {
+  const [, setTodos] = useTodos((state) => state.items);
+
+  return (
+    <button
+      onClick={() =>
+        setTodos(adaptor((draft) => {
+          const item = draft.items.find((item) => item.id === id);
+          if (item) item.done = true;
+        }))
+      }
+    >
+      Complete
+    </button>
+  );
+}
+```
+
+`adaptor`에 넘긴 function은 실제 store state가 아니라 draft를 mutate합니다. 반환된 updater를 `setState`에 넘깁니다.
+
+## adaptor가 도움이 되는 경우
+
+Immutable update가 너무 시끄러워질 때 `adaptor`가 유용합니다.
+
+```ts lineNumbers
+setProject(adaptor((draft) => {
+  draft.columns[columnId].cards.push(cardId);
+  draft.cards[cardId] = { id: cardId, title, done: false };
+}));
+```
+
+Draft syntax가 없으면 여러 nested object와 array를 직접 복사해야 할 수 있습니다. Draft syntax는 의도를 더 잘 보이게 합니다.
+
+## adaptor를 쓰지 않는 편이 좋은 경우
+
+Update가 더 단순해지는 경우에는 `adaptor`를 피하세요.
+
+```ts lineNumbers
+// 단순 replacement에는 이쪽이 낫습니다.
+setTheme({ mode: 'dark' });
+
+// primitive state에는 이쪽이 낫습니다.
+setCount((count) => count + 1);
+```
+
+`adaptor`는 object state로 제한됩니다. string, number, boolean 같은 primitive state에는 직접 next value나 updater function을 사용하세요.
+
+## Plain state와 함께 쓰기
+
+Plain state writer는 `setState` updater function을 받으므로 `adaptor`는 plain state에서 가장 자주 사용됩니다.
+
+```ts lineNumbers
+const useProfile = create({
+  name: '',
+  contacts: [{ type: 'email', value: '' }],
+});
+
+const updateProfile = useProfile.writeOnly();
+
+updateProfile(adaptor((draft) => {
+  draft.contacts[0].value = 'hello@example.com';
+}));
+```
+
+Adapter는 여전히 일반 store update pipeline을 통해 subscriber에게 알립니다.
+
+## Middleware와 함께 쓰기
+
+`adaptor`는 middleware write가 끝나기 전에 next state를 만듭니다. Validation, persistence, logging, DevTools는 produced state를 보게 됩니다.
+
+```ts lineNumbers
+import { logger, validate } from '@ilokesto/state/middleware';
+import { adaptor } from '@ilokesto/state/adaptor';
+import { pipe } from '@ilokesto/state/utils';
+
+const store = pipe
+  .use(validate(tagsSchema))
+  .use(logger({ diff: true }))
+  .create({ tags: [] as string[] });
+
+const useTags = create(store);
+const writeTags = useTags.writeOnly();
+
+writeTags(adaptor((draft) => {
+  draft.tags.push('docs');
+}));
+```
+
+Validation이 produced state를 거부하면 update는 commit되지 않습니다.
+
+## Reducer state와 adaptor
+
+Reducer writer는 action을 dispatch하므로 `adaptor`를 `dispatch`에 직접 넘기지 않습니다. Reducer state에서 draft syntax가 필요하다면 reducer 내부에서 Immer를 사용하거나, named writer helper가 있는 plain state를 유지하세요.
+
+```ts lineNumbers
+// Plain state: adaptor를 setState에 넘깁니다.
+setProfile(adaptor((draft) => {
+  draft.name = 'Ada';
+}));
+
+// Reducer state: action을 dispatch합니다.
+dispatchProfile({ type: 'rename', name: 'Ada' });
+```
+
+## adaptor update 테스트하기
+
+`adaptor`는 normal updater를 반환하므로 adapter API로 test할 수 있습니다.
+
+```ts lineNumbers
+const write = useTodos.writeOnly();
+
+write({ items: [{ id: 'a', title: 'Read docs', done: false }] });
+write(adaptor((draft) => {
+  draft.items[0].done = true;
+}));
+
+expect(useTodos.readOnly((state) => state.items[0].done)).toBe(true);
+```
+
+## 자주 하는 실수
+
+- **`immer` 설치 없이 `adaptor` 사용하기.** `immer`는 optional이므로 `adaptor`를 쓰는 project는 직접 설치해야 합니다.
+- **reducer `dispatch`에 `adaptor` 넘기기.** Reducer adapter는 action을 기대합니다. Draft syntax는 reducer 내부에서 쓰거나 plain state를 사용하세요.
+- **primitive state에 사용하기.** `adaptor`는 object state용입니다.
+- **draft callback 밖에서 state mutate하기.** `adaptor`에 전달된 `draft`만 mutate하세요.

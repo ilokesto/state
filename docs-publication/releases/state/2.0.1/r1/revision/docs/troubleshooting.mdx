@@ -1,0 +1,48 @@
+---
+title: "Troubleshooting"
+description: "Common @ilokesto/state mistakes and fixes."
+---
+
+# Troubleshooting
+
+## `create` is undefined from the root import
+
+Import the convenience `create` from a framework subpath.
+
+```ts lineNumbers
+import { create } from '@ilokesto/state/react';
+```
+
+Framework subpaths also export `bind`, while the root exports `createStore` and `createReducer`. See the [migration guide](/en/state/advanced/migration) for changes from the previous major.
+
+## Vue says the composable must run inside setup or effectScope
+
+Call the adapter inside `setup` or an active `effectScope`. For synchronous reads outside Vue, use `readOnly()`.
+
+## Solid says an accessor needs a reactive owner
+
+Call the adapter inside a component or `createRoot`. For non-reactive service code, use `readOnly()` and `writeOnly()`.
+
+## Angular says it needs an injection context
+
+Call the adapter where `inject(DestroyRef)` works, or pass `{ destroyRef }` explicitly.
+
+## `validate` does not accept async schemas
+
+The validate middleware rejects async Standard Schema results. Keep validation synchronous or validate before calling `setState`.
+
+## Redux DevTools does not show updates
+
+`devtools` is disabled in production and depends on the browser extension being available.
+
+## Persisted state did not migrate
+
+All storage adapters use the same migration pipeline. Start it explicitly with `await store.persist.rehydrate()` and handle rejection. Check the stored `{ state, version }` envelope, migration array length, and required `decode` function. Inspect `store.persist.getStatus().error`; invalid data preserves memory and storage instead of silently replacing them. Await `store.persist.flush()` for migration write completion.
+
+## Persistence reports a conflict or an unsaved change
+
+Edits before restoration completes produce `CONFLICT`. Explicitly choose `rehydrate({ conflict: 'keep-current' })` or `rehydrate({ conflict: 'use-stored' })`; there is no automatic deep merge. `flush()` before successful hydration rejects with `NOT_HYDRATED`. Subscribe to persistence status to distinguish restoration from saving. See [Persist migrations](/en/state/advanced/persist-migrations) for the API replacement table.
+
+## `adaptor` cannot be imported or used
+
+Install the optional `immer` peer dependency, import `adaptor` from `@ilokesto/state/adaptor`, and use it with object state.

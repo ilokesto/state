@@ -1,0 +1,141 @@
+---
+title: "pipe"
+description: "Create a Store and apply middleware left-to-right before connecting an adapter."
+---
+
+# pipe
+
+`pipe` is a builder-only composition helper from `@ilokesto/state/utils`.
+
+```ts lineNumbers
+pipe.use(middleware): PipeBuilder
+PipeBuilder.use(middleware): PipeBuilder
+PipeBuilder.create<T>(initialState: T): Store<T>
+```
+
+The root `pipe` object exposes only `.use()`. Each `.use()` returns a builder that can register another middleware or call `.create(initialState)`. `.create()` creates a new `Store<T>`, applies the registered middleware in declaration order, and returns the prepared store for a framework adapter.
+
+## Basic usage
+
+```ts lineNumbers
+import { create } from '@ilokesto/state/react';
+import { logger, persist } from '@ilokesto/state/middleware';
+import { pipe } from '@ilokesto/state/utils';
+
+type CounterState = { count: number };
+
+const decodeCounter = (value: unknown): CounterState | null => {
+  if (typeof value !== 'object' || value === null) return null;
+  if (!('count' in value) || typeof value.count !== 'number') return null;
+  return { count: value.count };
+};
+
+const counterStore = pipe
+  .use(persist({ local: 'counter', decode: decodeCounter }))
+  .use(logger({ collapsed: true, diff: true }))
+  .create<CounterState>({ count: 0 });
+
+export const useCounter = create(counterStore);
+```
+
+Middleware setup runs from the first `.use()` to the last. During updates, the first registered middleware is outermost. Order matters, and `pipe` validates the declared order without rearranging it.
+
+## Public pipe types
+
+`@ilokesto/state/utils` exports `Pipe` for the root builder and `PipeBuilder` for a configured chain. `PipeMiddleware` describes state-specific middleware; `PipeAnyMiddleware` describes middleware that works for every state type. `PipeCapability` describes store API added by middleware, `PipeMiddlewareMetadata` declares its ID and relationships, and `PipeDuplicatePolicy` controls duplicate IDs.
+
+`PipeMiddlewareConflictDiagnostic` is the compile-time diagnostic exposed when declared metadata conflicts. At runtime, invalid configuration throws `PipeConfigurationError`; its `code` is `PipeConfigurationErrorCode`.
+
+## Why builder syntax?
+
+`pipe` is not callable and does not accept a variadic middleware list. Register one middleware per `.use()`, then create the store from plain initial state.
+
+```ts lineNumbers
+const store = pipe
+  .use(validate(counterSchema))
+  .use(logger({ collapsed: true }))
+  .create({ count: 0 });
+```
+
+Read the chain from top to bottom: register validation, register logging, then create state.
+
+## Custom middleware
+
+Every value passed to `.use()` must be registered with `definePipeableMiddleware()`. Give each middleware an `id`; use metadata to declare `adds`, `requires`, `before`, `after`, `conflicts`, and the optional `duplicate` policy. Capabilities added by an earlier outer middleware are available to later inner middleware. A relation to middleware absent from the chain is ignored. For a present `before` or `after` relation, pipe validates the declared direction and rejects only violated (reversed) order; valid relations keep their declared order. Conflicts, duplicate IDs, and cycles are also rejected without reordering.
+
+## Configuration errors
+
+`PipeConfigurationError` exposes a contextual primary `id`, related `ids`, and a code: `DUPLICATE_CAPABILITY`, `DUPLICATE_MIDDLEWARE`, `INVALID_METADATA`, `INVALID_MIDDLEWARE_RESULT`, `INVALID_STORE_INPUT`, `MISSING_CAPABILITY`, `MIDDLEWARE_CONFLICT`, `MIDDLEWARE_CYCLE`, or `MIDDLEWARE_ORDER`. The primary ID can name a middleware or a capability, and is empty when no identifier applies; `ids` contains the related contextual identifiers and can also be empty.
+
+`history()` cannot share a chain with `debounce()` or `throttle()` in either order because history needs synchronous commits; those combinations use `MIDDLEWARE_CONFLICT`. When using `debounce()` and `persist()`, declare debounce first: `pipe.use(debounce(...)).use(persist(...))`. The reverse uses `MIDDLEWARE_ORDER` because persistence would miss the deferred commit.
+
+## Use with validation
+
+Validation is often best placed before middleware that performs side effects, so invalid states do not get persisted or sent to tooling.
+
+```ts lineNumbers
+import { devtools, validate } from '@ilokesto/state/middleware';
+import { pipe } from '@ilokesto/state/utils';
+
+const settingsStore = pipe
+  .use(validate(settingsSchema))
+  .use(devtools('settings'))
+  .create({ theme: 'system' as 'system' | 'light' | 'dark' });
+```
+
+If validation rejects an update, later middleware in the chain should not see the invalid state.
+
+## Use with reducers
+
+`pipe` prepares a store. The reducer still belongs to the adapter `create(reduce, store)` overload.
+
+```ts lineNumbers
+import { create } from '@ilokesto/state/react';
+import { logger } from '@ilokesto/state/middleware';
+import { pipe } from '@ilokesto/state/utils';
+
+const todoStore = pipe
+  .use(logger({ diff: true }))
+  .create({ items: [] as string[] });
+
+export const useTodos = create(reduceTodos, todoStore);
+```
+
+Reducer actions are converted to next state, then the store middleware pipeline handles the resulting update.
+
+## Existing Store instances
+
+`pipe` always creates a new `Store<T>` from plain initial state. `.create()` rejects an existing `Store`. If another module already owns the exact store instance, pass that store directly to the framework adapter and do not use `pipe` for its construction.
+
+```ts lineNumbers
+import { Store } from '@ilokesto/store';
+import { create } from '@ilokesto/state/react';
+
+const existingStore = new Store({ count: 0 });
+const useCounter = create(existingStore);
+```
+
+Use this style when another module already subscribes to the store or when infrastructure outside the utility layer created it.
+
+## Testing a piped store
+
+Because `pipe` returns a plain `Store<T>`, it can be tested before any framework adapter is involved.
+
+```ts lineNumbers
+const store = pipe
+  .use(validate(counterSchema))
+  .create({ count: 0 });
+
+store.setState({ count: 1 });
+expect(store.getState()).toEqual({ count: 1 });
+```
+
+For persistence or browser-only middleware, run tests in an environment that provides the required storage APIs or mock those APIs.
+
+## Common mistakes
+
+- **Calling `pipe(initialState, ...middleware)`.** `pipe` is an object; start with `pipe.use(...)` and finish with `.create(initialState)`.
+- **Passing an existing store to `.create()`.** The builder accepts plain initial state only and creates a new `Store<T>`.
+- **Ignoring order.** Middleware is registered in declaration order, and side-effect middleware should usually come after validation.
+- **Putting framework adapter calls inside `pipe`.** `pipe` composes store middleware, not React/Vue/Svelte/Solid/Angular adapter calls.
+- **Using `pipe` for one-off direct updates.** Use `setState`, `dispatch`, or [`adaptor`](/en/state/utility/adaptor) for updates after the store exists.

@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -42,6 +42,15 @@ function packInto(packDir: string, packageDir: string, targetDir: string): Proce
   return run(['tar', '-xzf', tarball, '-C', targetDir, '--strip-components=1'], packageDir);
 }
 
+function copyInstalledPackage(name: string, targetDir: string): void {
+  // The registry-installed dependency payload is exactly what a packed consumer receives.
+  mkdirSync(targetDir, { recursive: true });
+  cpSync(join(projectRoot, 'node_modules', ...name.split('/')), targetDir, {
+    dereference: true,
+    recursive: true,
+  });
+}
+
 function createIsolatedConsumer(): string {
   const workDir = mkdtempSync(join(tmpdir(), 'ilokesto-state-no-immer-'));
   tempDirs.push(workDir);
@@ -52,18 +61,12 @@ function createIsolatedConsumer(): string {
   mkdirSync(consumerDir);
   writeFileSync(join(consumerDir, 'package.json'), '{"name":"consumer","type":"module"}\n');
 
-  const packStore = packInto(
-    packDir,
-    join(projectRoot, '..', 'store'),
-    join(consumerDir, 'node_modules', '@ilokesto', 'store'),
-  );
   const packState = packInto(packDir, projectRoot, join(consumerDir, 'node_modules', '@ilokesto', 'state'));
 
-  for (const result of [packStore, packState]) {
-    if (result.exitCode !== 0) {
-      throw new Error(result.stderr || result.stdout);
-    }
+  if (packState.exitCode !== 0) {
+    throw new Error(packState.stderr || packState.stdout);
   }
+  copyInstalledPackage('@ilokesto/store', join(consumerDir, 'node_modules', '@ilokesto', 'store'));
 
   return consumerDir;
 }

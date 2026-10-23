@@ -1,0 +1,36 @@
+---
+title: "핵심 개념"
+description: "@ilokesto/state가 Store<T>를 프레임워크 생명주기에 연결하는 방식입니다."
+---
+
+# 핵심 개념
+
+`@ilokesto/state`의 핵심은 단순합니다. `Store<T>`를 만들거나 재사용한 뒤, 각 프레임워크에 맞는 API 모양으로 노출합니다.
+
+## Store가 먼저입니다
+
+모든 어댑터는 내부적으로 같은 `getStore` 흐름을 탑니다. `Store<T>`를 넘기면 그 store를 재사용하고, 초기 값을 넘기면 새 `Store<T>`를 만듭니다.
+
+## plain state vs reducer state
+
+plain state는 `setState`를 사용합니다. reducer state는 `dispatch`를 사용하고, action은 reducer를 거쳐 다음 상태가 된 뒤 store 업데이트로 이어집니다.
+
+```ts lineNumbers
+type Action = { type: 'increment' };
+const reduce = (state: { count: number }, action: Action) =>
+  action.type === 'increment' ? { count: state.count + 1 } : state;
+
+const useCounter = create(reduce, { count: 0 });
+```
+
+## Selectors
+
+어댑터는 selector를 받아 컴포넌트가 필요한 조각만 받을 수 있게 합니다. 모든 adapter는 같은 1단계 `shallow` 비교를 사용하고, React는 `useSyncExternalStore`로 snapshot을 memoize합니다.
+
+## Middleware pipeline
+
+middleware는 underlying store에 붙습니다. reducer 지원은 내부 middleware를 앞쪽에 넣어서 dispatched action을 state update로 바꿉니다.
+
+## Lifecycle boundaries
+
+reactive read는 프레임워크가 cleanup을 소유할 수 있는 위치에서 실행해야 합니다. React hook은 component 안에서, Vue는 `setup` 또는 `effectScope` 안에서, Solid는 `createRoot` 같은 reactive owner 안에서, Angular는 injection context 또는 `DestroyRef`와 함께 사용합니다. Svelte는 cleanup을 반환하는 Svelte store subscription을 제공합니다.

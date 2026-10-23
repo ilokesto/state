@@ -1,0 +1,177 @@
+---
+title: "Plain state 가이드"
+description: "setState 스타일 update로 작은 shared state를 설계합니다."
+---
+
+# Plain state 가이드
+
+Plain state는 `@ilokesto/state`에서 가장 단순한 패턴입니다. 하나의 값을 store에 두고 `setState`로 다음 값을 교체합니다. 모든 전이를 domain action으로 이름 붙일 필요 없이, 이전 state에서 다음 state를 직접 설명할 수 있을 때 사용하세요.
+
+UI preference, filter, 작은 form draft, modal 상태, 선택된 ID, wizard 진행 단계처럼 여러 component가 공유하지만 아직 reducer까지는 필요 없는 state에 잘 맞습니다.
+
+## 언제 plain state를 고르나
+
+다음 조건이 대부분 맞으면 plain state가 적합합니다.
+
+- state shape이 작고 object로 읽기 쉽습니다.
+- update가 UI feature 근처에 있습니다: query 설정, flag toggle, page reset 등.
+- 엄격한 action log나 action union type이 필요하지 않습니다.
+- component와 component 밖 코드에서 같은 state를 읽어야 합니다.
+- validation, persistence, logging, debouncing은 나중에 middleware로 붙일 수 있습니다.
+
+update vocabulary 자체가 domain의 일부이거나, 여러 화면이 같은 이름의 transition을 dispatch해야 하거나, test가 raw object replacement보다 action을 검증해야 한다면 [Reducer state](/ko/state/guides/reducer-state)를 선택하세요.
+
+## state shape부터 정하기
+
+state type은 feature의 public contract처럼 작성합니다. selector로 계산할 수 있는 derived value는 store에 넣지 않는 편이 좋습니다.
+
+```ts lineNumbers
+type SearchState = {
+  query: string;
+  page: number;
+  pageSize: number;
+  sort: 'relevance' | 'newest';
+};
+
+const initialSearchState: SearchState = {
+  query: '',
+  page: 1,
+  pageSize: 20,
+  sort: 'relevance',
+};
+```
+
+좋은 plain-state shape은 단순합니다. serializable하고, 명시적이며, 특정 component instance에 묶이지 않습니다. framework object, class instance, disposable resource가 필요하다면 store에는 stable ID나 flag만 넣고 실제 resource는 밖에서 관리하세요.
+
+## adapter hook 또는 store 만들기
+
+사용하는 framework subpath에서 import하세요. root package는 `create`를 export하지 않습니다.
+
+```tsx lineNumbers
+import { create } from '@ilokesto/state/react';
+
+const useSearch = create<SearchState>(initialSearchState);
+```
+
+React는 `[selection, setState]`를 반환합니다. Vue, Solid, Angular는 reactive `state`와 `setState`를 가진 object를 반환합니다. Svelte는 `set`, `update`, `setState`, `select`가 있는 Svelte-compatible store를 반환합니다.
+
+## 좁게 선택하기
+
+component가 필요한 가장 작은 값을 selector로 선택하세요. 이렇게 하면 component가 unrelated state에 덜 묶이고 코드가 더 분명해집니다.
+
+```tsx lineNumbers
+function SearchInput() {
+  const [query, setSearch] = useSearch((state) => state.query);
+
+  return (
+    <input
+      value={query}
+      onChange={(event) =>
+        setSearch((prev) => ({
+          ...prev,
+          query: event.currentTarget.value,
+          page: 1,
+        }))
+      }
+    />
+  );
+}
+```
+
+selector는 component로 반환되는 값을 결정합니다. writer는 여전히 전체 state를 update하므로, 완성된 object를 넘기거나 전체 next state를 반환하는 updater function을 사용하세요.
+
+## 반복되는 update는 writer 함수로 빼기
+
+Plain state라고 해서 모든 component가 object spread logic을 직접 써야 하는 것은 아닙니다. 같은 update가 두 곳 이상에서 반복되면 store 근처에 작은 writer 함수를 만드세요.
+
+```ts lineNumbers
+const writeSearch = useSearch.writeOnly();
+
+export function setQuery(query: string) {
+  writeSearch((prev) => ({ ...prev, query, page: 1 }));
+}
+
+export function setSort(sort: SearchState['sort']) {
+  writeSearch((prev) => ({ ...prev, sort, page: 1 }));
+}
+
+export function resetSearch() {
+  writeSearch(initialSearchState);
+}
+```
+
+이 방식은 plain-state mode를 유지하면서 action에 가까운 가독성을 줍니다. writer helper가 feature command surface처럼 커지기 시작하면 reducer state로 옮길 신호입니다.
+
+## component 밖에서 읽기
+
+route guard, request builder, test, utility module처럼 subscription이 필요 없는 곳에서는 `readOnly`로 synchronous snapshot을 읽으세요.
+
+```ts lineNumbers
+export function buildSearchUrl() {
+  const { query, page, pageSize, sort } = useSearch.readOnly();
+  const params = new URLSearchParams({
+    q: query,
+    page: String(page),
+    size: String(pageSize),
+    sort,
+  });
+
+  return `/api/search?${params}`;
+}
+```
+
+component 밖 코드가 state를 써야 한다면 framework lifecycle subscription을 만들지 않는 `writeOnly()`를 사용하세요.
+
+## component code를 바꾸지 않고 middleware 붙이기
+
+Middleware는 adapter를 만들기 전에 underlying `@ilokesto/store`를 감쌉니다. Component는 같은 adapter API를 계속 사용합니다.
+
+```ts lineNumbers
+import { create } from '@ilokesto/state/react';
+import { jsonStorage, logger, persist } from '@ilokesto/state/middleware';
+import { pipe } from '@ilokesto/state/utils';
+
+const decodeSearch = (value: unknown): SearchState | null => {
+  if (typeof value !== 'object' || value === null) return null;
+  if (!('query' in value) || typeof value.query !== 'string') return null;
+  if (!('page' in value) || typeof value.page !== 'number') return null;
+  if (!('pageSize' in value) || typeof value.pageSize !== 'number') return null;
+  if (!('sort' in value) || (value.sort !== 'relevance' && value.sort !== 'newest')) return null;
+  return { query: value.query, page: value.page, pageSize: value.pageSize, sort: value.sort };
+};
+
+const searchStore = pipe
+  .use(persist({ key: 'search-state', storage: jsonStorage(() => window.localStorage), decode: decodeSearch }))
+  .use(logger({ collapsed: true }))
+  .create<SearchState>(initialSearchState);
+
+export const useSearch = create<SearchState>(searchStore);
+
+export async function restoreSearch() {
+  await searchStore.persist.rehydrate();
+}
+```
+
+위의 상태 정의에 이어 사용하는 예제입니다. 클라이언트 시작 코드나 effect에서 `restoreSearch()`를 호출하고 오류를 처리한 뒤 편집을 활성화하세요. 생성 시 저장소 I/O는 없습니다. 저장 완료가 필요하면 `searchStore.persist.flush()`를 기다립니다. 순서와 주의점은 [Middleware](/ko/state/middleware)를 보세요. Plain state에서는 모든 쓰기가 전체 상태 교체 후보이므로 validation middleware가 특히 유용합니다.
+
+## Plain state 테스트하기
+
+State behavior만 검증하면 component를 mount하지 말고 `writeOnly()`와 `readOnly()`를 사용하세요.
+
+```ts lineNumbers
+const write = useSearch.writeOnly();
+
+write({ ...initialSearchState, query: 'docs' });
+expect(useSearch.readOnly((state) => state.query)).toBe('docs');
+
+write(initialSearchState);
+```
+
+Adapter가 module-level singleton이면 test 사이에 state를 reset하세요. Module-level store는 의도적으로 공유됩니다.
+
+## 자주 하는 실수
+
+- **이전 state를 직접 mutate하기.** Updater function에서는 새 object를 반환하세요. mutation syntax가 필요하면 [`adaptor`](/ko/state/utility/adaptor)를 사용하세요.
+- **모든 곳에서 전체 state 선택하기.** 가능하지만 component reasoning이 어려워집니다. 좁은 selector를 선호하세요.
+- **lifecycle 밖에서 reactive adapter function 호출하기.** Module code에서는 `readOnly`와 `writeOnly`를 사용하세요.
+- **writer helper가 숨은 reducer가 되게 두기.** Helper 이름이 feature vocabulary가 되면 reducer state를 고려하세요.

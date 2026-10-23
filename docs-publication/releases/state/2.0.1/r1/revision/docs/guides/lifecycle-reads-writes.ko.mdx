@@ -1,0 +1,198 @@
+---
+title: "생명주기 밖 읽기와 쓰기"
+description: "subscription, snapshot, writer를 올바른 runtime context에서 사용합니다."
+---
+
+# 생명주기 밖 읽기와 쓰기
+
+`@ilokesto/state` adapter는 state와 상호작용하는 두 가지 길을 제공합니다.
+
+- component 또는 framework lifecycle 안에서 쓰는 **reactive adapter call**
+- lifecycle 밖 synchronous 작업에서 쓰는 **`readOnly` / `writeOnly` helper**
+
+이 가이드는 각각을 어디에 써야 하는지 설명합니다. 핵심 규칙은 간단합니다. Framework가 cleanup할 수 있는 곳에서는 subscribe하고, 그 밖에서는 snapshot read나 writer를 사용하세요.
+
+## 세 가지 access pattern
+
+| Pattern | 용도 | Subscribe 여부 | Cleanup owner |
+| --- | --- | --- | --- |
+| `useStore(selector)` / adapter call | component에서 selected state render | Yes | React/Vue/Solid/Angular/Svelte lifecycle |
+| `readOnly(selector?)` | module code, guard, test, service에서 current state 읽기 | No | cleanup 불필요 |
+| `writeOnly()` | module code, event, callback, test에서 state 쓰기 | No | cleanup 불필요 |
+
+Reactive adapter call은 의도적으로 lifecycle에 묶여 있습니다. Vue composable은 active scope가 필요하고, Solid accessor는 owner가 필요하며, Angular signal은 injection context 또는 `DestroyRef`가 필요합니다. React hook은 React render/custom hook 안에서만 호출해야 합니다.
+
+## Component 안에서는 reactive call 사용하기
+
+UI가 state 변경 후 update되어야 한다면 framework의 정상 lifecycle 안에서 adapter를 호출하세요.
+
+```tsx lineNumbers
+import { create } from '@ilokesto/state/react';
+
+type SessionState = { user: { id: string; name: string } | null };
+
+export const useSession = create<SessionState>({ user: null });
+
+export function UserBadge() {
+  const [user] = useSession((state) => state.user);
+
+  return user ? <span>{user.name}</span> : <span>Guest</span>;
+}
+```
+
+Component는 store change를 subscribe하고 selected snapshot이 바뀌면 rerender됩니다. 화면에 보이는 UI에는 이 경로가 맞습니다.
+
+## Synchronous snapshot에는 `readOnly` 사용하기
+
+`readOnly`는 현재 state를 즉시 읽고 selected value를 반환합니다. Subscribe하지 않으므로 router guard, request builder, command module, test, plain event callback에서 안전합니다.
+
+```ts lineNumbers
+const readSession = useSession.readOnly;
+
+export function requireUserId() {
+  const userId = readSession((state) => state.user?.id);
+
+  if (!userId) {
+    throw new Error('Login required');
+  }
+
+  return userId;
+}
+```
+
+`readOnly`는 snapshot이므로 state가 바뀌어도 이 function을 다시 실행하지 않습니다. 최신 값이 필요할 때마다 다시 호출하세요.
+
+## Lifecycle-free update에는 `writeOnly` 사용하기
+
+`writeOnly()`는 subscription을 만들지 않고 adapter writer를 반환합니다.
+
+```ts lineNumbers
+const writeSession = useSession.writeOnly();
+
+export function logout() {
+  writeSession({ user: null });
+}
+```
+
+Reducer state에서는 `writeOnly()`가 `setState` 대신 `dispatch`를 반환합니다.
+
+```ts lineNumbers
+type AuthAction = { type: 'login'; user: { id: string; name: string } } | { type: 'logout' };
+
+const useAuth = create(
+  (state: SessionState, action: AuthAction): SessionState => {
+    if (action.type === 'login') return { user: action.user };
+    if (action.type === 'logout') return { user: null };
+    return state;
+  },
+  { user: null },
+);
+
+const dispatchAuth = useAuth.writeOnly();
+
+dispatchAuth({ type: 'logout' });
+```
+
+## Router guard 예시
+
+Router guard는 보통 component render lifecycle 밖에서 실행됩니다. Snapshot을 읽고 continue, redirect, throw 중 하나를 결정하세요.
+
+```ts lineNumbers
+export function canEnterSettings() {
+  return useSession.readOnly((state) => Boolean(state.user));
+}
+
+export function settingsRedirect() {
+  if (canEnterSettings()) return null;
+  return '/login';
+}
+```
+
+Framework가 필요한 lifecycle context를 명시적으로 제공하지 않는 guard에서 React hook, Vue composable, Solid accessor creator, Angular signal factory를 호출하지 마세요.
+
+## Network callback 예시
+
+Network callback은 promise resolve 뒤 state를 update해야 하는 경우가 많습니다. Callback이 component mount 여부에 의존하지 않도록 `writeOnly()`를 사용하세요.
+
+```ts lineNumbers
+const writeSessionState = useSession.writeOnly();
+
+export async function refreshCurrentUser() {
+  const response = await fetch('/api/me');
+
+  if (response.status === 401) {
+    writeSessionState({ user: null });
+    return;
+  }
+
+  const user = (await response.json()) as { id: string; name: string };
+  writeSessionState({ user });
+}
+```
+
+Callback이 component에 속하고 unmount 때 cancel되어야 한다면 cancellation은 framework layer에 두세요. Store writer 자체는 lifecycle-free입니다.
+
+## Manual subscription
+
+Component 안에서는 framework adapter가 대신 subscribe합니다. Manual subscription이 필요하다면 adapter가 노출하는 API가 있는 경우에만 사용하고 cleanup을 명시하세요.
+
+Svelte store는 `subscribe`를 직접 노출합니다. Angular adapter result도 `subscribe`를 노출합니다. Framework-neutral subscription이 필요하면 `@ilokesto/store` instance를 만들거나 재사용하고, 그 store를 `create`에 넘기기 전에 subscribe하세요.
+
+```ts lineNumbers
+import { Store } from '@ilokesto/store';
+import { create } from '@ilokesto/state/react';
+
+const sessionStore = new Store<SessionState>({ user: null });
+export const useSessionFromStore = create(sessionStore);
+
+const unsubscribe = sessionStore.subscribe(() => {
+  console.log('session changed', sessionStore.getState());
+});
+
+unsubscribe();
+```
+
+직접 subscribe했다면 `unsubscribe` 호출 책임도 직접 가집니다. Application-wide subscription이 아니라면 module에 long-lived subscription을 숨기지 마세요.
+
+## SSR과 initial state
+
+`readOnly`는 현재 runtime의 current store value를 읽습니다. React adapter는 `useSyncExternalStore`의 server snapshot으로 store initial state를 사용합니다. Hydration surprise를 피하려면 server와 client에서 같은 initial state로 store를 만들거나, subscribed UI를 render하기 전에 명시적으로 hydrate하세요.
+
+영속화 헬퍼와 스토어 생성 시에는 브라우저 접근이나 저장소 I/O가 없습니다. `jsonStorage(window.localStorage)`가 아니라 `jsonStorage(() => window.localStorage)`로 브라우저 접근을 미루세요. 서버와 클라이언트 모두 초기 상태에서 시작합니다.
+
+클라이언트 effect에서 비동기 `store.persist.rehydrate()`를 호출하고 거부를 처리하세요. `store.persist.subscribe()`로 구독하고 `getStatus()`를 읽어 복원 진행, 성공, 충돌, 오류를 구분합니다. 복원 성공 전에는 편집을 막거나 명시적인 충돌 정책을 제공하세요. `skipHydration` 옵션은 없습니다. 수명주기와 소유권은 [persist 미들웨어 문서](/ko/state/middleware/persist)를 참고하세요.
+
+## Testing pattern
+
+State behavior만 필요한 test는 framework rendering 없이 작성할 수 있습니다.
+
+```ts lineNumbers
+const write = useSession.writeOnly();
+
+beforeEach(() => {
+  write({ user: null });
+});
+
+it('stores the current user', () => {
+  write({ user: { id: 'u1', name: 'Ada' } });
+
+  expect(useSession.readOnly((state) => state.user?.name)).toBe('Ada');
+});
+```
+
+Subscription과 UI behavior를 검증해야 할 때만 framework component를 render하세요.
+
+## 결정 checklist
+
+- Caller가 state로 UI를 render하나요? Framework adapter call을 사용하세요.
+- Caller가 framework lifecycle 밖인가요? `readOnly` 또는 `writeOnly`를 사용하세요.
+- State 변경 때 code가 다시 실행되어야 하나요? `readOnly`가 아니라 subscription 또는 component를 사용하세요.
+- Callback이 component보다 오래 살아남을 수 있나요? `writeOnly()`를 사용하고 cancellation은 별도로 처리하세요.
+- 직접 subscribe했나요? `unsubscribe`를 저장하고 호출하세요.
+
+## 자주 하는 실수
+
+- **`readOnly`를 reactive처럼 사용하기.** Snapshot read입니다. Update가 필요하면 다시 호출하거나 subscribe하세요.
+- **plain module에서 lifecycle-bound adapter 호출하기.** Vue, Solid, Angular, React는 context 밖 호출을 거부하거나 lifecycle rule을 깨게 됩니다.
+- **test isolation을 잊기.** Module-level store는 reset하지 않으면 test 사이에 state가 남습니다.
+- **cleanup 없이 manual subscribe하기.** 잊힌 `unsubscribe`는 leak입니다.

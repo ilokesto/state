@@ -1,0 +1,65 @@
+---
+title: "Quick start"
+description: "Install @ilokesto/state and create the first framework adapter."
+---
+
+# Quick start
+
+Install the package and the framework peer you actually use. Framework peers are optional, so a React project does not need Vue, Svelte, Solid, or Angular installed.
+
+```bash lineNumbers
+pnpm add @ilokesto/state react
+```
+
+This walkthrough uses React. For another framework, install its peer and use the matching adapter page below. `@ilokesto/store` is already a package dependency; install it directly only when your application imports it.
+
+## 1. Import from the React subpath
+
+Framework adapters are subpath exports. Do not import `create` from the package root.
+
+```tsx lineNumbers
+import { create } from '@ilokesto/state/react';
+```
+
+## 2. Create and render plain state
+
+Add this complete component to a React application and render `<ThemeButton />`.
+
+```tsx lineNumbers
+import { create } from '@ilokesto/state/react';
+
+const useTheme = create<{ mode: 'light' | 'dark' }>({ mode: 'light' });
+
+export function ThemeButton() {
+  const [mode, setTheme] = useTheme((state) => state.mode);
+
+  return (
+    <button
+      type="button"
+      onClick={() => setTheme({ mode: mode === 'light' ? 'dark' : 'light' })}
+    >
+      Theme: {mode}
+    </button>
+  );
+}
+```
+
+The button first shows **Theme: light**. Each click switches the label between **Theme: light** and **Theme: dark**.
+
+## 3. Choose plain or reducer state
+
+The example uses plain state because the UI directly replaces a small value. Continue with the [plain-state guide](/en/state/guides/plain-state) for setters and selectors. Choose the [reducer-state guide](/en/state/guides/reducer-state) when transitions should be named actions such as `login`, `addItem`, or `reset`.
+
+For route guards, services, tests, and other code outside React, use the adapter's `readOnly()` and `writeOnly()` helpers instead of calling the hook. The [lifecycle reads and writes guide](/en/state/guides/lifecycle-reads-writes) shows both patterns.
+
+## 4. Move to your adapter page
+
+- [React](/en/state/integrations/react)
+- [Vue](/en/state/integrations/vue)
+- [Svelte](/en/state/integrations/svelte)
+- [Solid](/en/state/integrations/solid)
+- [Angular](/en/state/integrations/angular)
+
+Each integration page shows its return shape, lifecycle owner, reducer form, and non-reactive access. For exact imports and optional peer dependencies, use the [package surface reference](/en/state/reference/package-surface).
+
+> The package also supports root `createStore`/`createReducer` plus framework `bind`/`bindReducer` when you want to create state once and connect it explicitly. See the [migration guide](/en/state/advanced/migration).
