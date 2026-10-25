@@ -1,254 +1,80 @@
 # @ilokesto/state
 
-[English](./README.md) | **한국어**
+공유 TypeScript 상태와 미들웨어에 React, Vue, Angular, Svelte, Solid 바인딩을 더합니다.
 
-`@ilokesto/store`를 기반으로 만든 가벼운 멀티 프레임워크 상태 관리 헬퍼입니다.
+[![npm](https://img.shields.io/npm/v/@ilokesto/state?style=flat&color=555)](https://www.npmjs.com/package/@ilokesto/state)
+![MIT](https://img.shields.io/badge/license-MIT-555?style=flat)
 
-이 패키지는 스토어 핵심 로직을 프레임워크와 무관하게 유지하면서, React, Vue, Angular, Svelte, Solid를 위한 얇은 어댑터를 제공합니다.
+[문서](./docs/index.ko.mdx) | [API](./docs/reference/package-surface.ko.mdx) | [English](./README.md)
 
-
-## 문서
-
-- 전체 문서: [English](https://ilokesto.ayden94.com/en/state) · [한국어](https://ilokesto.ayden94.com/ko/state)
-- 소스: [packages/state](https://github.com/ilokesto/ilokesto/tree/main/packages/state)
-- npm: [@ilokesto/state](https://www.npmjs.com/package/@ilokesto/state)
-
-## 한 번 만들고 명시적으로 연결하기
-
-`@ilokesto/state` 루트는 프레임워크 독립적인 `createStore`, `createReducer`, 조합 API와 구조적 저장소 계약을 내보냅니다. 각 프레임워크는 `bind(store)`와 `bindReducer(handle)`을 제공하며 기존 `create` 편의 API도 같은 기반을 사용합니다.
-
-```ts
-import { createStore } from '@ilokesto/state';
-import { bind } from '@ilokesto/state/react';
-
-const counter = createStore({ count: 0 });
-const useCounter = bind(counter);
-counter.update(previous => ({ count: previous.count + 1 }));
-```
-
-[상태 생성과 연결](docs/reference/vanilla.ko.mdx), [메이저 이전 안내](docs/advanced/migration.ko.mdx)를 참고하세요. 빌드 후 루트에서 `node packages/state/examples/vanilla-counter.mjs`로 예제를 실행할 수 있습니다.
-
-## 주요 기능
-
-- 일반 상태나 Reducer로부터 프레임워크 친화적인 상태 어댑터 생성
-- 모든 프레임워크에서 하나의 공통 shallow 동등성 계약으로 Selector 기반 상태 구독
-- `readOnly()`를 사용해 프레임워크 생명주기 밖에서 상태 조회
-- `writeOnly()`를 사용해 프레임워크 생명주기 밖에서 상태 업데이트
-- `logger`, `debounce`, `persist`, `devtools` 등의 미들웨어로 스토어 구성
-- `adaptor()`를 사용한 immer 기반 객체 업데이트
+- 일반 상태나 Reducer 상태를 한 번 만들고 프레임워크에 연결합니다.
+- 공통 shallow 동등성 계약으로 필요한 값만 구독합니다.
+- 검증, 영속화, 히스토리, 로깅, 시간 제어 미들웨어를 조합합니다.
 
 ## 설치
 
-```bash
+```sh
 pnpm add @ilokesto/state
 ```
 
-`immer`는 선택적 피어 의존성(peer dependency)이며, `adaptor()`를 사용할 때만 필요합니다.
+사용할 프레임워크도 함께 설치하세요. 아래 예제는 React를 사용합니다.
+`immer`는 `@ilokesto/state/adaptor`에만 필요한 선택적 피어 의존성입니다.
 
-## Selector 구독 계약
+## 빠른 시작
 
-React, Vue, Angular, Svelte, Solid는 일반 상태와 Reducer 상태 모두에서 동일한 Selector 구독 동작을 사용합니다.
+컴포넌트 밖에서 스토어를 만들고 `bind()`로 연결합니다.
 
-- 원시값 선택은 `Object.is` 의미론을 사용합니다.
-- 객체, 배열, `Map`, `Set`, `Date` 선택은 패키지의 1단계 `shallow` 비교를 사용합니다.
-- Store가 변경되어도 선택 결과가 shallow 비교에서 같으면 프레임워크 consumer에 알리지 않습니다.
-- 선택 결과와 관련된 업데이트는 consumer에 정확히 한 번 알립니다.
-- React unmount, Vue scope dispose, Angular `DestroyRef`, Solid owner cleanup, Svelte unsubscribe 시 구독을 해제합니다.
-- React server snapshot은 Store의 초기 상태에서 값을 선택하므로 현재 상태가 이미 변경되었어도 hydration 의미론을 유지합니다.
-- Selector 입력, 전체 상태 reactive 결과, `readOnly()` snapshot은 object state에 `Readonly<T>`를 사용합니다. callable state는 exact `T`로 유지되어 임의의 generic/overloaded signature를 보존하며 own-property modifier도 선언된 그대로입니다. plain-state writer는 mutable next-state와 updater 계약을 유지하고, reducer writer는 typed action을 받습니다.
-
-이 계약은 `Store.subscribeSelector`를 기반으로 하며, 어댑터는 프레임워크별 동등성 옵션을 노출하지 않습니다. `create(initialState)`와 `create(reducer, initialState)`에 동일하게 적용됩니다.
-
-## React
-
-```ts
-import { create } from '@ilokesto/state/react';
+```tsx
+import { createStore } from '@ilokesto/state';
+import { bind } from '@ilokesto/state/react';
 
 type CounterState = {
   count: number;
 };
 
-const useCounter = create<CounterState>({ count: 0 });
+const counter = createStore<CounterState>({ count: 0 });
+const useCounter = bind(counter);
+const selectCount = (state: Readonly<CounterState>) => state.count;
 
-function Counter() {
-  const [count, setCounter] = useCounter((state) => state.count);
+export function Counter() {
+  const [count] = useCounter(selectCount);
 
   return (
-    <button onClick={() => setCounter((prev) => ({ ...prev, count: prev.count + 1 }))}>
+    <button
+      onClick={() => counter.update(previous => ({ count: previous.count + 1 }))}
+    >
       {count}
     </button>
   );
 }
 ```
 
-## Vue
+Selector는 순수하고 참조가 안정적이어야 합니다. 객체는 깊은 비교가 아닌 shallow 비교를
+사용하므로 중첩 값을 변경할 때도 새 불변 상태를 반환하세요. React의 서버 스냅샷은
+초기 상태에서 값을 선택합니다. 다른 어댑터도 각 프레임워크의 생명주기 요구사항을 따릅니다.
 
-```ts
-import { create } from '@ilokesto/state/vue';
+Action 중심 상태에는 `createReducer()`와 `bindReducer()`를 사용하세요.
+기존 `create()` 헬퍼도 유지합니다. 명시적인 연결과 FIFO 알림의 변경 사항은
+[2.0 마이그레이션 안내](./docs/advanced/migration.ko.mdx)를 참고하세요.
 
-type CounterState = {
-  count: number;
-};
+`pipe.use(...).create(initialState)` 빌더 문법을 사용하세요. `history()`는
+`debounce()`나 `throttle()`과 같은 체인에 둘 수 없으며 `debounce()`는 `persist()`보다 앞에 둡니다.
+영속화에는 `key`, 저장소 팩토리, `decode`와 명시적인 비동기 `rehydrate()`, `flush()`가 필요합니다.
+호환성을 깨는 patch 마이그레이션은 아래 문서에 설명되어 있습니다.
+미들웨어 리소스는 `dispose(store)`로 정리하며 저장이 필요하면 먼저 `flush()`를 기다리세요.
 
-const useCounter = create<CounterState>({ count: 0 });
+## 더 알아보기
 
-export function useCounterState() {
-  const { state, setState } = useCounter((current) => current.count);
+- [Vanilla 상태, Reducer, 연결과 소유권](./docs/reference/vanilla.ko.mdx)
+- [Selector 의미론과 프레임워크 스냅샷](./docs/advanced/selector-semantics.ko.mdx)
+- [Pipe 조합, capability와 순서](./docs/utility/pipe.ko.mdx)
+- [영속화 마이그레이션, 충돌과 저장 보장](./docs/advanced/persist-migrations.ko.mdx)
+- [프레임워크 생성 헬퍼와 어댑터 가이드](./docs/reference/create.ko.mdx)
 
-  return {
-    count: state,
-    increment: () => setState((prev) => ({ ...prev, count: prev.count + 1 })),
-  };
-}
-```
+<details>
+<summary>미들웨어 예제</summary>
 
-반환된 composable은 `setup()` 내부 또는 활성화된 `effectScope()` 안에서 실행되어야 합니다.
-
-## Angular
-
-```ts
-import { Component, DestroyRef, inject } from '@angular/core';
-import { create } from '@ilokesto/state/angular';
-
-type CounterState = {
-  count: number;
-};
-
-const counter = create<CounterState>({ count: 0 });
-
-@Component({
-  selector: 'app-counter',
-  standalone: true,
-  template: '<button (click)="increment()">{{ count() }}</button>',
-})
-export class CounterComponent {
-  private readonly destroyRef = inject(DestroyRef);
-  readonly count = counter((state) => state.count, { destroyRef }).state;
-
-  increment() {
-    counter.writeOnly()((prev) => ({ ...prev, count: prev.count + 1 }));
-  }
-}
-```
-
-활성화된 injection context 밖에서 이 어댑터로 Angular signal을 생성하는 경우, `{ destroyRef }`를 명시적으로 전달하세요.
-
-## Svelte
-
-```ts
-import { create } from '@ilokesto/state/svelte';
-
-type CounterState = {
-  count: number;
-};
-
-export const counter = create<CounterState>({ count: 0 });
-export const count = counter.select((state) => state.count);
-```
-
-```svelte
-<script lang="ts">
-  import { counter, count } from './counter';
-
-  const increment = () => {
-    counter.update((state) => ({ ...state, count: state.count + 1 }));
-  };
-</script>
-
-<button on:click={increment}>{$count}</button>
-```
-
-## Solid
-
-```tsx
-import { create } from '@ilokesto/state/solid';
-
-type CounterState = {
-  count: number;
-};
-
-const useCounter = create<CounterState>({ count: 0 });
-
-function Counter() {
-  const { state, setState } = useCounter((current) => current.count);
-
-  return (
-    <button onClick={() => setState((prev) => ({ ...prev, count: prev.count + 1 }))}>
-      {state()}
-    </button>
-  );
-}
-```
-
-`create()`가 반환한 함수를 컴포넌트나 `createRoot()` 같은 reactive owner 내부에서 호출해야 합니다. Solid 범위 밖에서 동기적으로 상태를 읽으려면 `readOnly()`를 사용하세요.
-
-## Reducer 사용법
-
-모든 프레임워크 어댑터는 Reducer 형태를 지원합니다.
-
-```ts
-type CounterState = {
-  count: number;
-};
-
-type CounterAction = { type: 'increment' } | { type: 'decrement' };
-
-const counter = create<CounterState, CounterAction>(
-  (state, action) => {
-    switch (action.type) {
-      case 'increment':
-        return { count: state.count + 1 };
-      case 'decrement':
-        return { count: state.count - 1 };
-      default:
-        return state;
-    }
-  },
-  { count: 0 },
-);
-```
-
-React는 튜플을 반환하고, Vue는 `{ state, dispatch }`, Angular는 `{ state, dispatch }`, Svelte는 `dispatch`가 포함된 readable store를 반환하며, Solid는 `{ state, dispatch }`를 반환합니다.
-
-### 기존 Store 재사용
-
-두 번째 인자로 기존 `Store`를 전달하면 프레임워크 어댑터와 직접 Store 쓰기가 하나의 상태 스냅샷을 공유합니다. 같은 Store를 정확히 동일한 reducer 함수 참조와 함께 다시 사용해도 안전합니다. `@ilokesto/state`는 reducer middleware를 한 번만 설치하며, dispatch마다 reducer를 한 번 호출한 결과를 모든 어댑터가 관찰합니다.
-
-하나의 Store에는 하나의 reducer 식별자만 등록할 수 있습니다. 같은 Store에 다른 reducer 함수를 등록하면 middleware나 상태를 변경하기 전에 `TypeError: Cannot register a different reducer for the same Store.`를 동기적으로 throw합니다. 직접 호출한 `store.setState(...)`는 기존과 동일하게 일반 Store 업데이트로 동작하며 reducer를 호출하지 않습니다.
-
-## 프레임워크 생명주기 밖에서 읽기 및 쓰기
-
-```ts
-const writeCounter = counter.writeOnly();
-const currentCount = counter.readOnly((state) => state.count);
-
-writeCounter((prev) => ({ ...prev, count: prev.count + 1 }));
-
-console.log(currentCount);
-```
-
-## 미들웨어 및 유틸리티
-
-### `@ilokesto/state/middleware`
-
-- `debounce()`
-- `devtools()`
-- `history()`
-- `logger()`
-- `persist()`
-- `throttle()`
-- `validate()`
-
-### `@ilokesto/state/utils`
-
-- `pipe`: 일반 상태와 등록된 미들웨어로 스토어 조합
-- `definePipeableMiddleware()`: 사용자 미들웨어 메타데이터 등록
-
-### `@ilokesto/state/adaptor`
-
-- `adaptor()`: immer를 사용한 불변 객체 업데이트 헬퍼 생성
-
-`pipe`는 빌더 전용 API입니다. `pipe.use(...)`로 시작해 바깥쪽에서 안쪽 순서로 미들웨어를 추가한 다음, `.create(initialState)`를 호출하세요. 첫 번째 `.use()`가 업데이트 시 가장 바깥을 감싸며, `.create()`가 Store를 만들 때 미들웨어 설정은 왼쪽에서 오른쪽 순서로 실행됩니다.
+### 빌더 기본 사용
 
 <!-- pipe-example:builder-basics -->
 ```ts
@@ -274,13 +100,7 @@ export async function restoreCounter() {
 }
 ```
 
-`.create()`는 일반 상태만 받습니다. 기존 `Store`는 받을 수 없습니다.
-
-### 히스토리, 시간 제어, 정리
-
-`history()`는 성공한 동기 상태 변경을 기록합니다. 반환된 스토어에는 `undo()`, `redo()`,
-`canUndo()`, `canRedo()`, `clearHistory()`가 추가됩니다. `undo()`와 `redo()`는 기록한 상태를
-스토어에 적용하므로, 호환되는 미들웨어는 이 변경을 관찰할 수 있습니다.
+### 히스토리
 
 <!-- pipe-example:history-pipe -->
 ```ts
@@ -295,16 +115,7 @@ const counterStore = pipe
 counterStore.undo();
 ```
 
-`history()`는 선언 순서와 관계없이 하나의 pipe 체인에서 `debounce()` 또는 `throttle()`과 함께
-사용할 수 없습니다. 지연된 업데이트에는 히스토리에 필요한 동기 커밋 경계가 없습니다. Pipe는
-이 충돌을 거부하며, 유효한 체인으로 만들기 위해 미들웨어 순서를 자동으로 바꾸지 않습니다.
-
-`debounce()`는 기본값이 `300`밀리초인 대기 시간 뒤에 업데이트를 하나의 커밋으로 합칩니다.
-대기 시간은 유한한 0 이상의 숫자여야 하며 `0`도 유효합니다. 잘못된 값은 middleware 또는
-timer를 설정하기 전에 `RangeError`를 던집니다.
-
-`throttle()`은 선행 통과 후 드롭 방식으로 동작합니다. 첫 번째 업데이트는 즉시 통과하고, 대기
-시간이 끝날 때까지 이후 업데이트는 드롭됩니다.
+### Throttle
 
 <!-- pipe-example:throttle-pipe -->
 ```ts
@@ -317,9 +128,7 @@ const counterStore = pipe
   .create({ count: 0 });
 ```
 
-타이머 기반 미들웨어는 스토어에 정리 작업을 등록합니다. 스토어가 더 이상 필요 없으면
-`dispose(store)`를 호출해 대기 중인 작업을 취소하고 미들웨어가 소유한 리소스를 해제하세요.
-정리는 해당 스토어에만 적용되며, 여러 번 안전하게 호출할 수 있습니다.
+### 리소스 정리
 
 <!-- pipe-example:dispose-store -->
 ```ts
@@ -331,13 +140,7 @@ const counterStore = pipe.use(throttle(250)).create({ count: 0 });
 dispose(counterStore);
 ```
 
-### 안전한 영속성
-
-`persist`는 `key`, 저장소 팩토리, `decode`가 필수입니다. 생성 시에는 저장소 I/O가 없습니다.
-클라이언트 시작 코드나 effect에서 `await store.persist.rehydrate()`를 명시적으로 호출하세요.
-복원은 저장 형식 검사, migration, decode, 검증을 거쳐 즉시 commit합니다.
-잘못된 데이터, migration 실패, 미래 버전은 현재 메모리와 저장값을 보존한 채 복원을 거부합니다.
-성공한 migration은 현재 버전으로 저장을 예약하며 현재 버전의 데이터는 다시 쓰지 않고 decode합니다.
+### 안전한 영속화
 
 <!-- pipe-example:safe-persist-pipe -->
 ```ts
@@ -366,49 +169,7 @@ counterStore.setState({ count: 1 });
 await counterStore.persist.flush();
 ```
 
-`decode`는 필수입니다. 저장된 값을 검증 없이 신뢰하지 않습니다.
-
-IndexedDB는 base64 변환 없이 structured clone으로 `File`, `Blob`, `Map`, `Set`,
-`Date`, `ArrayBuffer`를 보존합니다. `jsonStorage(() => window.localStorage)`와
-`jsonStorage(() => window.sessionStorage)`는 JSON 값만 지원하며 `cookieStorage({ path: '/' })`도
-JSON 기반입니다. IndexedDB 실패 시 다른 어댑터로 자동 전환하지 않습니다.
-헬퍼 반환값은 추가 `() =>` 없이 직접 전달하세요.
-
-이번 영속화 API는 **호환성을 깨지만 patch로 출시하는 변경**입니다.
-[이슈 #102](https://github.com/ilokesto/ilokesto/issues/102)의 v2 수정 릴리스에 한정된 명시적 예외입니다.
-
-| 이전 API | 대체 API |
-| --- | --- |
-| `local`, `session`, `cookie` 옵션 | `key` + `jsonStorage(...)` 또는 `cookieStorage(...)` |
-| 자동 복원 / `skipHydration` | 명시적 `await store.persist.rehydrate()` |
-| `hasHydrated()` / `onRehydrateStorage` | `getStatus()` / `subscribe(listener)` |
-| 동기 `rehydrate()` / `clearStorage()` | 반환된 Promise 대기 |
-| 업데이트 즉시 저장 완료로 가정 | `await store.persist.flush()` |
-
-복원 완료 전 편집은 충돌이 됩니다. `rehydrate({ conflict: 'keep-current' })` 또는
-`rehydrate({ conflict: 'use-stored' })`로 명시적으로 선택하세요. 깊은 병합은 없습니다.
-`getStatus()`와 `subscribe()`로 복원, 저장, 대기 작업, 오류를 관찰합니다.
-`clearStorage()`는 이전 쓰기 뒤에 해당 키만 삭제하며 메모리는 유지합니다.
-
-팩토리는 스토어마다 독립적인 인스턴스를 만듭니다. `dispose(store)`는 해당 스토어의 대기 작업과
-소유 연결만 정리합니다. 종료 전 저장 보장이 필요하면 먼저 `flush()`를 기다리세요.
-IndexedDB 저장 완료는 request 성공이 아니라 transaction 완료 기준입니다.
-`flush()`는 호출 시점의 저장 대상만 기다리고 debounce 타이머를 앞당기지 않습니다.
-
-[영속화 마이그레이션 가이드](docs/advanced/persist-migrations.ko.mdx)를 참고하세요.
-빌드 후 `node packages/state/examples/persist-lifecycle.mjs`를 실행하면 사용자 정의 저장소 팩토리로
-복원, 저장, 명시적 충돌 해결을 확인할 수 있습니다.
-
-`.use()`에 전달하는 모든 미들웨어는 사용자 미들웨어를 포함해 `definePipeableMiddleware`로 등록되어야 합니다. 메타데이터에는 `id`가 필요하며, 같은 ID는 기본적으로 거부됩니다. 반복이 의도된 경우에만 모든 항목에 `duplicate: 'allow'`를 설정하세요.
-
-`before: ['id']`는 이 미들웨어가 더 앞에 선언되어 바깥쪽이 되어야 함을 뜻합니다. `after: ['id']`는 더 뒤에 선언되어 안쪽이 되어야 함을 뜻합니다. 대상 미들웨어가 없으면 관계는 무시됩니다. 파이프는 존재하는 관계의 오류와 순환을 거부하며, 미들웨어 순서를 자동으로 바꾸지 않습니다.
-
-`debounce()`는 `persist()`보다 먼저 선언하세요. 반대 순서는 계속 `MIDDLEWARE_ORDER`로 거부됩니다.
-영속화는 지연된 commit을 포함한 실제 commit을 관찰합니다.
-복원은 시간 제어 미들웨어를 우회하고 새로운 history 기준점이 됩니다.
-`history()`와 `debounce()`/`throttle()`의 조합 제한은 유지됩니다.
-
-기능(capability)은 미들웨어가 Store에 추가한 API를 이후 미들웨어와 최종 Store에서 보이게 합니다. `requires`는 `.use()`를 호출할 때 이미 사용할 수 있어야 하므로, 앞선 바깥 미들웨어가 나중의 안쪽 미들웨어가 제공하는 기능을 요구할 수 없습니다. `adds`는 즉시 바깥에서 안쪽으로 향하는 방향으로 기능을 제공합니다.
+### 사용자 정의 capability
 
 <!-- pipe-example:custom-capability -->
 ```ts
@@ -440,89 +201,45 @@ counterStore.increment();
 counterStore.getState().count;
 ```
 
-이 변경은 호환성을 깨는 변경입니다. 호출형과 가변 인자 `pipe` 문법은 제거되었습니다. 기존 호출은 `pipe.use(...).create(initialState)`로 바꾸세요.
+### 프레임워크 연결
 
-## 내보내기
+각 어댑터 문서에서 생명주기와 반환 형태를 확인할 수 있습니다.
+[React](./docs/integrations/react.ko.mdx), [Vue](./docs/integrations/vue.ko.mdx),
+[Angular](./docs/integrations/angular.ko.mdx), [Svelte](./docs/integrations/svelte.ko.mdx),
+[Solid](./docs/integrations/solid.ko.mdx)를 참고하세요.
 
-- `@ilokesto/state/react` → React 어댑터
-- `@ilokesto/state/vue` → Vue 어댑터
-- `@ilokesto/state/angular` → Angular 어댑터
-- `@ilokesto/state/svelte` → Svelte 어댑터
-- `@ilokesto/state/solid` → Solid 어댑터
-- `@ilokesto/state/middleware` → 미들웨어 헬퍼
-- `@ilokesto/state/utils` → `pipe`, `definePipeableMiddleware`, pipe 타입
-- `@ilokesto/state/adaptor` → `adaptor` (optional `immer` peer dependency 필요)
+Reducer 식별자와 Store 직접 쓰기는 [Reducer 상태](./docs/guides/reducer-state.ko.mdx),
+안정적인 selector와 1단계 비교는
+[selector 의미론](./docs/advanced/selector-semantics.ko.mdx)을 참고하세요.
 
-## 마이그레이션: 통합 shallow Selector 구독
+</details>
 
-### 변경 사항
+<details>
+<summary>개발</summary>
 
-React 어댑터는 이전에 **깊은 비교** (`deepCompare`)를 사용하여 selector 결과가 리렌더를 트리거해야 하는지 판단했습니다. 이후 zustand가 사용하는 패턴과 같은 **shallow 비교**로 전환했습니다. 이제 React, Vue, Angular, Svelte, Solid의 일반 상태와 Reducer 상태가 모두 같은 shallow Selector 구독 계약을 사용합니다.
+Node 22와 pnpm 10.17.1을 사용하고 저장소 루트에서 실행하세요.
+`pnpm test`의 배포 결과물 테스트에는 Bun도 필요합니다.
 
-### 이유
-
-- **성능**: 깊은 비교는 매 렌더마다 실행되어 전체 state를 재귀적으로 순회했습니다. shallow 비교는 1단계만 확인합니다.
-- **정확성**: `deepCompare`는 `Map`, `Set`, `Date`를 올바르게 처리하지 못했고, 순환 참조 시 스택 오버플로우가 발생했습니다. shallow 비교는 `Map`, `Set`, 배열, 일반 객체를 올바르게 처리하며 순환 참조에 안전합니다.
-- **생태계 정합**: zustand v5가 shallow 비교를 표준 패턴으로 사용합니다.
-
-### 사용자에게 미치는 영향
-
-| 패턴 | 이전 (deep) | 이후 (shallow) |
-|---|---|---|
-| `useStore(s => s.count)` | 동작 | 동작 (동일) |
-| `useStore(s => ({ a: s.a, b: s.b }))` | 깊은 비교 (값이 같으면 항상 같음) | shallow 비교 (1단계 값이 같으면 같음) |
-| selector 결과의 중첩 객체 | 깊은 비교 | 참조 비교 (`Object.is`) |
-| state의 `Map` / `Set` | 잘못된 비교 | 올바른 shallow 비교 |
-| state의 `Date` | 잘못된 비교 | `getTime()` 기반 올바른 shallow 비교 |
-
-### 깊은 비교가 필요한 경우
-
-`useMemo`로 selector 결과를 메모이제이션하세요:
-
-```ts
-const value = useMemo(() => {
-  return computeDerivedState(store.getState());
-}, [dependency]);
-```
-
-또는 selector에서 원시값을 반환하여 `Object.is`로 충분하게 만드세요:
-
-```ts
-const time = useStore(s => s.date.getTime());
-```
-
-### selector 참조를 안정적으로 유지하기
-
-shallow selector 캐시는 selector 함수의 참조 동일성을 기준으로 동작합니다. 인라인 selector
-(`useStore(s => ({ a: s.a, b: s.b }))`)는 매 렌더마다 새로운 함수 참조를 만들어 캐시를
-초기화하고 shallow 최적화를 무의미하게 만듭니다. 다음 중 하나를 선호하세요:
-
-```ts
-// 1. 모듈 스코프 selector (순수 파생은 권장)
-const selectSlice = (s: State) => ({ a: s.a, b: s.b });
-const slice = useStore(selectSlice);
-
-// 2. selector가 props나 다른 반응성 입력에 의존할 때는 useCallback
-const selectFiltered = useCallback(
-  (s: State) => s.items.filter(i => i.id === activeId),
-  [activeId],
-);
-const filtered = useStore(selectFiltered);
-```
-
-인라인 selector에서 새 객체/배열 리터럴을 반환하면 호출마다 새 참조가 생깁니다. shallow 비교로
-1단계 값이 같을 때 리렌더는 막을 수 있지만, selector 참조를 안정화하면 `useSyncExternalStore`가
-비교 자체를 건너뛸 수 있습니다.
-
-## 개발
-
-```bash
-pnpm install
+```sh
+pnpm install --frozen-lockfile
 pnpm build
+pnpm typecheck
+pnpm test
+pnpm test:typecheck
+pnpm test:browser
+pnpm test:tooling
+pnpm migrate:verify
+pnpm docs:publication:verify
+pnpm docs:typecheck
+pnpm docs:build
+pnpm docs:test
 ```
 
-빌드 결과물은 `dist` 디렉터리에 생성됩니다.
+빌드 결과는 `dist/`에 생성됩니다. 전용 문서 사이트를 빌드한 뒤
+`pnpm docs:start`로 로컬에서 실행합니다. 공식 영문·한국어 문서는 `docs/`에,
+렌더러는 `website/`에 있습니다.
 
-## 라이선스
+변경 불가능한 문서 기록과 마이그레이션 이력을 보존하세요.
+`.release/policy.json`에 따라 게시가 비활성화되어 있으며 로컬 게시나 문서 배포는 하지 않습니다.
 
-MIT
+</details>
