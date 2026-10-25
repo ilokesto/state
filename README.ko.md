@@ -240,6 +240,9 @@ pnpm docs:test
 렌더러는 `website/`에 있습니다.
 
 변경 불가능한 문서 기록과 마이그레이션 이력을 보존하세요.
-`.release/policy.json`에 따라 게시가 비활성화되어 있으며 로컬 게시나 문서 배포는 하지 않습니다.
+PR은 Verify CI를 실행합니다. main 병합은 Changesets 릴리스 PR을 생성·갱신하며,
+릴리스 PR을 병합하면 GitHub Actions가 성공한 Verify의 정확한 아티팩트만 게시합니다.
+적용 전에 `Allow GitHub Actions to create and approve pull requests`를 켜고
+`Production` 환경에 `NPM_TOKEN`을 설정하세요. 로컬 게시나 문서 배포는 하지 않습니다.
 
 </details>
