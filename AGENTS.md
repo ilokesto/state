@@ -16,9 +16,11 @@ Use Node 22 and pnpm 10.17.1. Run commands from this root.
 - Preserve `.migration/source-manifest.json`, original archive refs and tag objects.
   `migrate:verify` protects immutable history and present standalone safety without
   fixing future HEAD, package version, or API to the migration checkpoint.
-- `release:verify --sha <full-SHA>` is read-only. Publishing is disabled by
-  `.release/policy.json`; never publish locally or deploy docs during migration.
-- Future publication remains token-based GitHub Actions with the latest dist-tag.
+- `release:verify --sha <full-SHA>` is read-only. Main merges maintain the Changesets release PR; merging
+  it publishes only the exact successful Verify artifact through GitHub Actions with the
+  latest dist-tag. Never publish locally or deploy docs.
+- Before rollout, enable `Allow GitHub Actions to create and approve pull requests`
+  and configure `NPM_TOKEN` in the `Production` environment.
 
 ## Must not do
 
