@@ -1,0 +1,68 @@
+---
+title: "테스트와 측정"
+description: "격리된 메모리 영속성, 알림 기반 대기, 재현 가능한 측정입니다."
+---
+
+# 테스트와 측정
+
+## 메모리 영속성
+
+`memoryStorage(initialEntries?)`는 `/utils`와 `/middleware`에서 제공하는 `PersistStorageFactory`입니다. Entry는 key별 `{ state, version }` envelope입니다. 초기 entry, 쓰기, 읽기에 `structuredClone`을 사용하며 함수처럼 복제할 수 없는 값은 누락시키지 않고 거부합니다. JSON 직렬화가 아니므로 브라우저 용량 제한, cookie, IndexedDB transaction, 탭 간 이벤트를 재현하지는 않습니다.
+
+Factory마다 별도 map을 가집니다. 여러 store 사이의 복원을 검증할 때 factory를 재사용하세요. 각 활성화는 같은 map을 사용하되 독립적으로 dispose할 수 있는 adapter를 반환합니다. `removeItem`은 해당 key만 삭제합니다. Adapter의 `dispose()`는 여러 번 호출해도 안전하며 이후 작업을 거부하고 공유 entry는 유지합니다. 테스트가 끝나면 factory 참조를 놓아 map을 해제하세요.
+
+## 완료 신호와 정리
+
+`/utils`의 `createStoreTestHarness<State>(store: StoreApi<State>): StoreTestHarness<State>`는 즉시 구독하고 다음을 제공합니다.
+
+| Member | 계약 |
+| --- | --- |
+| `states` | 초기 상태와 알림 시점 상태 참조의 복사된 배열입니다. 깊은 복사나 commit log는 아닙니다. |
+| `waitFor(predicate, options?)` | 현재 또는 이후 알림에서 조건을 만족하는 상태로 resolve합니다. Predicate 예외는 reject합니다. |
+| `dispose()` | 구독을 해제하고 진행 중인 대기를 거부하며 middleware를 한 번 정리합니다. |
+
+`StoreWaitOptions`는 `timeoutMs`(기본 1000, 정수 0–2147483647)와 `signal?: AbortSignal`을 받습니다. Timeout은 실패 기한이며 polling 간격이 아닙니다. Abort는 `signal.reason`으로 reject합니다. 성공, 실패, abort, disposal 모두 timer와 abort listener를 해제합니다. Dispose한 harness는 새 대기를 거부합니다. 전용 store를 사용하세요. Harness는 해당 store의 middleware 정리를 소유하지만 상태를 초기화하거나 다른 소비자의 구독을 해제하지 않습니다.
+
+```ts lineNumbers
+import { persist, memoryStorage } from '@ilokesto/state/middleware';
+import { createStoreTestHarness, pipe } from '@ilokesto/state/utils';
+
+const storage = memoryStorage();
+const store = pipe.use(persist({
+  key: 'counter',
+  storage,
+  decode: value => typeof value === 'number' ? value : null,
+})).create<number>(0);
+const harness = createStoreTestHarness(store);
+
+try {
+  await store.persist.rehydrate();
+  const completed = harness.waitFor(value => value === 2);
+  store.set(2);
+  const observed = await completed; // 동기 알림도 놓치지 않고 2를 반환
+  await store.persist.flush(); // 저장 완료는 별도로 대기
+} finally {
+  harness.dispose();
+}
+```
+
+동작을 시작하기 전에 대기를 등록하세요. 상태 일치가 저장이나 네트워크 완료까지 증명하지는 않습니다. `rehydrate()`, `flush()` 또는 실제 작업의 promise를 사용하세요. Helper는 debounce/throttle clock을 진행시키지 않습니다. 상태 참조는 불변 업데이트를 전제하며 제자리 변경은 과거 snapshot으로 남지 않습니다.
+
+## 재현 가능한 저장소 benchmark
+
+저장소 root에서 고정된 Node/pnpm과 설치된 Bun으로 실행하세요.
+
+```bash lineNumbers
+pnpm install --frozen-lockfile
+pnpm benchmark
+# 선택적으로 양의 반복 횟수 지정; 기본 1000.
+pnpm benchmark 100
+```
+
+Script는 먼저 build한 뒤 schema-1 JSON을 출력합니다. 열 번의 commit마다 선택 값이 바뀌는 selector의 계산/알림 횟수, 제한된 history의 commit/undo/redo/알림 횟수, 순차 flush한 메모리 저장소의 읽기/쓰기/삭제/disposal 횟수와 JSON envelope 추정 byte, 각 작업의 경과 시간과 heap 차이를 측정합니다. 각 flush를 기다리므로 저장 횟수는 queue scheduling에 의존하지 않습니다.
+
+패키지 측정은 선언 파일을 포함한 전체 `dist` byte, manifest byte, 각 코드 entrypoint의 minify한 브라우저 ESM 및 gzip byte를 제공합니다. 모든 export를 유지하고 registry store 의존성을 포함하며 optional peer는 external로 남기고 bundler warning을 기록합니다. Metadata subpath는 manifest 원본 byte를 제공합니다. npm tarball 크기나 특정 소비자의 tree-shaking 결과는 아닙니다.
+
+같은 checkout, lockfile, runtime, machine, 반복 횟수끼리만 비교하세요. 시간에는 준비/정리가 포함되고 warmup이나 통계 표본은 없습니다. Heap 차이는 강제 GC 없이 관측하므로 음수일 수 있으며 retained memory나 누수 측정이 아닙니다. 결과는 CI 시간 gate나 성능 보장이 아닙니다. Tooling test는 작업 횟수만 검증하며 시간이나 문서 문구는 고정하지 않습니다.
+
+2026년 10월 26일 구현 checkout에서 Node 24.22.1, Bun 1.4.2, Apple M4 Pro(arm64)로 100회 실행한 결과는 selector 계산 101회와 알림 10회, undo 100회와 redo 100회, 저장소 읽기 1회·쓰기 100회·삭제 1회·disposal 1회였습니다. 모든 export를 유지한 bundle은 root 8,529 byte(gzip 2,898), `/utils` 9,110 byte(gzip 3,175), `/middleware` 21,257 byte(gzip 7,069)였습니다. 해당 checkout의 관측값이지 budget이 아니며 export 추가 merge 후 다시 실행해야 합니다. 이 실행의 selector heap 차이는 음수였으므로 단일 heap 표본으로 메모리 사용량을 확정할 수 없다는 한계도 드러납니다.
