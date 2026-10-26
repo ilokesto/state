@@ -98,6 +98,58 @@ React는 같은 equality를 구독 필터와 client/server snapshot 안정화에
 
 equality는 순수한 동등 관계여야 합니다. true를 반환하면 새 값은 전달되지 않고 이전 selection이 유지됩니다. readOnly()에는 비교가 적용되지 않습니다.
 
+## Async resource와 선택적 Suspense
+
+`bindResource(resource)`는 `UseResource<Input, Output>`을 반환합니다. selector와 `readOnly`가 있는 readonly hook에 `run(input, options?)`, `useSuspense()`가 추가됩니다. 일반 `useRequest()`는 모든 `ResourceState`를 반환하며 어디서 시작한 실행이든 관찰합니다. 관찰만 필요하면 기존 `bindReadonly(resource.store)`도 사용할 수 있습니다.
+
+`useSuspense()`는 `idle` 또는 `success`를 반환하고, 원래 오류를 error boundary에 던지며, **이 binding의 `run`으로 시작한** pending 실행만 suspend합니다. binding을 한 번 만들고 공유하세요. 실행은 event나 service에서 시작하며 render에서는 시작하지 않습니다. 반환된 run promise가 해당 실행의 안정적인 Suspense promise이며 새 실행이 이를 교체합니다. 이미 abort된 signal을 전달한 실행은 진행 중인 작업을 교체하지 않습니다.
+
+다음 예제는 서버 없이 loading, error, retry를 실행할 수 있도록 실패 버튼도 제공합니다.
+
+```tsx lineNumbers
+import { Component, Suspense, useState, type ReactNode } from 'react';
+import { createResource } from '@ilokesto/state';
+import { bindResource } from '@ilokesto/state/react';
+
+const request = createResource(async (shouldFail: boolean) => {
+  if (shouldFail) throw new Error('Try again');
+  return 'Loaded';
+});
+const useRequest = bindResource(request);
+
+class RequestBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  render() { return this.state.failed ? <p>Request failed. Retry below.</p> : this.props.children; }
+}
+
+function Result() {
+  const state = useRequest.useSuspense();
+  return <p>{state.status === 'success' ? state.data : 'Choose an action'}</p>;
+}
+
+export function ResourcePanel() {
+  const [attempt, setAttempt] = useState(0);
+  const load = (shouldFail: boolean) => {
+    void useRequest.run(shouldFail);
+    setAttempt(previous => previous + 1);
+  };
+  return (
+    <section>
+      <RequestBoundary key={attempt}>
+        <Suspense fallback={<p>Loading...</p>}><Result /></Suspense>
+      </RequestBoundary>
+      <button onClick={() => load(false)}>Load / retry</button>
+      <button onClick={() => load(true)}>Fail</button>
+    </section>
+  );
+}
+```
+
+retry는 새 실행을 시작하고 boundary도 초기화합니다. boundary 초기화만으로는 재실행하지 않습니다. pending 작업을 취소하거나 dispose하면 `idle`을 반환하며 영구적으로 suspend하지 않습니다. 완료 후 dispose는 중립 resource와 동일하게 마지막 snapshot을 유지합니다. `request.run` 또는 다른 binding으로 시작한 pending 실행은 `useSuspense`에서 설명이 있는 오류를 발생시키므로 이 경우 일반 hook을 사용하세요. 이 계약은 commit되지 않은 render에서 구독을 만드는 일을 피합니다. suspend된 채 폐기된 mount를 포함해 unmount는 React 구독만 해제하며 빌린 resource를 취소하지 않습니다. `cancel`, `dispose` 시점은 resource 소유자가 결정합니다.
+
+Suspense helper는 기존 초기 server snapshot인 `idle`을 사용합니다. 서버 작업을 시작하거나 서버 data cache를 제공하지 않습니다.
+
 ## 주의할 점
 
 - 반환된 function은 내부적으로 `useSyncExternalStore`를 쓰는 React hook입니다. component 또는 custom hook 안에서만 호출하세요.

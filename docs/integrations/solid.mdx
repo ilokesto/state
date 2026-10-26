@@ -81,6 +81,44 @@ Call inside a component or createRoot() owner, as before. Owner cleanup unsubscr
 
 Equality must be a pure equivalence relation. Returning true suppresses delivery and retains the previous selection. Equality does not apply to readOnly().
 
+## Async resource accessor
+
+`bindResource(resource)` returns `UseResource<Input, Output>`: the readonly accessor factory plus `run(input, options?)`. Call it inside a Solid owner to receive an `Accessor<ResourceState<Output>>`; selectors and equality retain their existing contracts. `bindReadonly(resource.store)` also works for observation alone.
+
+The following component uses native reactive derivation and offers both outcomes without a server:
+
+```tsx lineNumbers
+import { createMemo } from 'solid-js';
+import { createResource } from '@ilokesto/state';
+import { bindResource } from '@ilokesto/state/solid';
+
+const request = createResource(async (shouldFail: boolean) => {
+  if (shouldFail) throw new Error('Try again');
+  return 'Loaded';
+});
+const useRequest = bindResource(request);
+
+export function ResourcePanel() {
+  const { state } = useRequest();
+  const message = createMemo(() => {
+    const current = state();
+    if (current.status === 'pending') return 'Loading...';
+    if (current.status === 'error') return String(current.error);
+    if (current.status === 'success') return current.data;
+    return 'Choose an action';
+  });
+  return (
+    <section>
+      <p>{message()}</p>
+      <button onClick={() => useRequest.run(false)}>Load / retry</button>
+      <button onClick={() => useRequest.run(true)}>Fail</button>
+    </section>
+  );
+}
+```
+
+The binding does not use Solid's separate `createResource` API or emulate React Suspense. Retry is another `run`. Owner cleanup unsubscribes without cancelling a borrowed resource; only the resource owner calls `cancel`/`dispose`. A direct resource run is observable too.
+
 ## Caveats
 
 - Subscribed accessors require `getOwner()` to exist.
