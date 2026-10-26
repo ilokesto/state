@@ -2,7 +2,7 @@ import { PersistError } from './Persist.js';
 import type { PersistStatus } from './Persist.js';
 import type { PersistedValue, PersistStorage } from './storage/PersistStorage.js';
 
-type Write = { readonly id: number; readonly generation: number; readonly value: PersistedValue };
+type Write = { readonly id: number; readonly generation: number; readonly value: () => PersistedValue };
 type Waiter = {
   readonly target: number;
   readonly resolve: () => void;
@@ -17,8 +17,11 @@ export class PersistWriter {
   private generation = 0;
   private pending: Write | undefined;
   private active = false;
+  private activeWrite: Write | undefined;
   private enabled = false;
   private disposed = false;
+  private paused = false;
+  private timer: ReturnType<typeof setTimeout> | undefined;
   private readonly waiters = new Set<Waiter>();
   private readonly removals: Removal[] = [];
 
@@ -26,21 +29,55 @@ export class PersistWriter {
     private readonly storage: () => PersistStorage,
     private readonly key: string,
     private readonly publish: (patch: Partial<PersistStatus>) => void,
+    private readonly saveDebounceMs: number,
   ) {}
 
-  enqueue(value: PersistedValue): void {
+  enqueue(value: () => PersistedValue): void {
     if (this.disposed) return;
     this.pending = { id: ++this.nextId, generation: this.generation, value };
     this.publish({ pending: true });
-    this.start();
+    this.schedule();
   }
 
   enable(): void {
     this.enabled = true;
+    this.schedule();
+  }
+
+  pause(): void {
+    this.paused = true;
+    this.cancelTimer();
+    this.publish({ paused: true });
+  }
+
+  resume(): void {
+    this.paused = false;
+    this.publish({ paused: false });
+    this.schedule();
+  }
+
+  private cancelTimer(): void {
+    if (this.timer !== undefined) clearTimeout(this.timer);
+    this.timer = undefined;
+  }
+
+  private schedule(): void {
+    this.cancelTimer();
+    if (this.disposed) return;
+    if (
+      this.enabled && !this.paused && this.pending &&
+      this.pending !== this.activeWrite && this.saveDebounceMs > 0
+    ) {
+      this.timer = setTimeout(() => {
+        this.timer = undefined;
+        this.start();
+      }, this.saveDebounceMs);
+    }
     this.start();
   }
 
   discard(): void {
+    this.cancelTimer();
     this.pending = undefined;
     this.savedId = this.nextId;
   }
@@ -56,6 +93,7 @@ export class PersistWriter {
     const promise = new Promise<void>((resolve, reject) => {
       this.waiters.add({ target, resolve, reject });
     });
+    this.cancelTimer();
     this.start();
     return promise;
   }
@@ -75,7 +113,9 @@ export class PersistWriter {
 
   dispose(): void {
     this.disposed = true;
+    this.cancelTimer();
     this.pending = undefined;
+    this.activeWrite = undefined;
     const error = this.disposedError();
     this.rejectWaiters(error);
     for (const removal of this.removals.splice(0)) removal.reject(error);
@@ -93,18 +133,31 @@ export class PersistWriter {
   private start(): void {
     if (this.active || this.disposed) return;
     const removal = this.removals[0];
-    const write = this.enabled ? this.pending : undefined;
+    const canWrite = this.waiters.size > 0 || (!this.paused && this.timer === undefined);
+    const write = this.enabled && canWrite ? this.pending : undefined;
     if (!removal && !write) return;
     this.active = true;
+    this.activeWrite = removal ? undefined : write;
     this.publish({ saving: 'writing', error: null });
     void Promise.resolve().then(async () => {
       if (this.disposed) return;
+      let projectionFailed = false;
       // Capture the job before publishing; status callbacks can enqueue or clear.
       try {
         if (removal) {
           await this.storage().removeItem(this.key);
         } else if (write && write.generation === this.generation) {
-          await this.storage().setItem(this.key, write.value);
+          let value: PersistedValue;
+          try {
+            value = write.value();
+          } catch (cause) {
+            projectionFailed = true;
+            throw cause;
+          }
+          // User projection can reenter clear/dispose before storage is invoked.
+          if (!this.disposed && write.generation === this.generation) {
+            await this.storage().setItem(this.key, value);
+          }
         }
         if (this.disposed) return;
         if (removal) {
@@ -121,16 +174,23 @@ export class PersistWriter {
           }
         }
         this.active = false;
+        this.activeWrite = undefined;
         this.publish({ saving: 'idle', pending: this.pending !== undefined });
         this.start();
       } catch (cause) {
         if (this.disposed) return;
-        const error = new PersistError(removal ? 'clear' : 'write', 'STORAGE', 'Persistence I/O failed', cause);
+        const error = new PersistError(
+          removal ? 'clear' : 'write',
+          projectionFailed ? 'INVALID_DATA' : 'STORAGE',
+          projectionFailed ? 'Persistence projection failed' : 'Persistence I/O failed',
+          cause,
+        );
         if (removal) {
           this.removals.shift();
           removal.reject(error);
         }
         this.active = false;
+        this.activeWrite = undefined;
         // A cleared generation must never poison its replacement's status.
         if (removal || write?.generation === this.generation) {
           this.rejectWaiters(error);

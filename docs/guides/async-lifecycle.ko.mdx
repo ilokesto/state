@@ -1,0 +1,182 @@
+---
+title: "비동기 리소스와 effect"
+description: "비동기 action, 취소, selector effect, 명시적 action 구독의 수명주기를 관리합니다."
+---
+
+# 비동기 리소스와 effect
+
+`createResource`, `createEffect`, `listenActions`는 프레임워크 독립적인 root
+export입니다. reducer dispatch를 바꾸거나 middleware를 설치하지 않으며 retry,
+debounce, scheduler, query cache를 제공하지 않습니다.
+
+## 리소스 action
+
+```ts
+import { createResource } from '@ilokesto/state';
+
+const text = createResource(async (path: string, { signal }) => {
+  const response = await fetch(path, { signal });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return response.text();
+});
+
+const unsubscribe = text.store.subscribeSelector(
+  state => state.status,
+  status => { document.body.dataset.requestStatus = status; },
+);
+const result = await text.run('/api/message');
+if (result.status === 'success') {
+  document.title = result.data;
+}
+unsubscribe();
+text.dispose();
+```
+
+`createResource<Input, Output>(task)`는 `{ store, run, cancel, dispose }`를
+반환합니다. task는 `(input, { signal })`을 받고 값 또는 promise를 반환합니다.
+`run(input, { signal? })`은 `Promise<ResourceResult<Output>>`를 반환합니다.
+입력이 없는 task는 `run()`으로 실행합니다.
+
+store는 `ReadableStore<ResourceState<Output>>`를 구현하며 `getState`,
+`getInitialState`, `subscribe`, `subscribeSelector`만 제공하고 쓰기는 노출하지
+않습니다. 초기 snapshot은 항상 `{ status: 'idle' }`입니다.
+
+| 상태 | 필드 |
+| --- | --- |
+| `idle` | 활성 요청 없음 |
+| `pending` | task 실행 중 |
+| `success` | `data: Output` |
+| `error` | `error: unknown` |
+
+결과 promise는 `{ status: 'success', data }`, `{ status: 'error', error }`,
+`{ status: 'cancelled', reason }` 중 하나로 resolve됩니다. task의 throw,
+rejection, 취소는 결과이며 run promise의 rejection이 아닙니다. 결과를 처리하거나
+store를 관찰하세요. 취소된 run 결과를 사용하지 않아도 미처리 rejection은 생기지
+않습니다.
+
+### 취소와 실행 순서
+
+- 새 run은 기존 활성 run을 대체하고 abort합니다. 이전 task가 signal을 무시해도
+  현재 실행만 완료 상태를 반영할 수 있습니다.
+- `cancel(reason?)`은 현재 run을 즉시 완료 처리하고 signal을 abort하며 외부
+  abort listener를 제거하고 상태를 `idle`로 돌립니다. 반복 호출해도 안전하고
+  이후 새 run을 실행할 수 있습니다.
+- `dispose()`는 새 task 실행을 영구적으로 막습니다. 진행 중인 작업은 취소하고,
+  이미 완료된 작업의 최종 snapshot은 유지합니다. 이후 run은 `cancelled`로
+  resolve됩니다. 기본 취소 사유는 `AbortError` DOMException입니다.
+- 이미 abort된 외부 signal은 task 실행이나 기존 작업 대체 없이 `cancelled`를
+  반환합니다. 외부 abort listener는 모든 종료 경로에서 제거됩니다.
+- abort callback과 pending 상태 구독자는 동기적으로 `run`, `cancel`,
+  `dispose`를 호출할 수 있습니다. 더 최신 run이 소유권을 유지하며 task 호출 전
+  취소가 일어나면 오래된 task는 호출하지 않습니다. 완료 상태 구독자를 호출하기
+  전에 해당 실행은 종료되므로 구독자가 새 run을 시작해도 완료된 결과는 취소되지
+  않습니다.
+
+task 자체의 I/O와 부수효과를 중단하려면 `signal`에 협조해야 합니다. generation
+검사는 리소스 상태만 보호합니다. abort를 무시하는 promise는 계속 실행될 수 있지만
+늦은 resolve/rejection이 최신 결과를 덮어쓰지는 못합니다.
+
+run의 상태 통지 중 store 구독자가 throw하면 해당 run은 store 통지 오류를 담은
+`error` 결과로 resolve됩니다. 이미 반영한 snapshot은 되돌리지 않습니다.
+동기 `cancel`/`dispose`의 통지 오류는 호출자에게 전파됩니다. 구독자는 throw하지
+않아야 합니다.
+
+## Selector effect
+
+```ts
+import { createEffect, createResource, createStore } from '@ilokesto/state';
+
+const selection = createStore({ path: '/api/message' });
+const errors: unknown[] = [];
+const request = createResource(async (path: string, { signal }) => {
+  const response = await fetch(path, { signal });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return response.text();
+});
+const stop = createEffect(
+  selection,
+  state => state.path,
+  (path, { signal }) => {
+    void request.run(path, { signal });
+  },
+  { onError: error => { errors.push(error); } },
+);
+
+selection.set({ path: '/api/next-message' });
+stop();
+request.dispose();
+```
+
+`createEffect(store, selector, callback, options)`는 여러 번 호출해도 안전한
+해제 함수를 반환합니다. `resource.store`를 포함해 계약을 따르는 모든
+`ReadableStore`를 사용할 수 있습니다. `fireImmediately`의 기본값은 `true`입니다.
+이후 실행은 `subscribeSelector`의 변경을 따르며 기본 비교는 `Object.is`,
+사용자 지정 비교는 `options.equalityFn`입니다. selector와 비교 함수는 순수해야
+하며 이 함수들의 예외는 원본 store의 오류 처리 규칙을 따릅니다.
+
+callback은 `(selection, { signal, dispose })`를 받습니다. 아무것도 반환하지
+않거나 cleanup 함수, 또는 둘 중 하나로 resolve되는 promise를 반환할 수 있습니다.
+외부 해제 함수가 아직 반환되지 않은 최초 callback에서도 `dispose`를 쓸 수 있습니다.
+
+다음 callback 전에 이전 signal을 abort하고 이미 확보된 cleanup을 호출합니다.
+동기 재진입 통지는 현재 callback, cleanup, 오류 처리 함수가 반환한 뒤 FIFO로
+처리하며 해당 사용자 callback 안에서 재귀적으로 실행하지 않습니다. 해제 시 원본
+구독과 대기 작업을 제거하고 현재 실행을 정확히 한 번 abort/cleanup합니다.
+
+비동기 callback의 완료를 기다리지 않고 대체 실행을 시작합니다. 오래된 비동기
+callback이 나중에 cleanup을 반환하면 즉시 한 번 호출합니다. 비동기 부수효과
+전에 `signal.aborted`를 확인하세요. 순서가 중요한 해제 작업은 cleanup 안에서
+동기적으로 수행해야 합니다. cleanup이 반환한 promise의 오류는 전달하지만 다음
+callback 전에 그 완료를 기다리지는 않습니다.
+
+`onError(error: unknown)`는 필수입니다. callback, cleanup, unsubscribe,
+늦은 비동기 작업의 오류를 받으며 해제 후 발생한 오류도 포함됩니다. 오류 전달
+자체는 이후 통지를 중단하지 않습니다. 중단하려면 오류 처리 함수에서 effect를
+해제하세요. 이 함수는 throw하지 않아야 합니다. throw하면 해당 예외는 microtask에서
+미처리 예외로 다시 발생하며 미처리 promise rejection으로 남기지 않습니다.
+
+## 명시적 action listener
+
+`listenActions(source, callback, { onError })`의 callback과 해제 계약은
+effect와 같습니다. 다만 명시적인 `ActionSource<Action>`,
+즉 `{ subscribe(listener): Unsubscribe }`에서 이벤트를 받습니다. reducer를
+패치하거나 상태 변경에서 action을 추론하지 않습니다. 동일한 action도 각각
+새 실행을 시작합니다.
+
+```ts
+import { createReducer, listenActions } from '@ilokesto/state';
+import type { ActionSource } from '@ilokesto/state';
+
+type Action = { type: 'add'; amount: number };
+const counter = createReducer((count: number, action: Action) => count + action.amount, 0);
+const listeners = new Set<(action: Action) => void>();
+const actions: ActionSource<Action> = {
+  subscribe(listener) {
+    listeners.add(listener);
+    return () => { listeners.delete(listener); };
+  },
+};
+const seen: number[] = [];
+const errors: unknown[] = [];
+const stop = listenActions(actions, action => {
+  seen.push(action.amount);
+}, { onError: error => { errors.push(error); } });
+
+// 애플리케이션이 dispatch 이후의 관찰 경계를 명시적으로 소유합니다.
+function dispatch(action: Action): void {
+  counter.dispatch(action);
+  for (const listener of [...listeners]) listener(action);
+}
+dispatch({ type: 'add', amount: 1 });
+stop();
+```
+
+source는 이벤트 순서를 소유하며 신뢰할 수 있는 unsubscribe 함수를 반환해야 합니다.
+구독 중 동기 발생한 이벤트는 subscribe가 반환할 때까지 보관하므로 callback 자체
+해제로 unsubscribe 핸들을 잃지 않습니다. 구독 등록 중 throw하는 source는 부분
+등록을 스스로 되돌려야 합니다.
+
+소유 범위가 끝나면 effect/listener 해제 함수와 리소스의 `dispose()`를 호출하세요.
+리소스 store를 직접 구독한 경우 해당 unsubscribe도 별도로 소유합니다.
+기존 `dispose(store)`는 middleware 정리 기능이며 이 helper들의 수명주기를
+자동 소유하거나 읽기 가능한 store를 파괴하지 않습니다.

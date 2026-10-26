@@ -17,14 +17,30 @@ mock.module('react', () => ({
     getServerSnapshot?: () => Snapshot,
   ): Snapshot => {
     cleanupCallbacks.push(subscribe(() => undefined));
-    if (useServerSnapshot && getServerSnapshot) return getServerSnapshot();
-    return getSnapshot();
+    const read = useServerSnapshot && getServerSnapshot ? getServerSnapshot : getSnapshot;
+    const snapshot = read();
+    expect(read()).toBe(snapshot);
+    return snapshot;
   },
 }));
 
-const { create } = await import('../../src/core/React');
+const { create, bind, bindReadonly } = await import('../../src/core/React');
+import { readableSource, selectNestedCount, equalNestedCount } from './readableSource';
 
 describe('React selector subscriptions', () => {
+  test('readonly server snapshot: custom equality -> initial selection is stable instead of current state', () => {
+    useServerSnapshot = true;
+    const { source, backing } = readableSource();
+    backing.setState(state => ({ ...state, count: 9 }));
+    const useCounter = bindReadonly(source);
+
+    const selected = useCounter(selectNestedCount, equalNestedCount);
+
+    expect(selected).toEqual({ nested: { count: 1 } });
+    cleanupCallbacks.pop()?.();
+    expect(backing.activeSelectorSubscriptions).toBe(0);
+  });
+
   test('Given a plain adapter primitive selector, When state changes, Then only relevant updates notify until hook cleanup', () => {
     // Given
     useServerSnapshot = false;
@@ -95,3 +111,35 @@ describe('React selector subscriptions', () => {
     cleanupCallbacks.pop()?.();
   });
 });
+
+for (const readonly of [false, true]) {
+  test('custom equality: '+ (readonly ? 'readable' : 'writable') + ' binding -> nested equal updates retain selection and cleanup subscriptions', () => {
+    const { source, backing } = readableSource();
+    const readonlyAdapter = bindReadonly(source);
+    const writableAdapter = bind(backing);
+    const adapter = readonly ? readonlyAdapter : writableAdapter;
+    useServerSnapshot = false;
+    const selected = readonly
+      ? readonlyAdapter(selectNestedCount, equalNestedCount)
+      : writableAdapter(selectNestedCount, equalNestedCount);
+    const before = selected;
+
+    backing.setState(state => ({ ...state, label: 'unrelated' }));
+
+    expect(backing.selectorNotifications).toBe(0);
+    expect(selected).toBe(before);
+    if (readonly) {
+      expect('writeOnly' in adapter).toBe(false);
+      expect('setState' in selected).toBe(false);
+      expect('dispatch' in selected).toBe(false);
+    }
+    backing.setState(state => ({ ...state, count: 2 }));
+    expect(backing.selectorNotifications).toBe(1);
+
+    cleanupCallbacks.pop()?.();
+    expect(backing.activeSelectorSubscriptions).toBe(0);
+    backing.setState(state => ({ ...state, count: 3 }));
+    expect(backing.selectorNotifications).toBe(1);
+    expect(adapter.readOnly(state => state.count)).toBe(3);
+  });
+}
