@@ -11,7 +11,7 @@ Public entrypoint 경로는 `state/package.json`의 exports가 기준입니다. 
 
 | Import | Purpose |
 |---|---|
-| `@ilokesto/state` | 프레임워크 독립적인 `Store`, `createStore`, `createReducer`, `pipe`, `definePipeableMiddleware`, `PipeConfigurationError`, `dispose`와 공개 상태 계약을 내보냅니다. |
+| `@ilokesto/state` | 프레임워크 독립적인 `Store`, `createStore`, `createReducer`, `createScope`, `createStateFactory`, `pipe`, `definePipeableMiddleware`, `PipeConfigurationError`, `dispose`와 공개 상태 계약을 내보냅니다. |
 | `@ilokesto/state/react` | React `create()` adapter와 `UseState`, `UseReducer` type입니다. |
 | `@ilokesto/state/vue` | Vue `create()` adapter와 `UseState`, `UseReducer` type입니다. |
 | `@ilokesto/state/svelte` | Svelte `create()` adapter와 `UseState`, `UseReducer` type입니다. |
@@ -45,6 +45,10 @@ import { logger } from '@ilokesto/state/middleware';
 ```
 
 Root의 `createStore` 또는 `createReducer`로 상태를 만들고 프레임워크 subpath의 `bind` 또는 `bindReducer`로 연결하세요. [프레임워크 독립 상태와 연결](/ko/state/reference/vanilla), [이전 가이드](/ko/state/advanced/migration)를 참고하세요.
+
+요청별 소유권과 검증된 초기 상태 전달은 `createScope`, `createStateFactory`를
+사용합니다. 공개 타입은 `StateScope`, `StateFactory`, `StateFactoryOptions`입니다.
+[Scope와 SSR](/ko/state/advanced/scopes-ssr)을 참고하세요.
 
 ## Peer dependencies
 

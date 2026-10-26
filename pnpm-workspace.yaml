@@ -2,6 +2,7 @@ packages:
   - .
   - website
   - docs-publication/runtime
+  - e2e/fixtures/ssr
 
 linkWorkspacePackages: false
 

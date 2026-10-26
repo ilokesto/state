@@ -11,7 +11,7 @@ The public entrypoint paths are defined by `state/package.json` exports. Import 
 
 | Import | Purpose |
 |---|---|
-| `@ilokesto/state` | Framework-neutral `Store`, `createStore`, `createReducer`, `pipe`, `definePipeableMiddleware`, `PipeConfigurationError`, and `dispose`, plus their public state contracts. |
+| `@ilokesto/state` | Framework-neutral `Store`, `createStore`, `createReducer`, `createScope`, `createStateFactory`, `pipe`, `definePipeableMiddleware`, `PipeConfigurationError`, and `dispose`, plus their public state contracts. |
 | `@ilokesto/state/react` | React `create()` adapter and `UseState`, `UseReducer` types. |
 | `@ilokesto/state/vue` | Vue `create()` adapter and `UseState`, `UseReducer` types. |
 | `@ilokesto/state/svelte` | Svelte `create()` adapter and `UseState`, `UseReducer` types. |
@@ -45,6 +45,10 @@ import { logger } from '@ilokesto/state/middleware';
 ```
 
 Use `createStore` or `createReducer` from the root and connect the result with `bind` or `bindReducer` from a framework subpath. See [Vanilla state and binding](/en/state/reference/vanilla) and the [migration guide](/en/state/advanced/migration).
+
+For request ownership and validated initial-state transfer, use `createScope` and
+`createStateFactory`. Their public types are `StateScope`, `StateFactory`, and
+`StateFactoryOptions`. See [Scopes and SSR](/en/state/advanced/scopes-ssr).
 
 ## Peer dependencies
 
