@@ -11,6 +11,100 @@ import * as svelte from '../../dist/core/Svelte/index.js';
 import * as solid from '../../dist/core/Solid/index.js';
 import { dispose, persist } from '../../dist/middleware/index.js';
 import { pipe } from '../../dist/utils/pipe/index.js';
+import {
+  batch, createStore, derived, focus, createStoreFamily, memoizeSelector,
+  trackedDerived, withLifecycle,
+} from '../../dist/index.js';
+
+export function registryComposition(framework) {
+  const source = createStore({ count: 1, other: 0 });
+  const count = focus(source, value => value.count, (value, count) => ({ ...value, count }));
+  const memo = memoizeSelector(value => value * 2);
+  const doubled = derived(count, memo);
+  let calculations = 0;
+  const tracked = trackedDerived(source, value => {
+    calculations++;
+    return value.count;
+  });
+  const combined = derived([tracked, doubled], ([count, doubled]) => ({ count, doubled }));
+  let active = 0;
+  const family = createStoreFamily(() => withLifecycle(combined, ({ onCleanup }) => {
+    active++;
+    onCleanup(() => active--);
+  }));
+  const view = family.get('counter');
+  const reused = family.get('counter') === view;
+  const binding = { react, vue, angular, solid, svelte }[framework].bindReadonly(view);
+  let read;
+  let cleanup;
+  if (framework === 'react') {
+    let current;
+    function View() {
+      current = binding();
+      return createElement('output', null, `${current.count}:${current.doubled}`);
+    }
+    const host = document.createElement('div');
+    document.body.append(host);
+    const root = createReactRoot(host);
+    flushSync(() => root.render(createElement(StrictMode, null, createElement(View))));
+    read = () => current;
+    cleanup = () => { flushSync(() => root.unmount()); host.remove(); };
+  } else if (framework === 'vue') {
+    const scope = effectScope();
+    const value = scope.run(() => binding());
+    read = () => value.state.value;
+    cleanup = () => scope.stop();
+  } else if (framework === 'angular') {
+    const callbacks = [];
+    read = binding({ destroyRef: {
+      onDestroy(callback) { callbacks.push(callback); return () => {}; },
+    } }).state;
+    cleanup = () => callbacks.forEach(callback => callback());
+  } else if (framework === 'solid') {
+    read = createSolidRoot(stop => {
+      cleanup = stop;
+      return binding().state;
+    });
+  } else {
+    let current;
+    cleanup = binding.subscribe(value => { current = value; });
+    read = () => current;
+  }
+  const act = action => framework === 'react' ? flushSync(action) : action();
+  const seen = [];
+  const stop = view.subscribeSelector(value => value, value => seen.push(value));
+  try {
+    const initial = read();
+    const before = calculations;
+    act(() => source.update(value => ({ ...value, other: 1 })));
+    const skipped = calculations === before && read() === initial;
+    act(() => batch(() => {
+      count.update(value => value + 1);
+      count.update(value => value + 1);
+    }));
+    const changed = read();
+    const connected = active;
+    stop();
+    cleanup();
+    const remaining = active;
+    source.update(value => ({ ...value, count: 9 }));
+    const stopped = read().count;
+    family.dispose();
+    return {
+      initial, skipped, changed, seen, connected, remaining, stopped, reused,
+      parent: source.getState(), exposed: writers(binding),
+    };
+  } finally {
+    stop();
+    cleanup();
+    family.dispose();
+    combined.dispose();
+    tracked.dispose();
+    doubled.dispose();
+    count.dispose();
+    memo.clear();
+  }
+}
 
 function source() {
   const backing = new Store({ count: 1, label: 'initial' });

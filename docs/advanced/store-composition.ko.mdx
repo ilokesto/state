@@ -1,0 +1,131 @@
+---
+title: "파생 store와 조합"
+description: "출시된 store primitive를 state와 다섯 readonly binding에서 사용합니다."
+---
+
+# 파생 store와 조합
+
+Root는 registry 의존성 `@ilokesto/store` 2.1.0 이상의 `batch`, `derived`,
+`focus`, `createStoreFamily`, `memoizeSelector`, `trackedDerived`,
+`withLifecycle`을 재export합니다. 별도 store 구현이 아니라 동일한 함수입니다.
+기존 프레임워크 subpath는 유지됩니다.
+
+## 상태 복사 없이 파생하고 부분 상태에 쓰기
+
+```ts
+import {
+  batch, createStore, derived, focus, createStoreFamily,
+  memoizeSelector, trackedDerived,
+} from '@ilokesto/state';
+
+const source = createStore({ count: 1, label: 'counter' });
+const count = focus(
+  source,
+  state => state.count,
+  (state, count) => ({ ...state, count }),
+);
+const selectDouble = memoizeSelector((value: number) => value * 2);
+const doubled = derived(count, selectDouble);
+const summary = derived([count, doubled] as const,
+  ([count, doubled]) => ({ count, doubled }));
+const label = trackedDerived(source, state => state.label);
+const family = createStoreFamily((id: string) =>
+  derived(summary, state => ({ ...state, id })));
+const view = family.get('primary');
+
+batch(() => {
+  count.update(value => value + 1);
+  count.update(value => value + 1);
+});
+summary.getState(); // { count: 3, doubled: 6 }
+family.get('primary') === view; // true
+label.getState(); // "counter"
+```
+
+`derived`는 하나의 readable store 또는 readonly tuple을 받습니다. 구독 중에만
+원본에 연결하고 직접 읽을 때도 최신 값을 제공하며, 출력이 같으면 이전 참조를
+유지합니다. `batch`는 원본 값을 즉시 갱신하되 바깥쪽 동기 callback이 끝난 뒤
+일반 알림을 안정화합니다. 비동기 transaction은 아니며 history의 commit observer는
+각 실제 commit을 계속 기록합니다.
+
+쓰기 가능한 `focus`는 부모의 update pipeline을 호출합니다. Write-back 함수는
+선택하지 않은 필드를 보존하는 불변 부모 값을 반환해야 합니다. Write-back 함수를
+생략하면 readonly focus입니다. 쓰기 가능한 focus도 부모의 middleware 등록 메서드를
+갖는 것은 아닙니다.
+
+`memoizeSelector`는 기본적으로 입력 identity에 따라 입력/결과 쌍을 캐시합니다.
+필드 접근을 추적하지는 않습니다. `trackedDerived`는 불변 plain object/array의
+root 속성 관찰을 추적하며 중첩 값은 identity 의존성으로 남습니다. Label을 유지하는
+다른 root 필드의 변경은 label 계산을 생략할 수 있지만 깊은 mutation 추적은 아닙니다.
+지원하지 않는 nonplain root는 보수적으로 전체 snapshot identity를 사용합니다.
+계산은 순수하고 동기적이어야 하며 임시 root proxy를 보관하거나 결과에 포함하거나
+identity로 비교하지 마세요.
+
+Family는 Map key identity를 사용하고 명시적으로 제거할 때까지 entry를 강하게
+참조합니다. Factory는 독점 소유할 entry를 새로 만들어야 합니다. `remove`, `clear`,
+종료용 `dispose`는 disposable entry를 정리하지만 빌린 upstream store는 정리하지 않습니다.
+
+## 어느 프레임워크에서든 읽기 전용 결과 연결
+
+파생·부분·추적 store 또는 family가 소유한 readable view에는 `bindReadonly`를
+사용합니다. Binding은 쓰기 메서드를 노출하거나 store 수명주기를 소유하지 않습니다.
+`count.set`/`count.update` 또는 원본 source로 명시적으로 쓰세요.
+Focus를 완전한 writable StoreApi처럼 `bind`에 넘기면 안 됩니다.
+
+```tsx
+import { bindReadonly } from '@ilokesto/state/react';
+
+const useView = bindReadonly(view);
+export function Counter() {
+  const value = useView();
+  return <button onClick={() => count.update(previous => previous + 1)}>
+    {value.count}:{value.doubled}
+  </button>;
+}
+```
+
+다른 어댑터도 아래 subpath에서 `bindReadonly`를 가져와 정상적인 프레임워크
+scope 안에서 consumer를 만듭니다.
+
+| Subpath | 예시 | Consumer 정리 |
+| --- | --- | --- |
+| `/vue` | `const { state } = bindReadonly(view)();` 후 `state.value` | Component 또는 effect-scope 종료 |
+| `/angular` | `const { state } = bindReadonly(view)({ destroyRef });` 후 `state()` | 전달한 DestroyRef; injection context도 지원 |
+| `/solid` | `const { state } = bindReadonly(view)();` 후 `state()` | Reactive owner 종료 |
+| `/svelte` | `const value = bindReadonly(view);` 후 component에서 `$value` | Component unsubscribe; 수동 구독은 정리 함수를 반환 |
+
+Selector와 custom equality는 기존 어댑터 계약을 따릅니다. 브라우저 통합 테스트는
+실제 설치된 registry 패키지로 다섯 어댑터의 batch 안정화와 부모를 정리하지 않는
+unsubscribe를 검증합니다.
+
+## 구독이 소유하는 자원과 최종 정리
+
+```ts
+import { withLifecycle } from '@ilokesto/state';
+
+const ticking = withLifecycle(summary, ({ onCleanup }) => {
+  const timer = setInterval(() => count.update(value => value + 1), 1000);
+  onCleanup(() => clearInterval(timer));
+});
+```
+
+첫 구독이 자원을 시작하고 마지막 unsubscribe가 정리합니다. 다시 구독하면
+다시 시작합니다. 공유 서버 singleton이 아닌 client/application 수명주기에서
+이 consumer를 만드세요. `ticking.dispose()`는 terminal이며 `summary`를
+정리하지 않습니다. State middleware의 `dispose(store)`는 이 readable handle의
+자체 `dispose()`를 대신하지 않습니다.
+
+Consumer를 unmount한 다음 소유자가 자신의 handle을 명시적으로 정리합니다.
+
+```ts
+ticking.dispose();
+family.dispose();
+summary.dispose();
+doubled.dispose();
+count.dispose();
+label.dispose();
+selectDouble.clear();
+```
+
+빌린 `source`는 계속 사용할 수 있습니다. 요청별 소유권과 초기 상태 전송은
+[Scope와 SSR](/ko/state/advanced/scopes-ssr)을 참고하세요.

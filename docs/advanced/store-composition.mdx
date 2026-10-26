@@ -1,0 +1,131 @@
+---
+title: "Derived stores and composition"
+description: "Use the published store primitives through state and its five readonly bindings."
+---
+
+# Derived stores and composition
+
+The root reexports `batch`, `derived`, `focus`, `createStoreFamily`,
+`memoizeSelector`, `trackedDerived`, and `withLifecycle` from the registry
+dependency `@ilokesto/store` 2.1.0 or newer. They are the same functions, not a
+second store implementation. Existing framework subpaths remain unchanged.
+
+## Derive and focus without another state copy
+
+```ts
+import {
+  batch, createStore, derived, focus, createStoreFamily,
+  memoizeSelector, trackedDerived,
+} from '@ilokesto/state';
+
+const source = createStore({ count: 1, label: 'counter' });
+const count = focus(
+  source,
+  state => state.count,
+  (state, count) => ({ ...state, count }),
+);
+const selectDouble = memoizeSelector((value: number) => value * 2);
+const doubled = derived(count, selectDouble);
+const summary = derived([count, doubled] as const,
+  ([count, doubled]) => ({ count, doubled }));
+const label = trackedDerived(source, state => state.label);
+const family = createStoreFamily((id: string) =>
+  derived(summary, state => ({ ...state, id })));
+const view = family.get('primary');
+
+batch(() => {
+  count.update(value => value + 1);
+  count.update(value => value + 1);
+});
+summary.getState(); // { count: 3, doubled: 6 }
+family.get('primary') === view; // true
+label.getState(); // "counter"
+```
+
+`derived` accepts one readable store or a readonly tuple. It connects only while
+observed, stays current on direct reads, and retains equal output references.
+`batch` updates source values immediately while settling ordinary notifications
+after the outer synchronous callback. It is not an async transaction; history
+commit observers still record each actual commit.
+
+Writable `focus` calls the parent's update pipeline. Its write-back function
+must return an immutable parent value, preserving unselected fields. Without a
+write-back function, focus is readonly. A writable focus exposes selected writes
+but does not acquire the parent's middleware-registration methods.
+
+`memoizeSelector` caches input/result pairs by identity by default. It does not
+track field access. `trackedDerived` instead tracks root-property observations
+on immutable plain objects/arrays; nested values remain identity dependencies.
+An unrelated label-preserving root write can skip the label computation, but
+this is not deep mutation tracking. Unsupported nonplain roots conservatively
+use whole-snapshot identity. Computations must be pure and synchronous; do not
+retain, embed, or identity-compare the temporary root proxy.
+
+Families use Map key identity and strongly retain entries until explicit removal.
+The factory must create exclusively owned entries. `remove`, `clear`, and terminal
+`dispose` release disposable entries, not their borrowed upstream stores.
+
+## Bind the readable result in any framework
+
+Use `bindReadonly` for derived, focused, tracked, or family-owned readable views.
+It does not expose writes or own the store's lifetime. Write explicitly through
+`count.set`/`count.update` or the original source. Do not pass a focus to `bind`
+as though it were a complete writable StoreApi.
+
+```tsx
+import { bindReadonly } from '@ilokesto/state/react';
+
+const useView = bindReadonly(view);
+export function Counter() {
+  const value = useView();
+  return <button onClick={() => count.update(previous => previous + 1)}>
+    {value.count}:{value.doubled}
+  </button>;
+}
+```
+
+For the other adapters, import `bindReadonly` from the indicated subpath and
+create the consumer in its normal framework scope:
+
+| Subpath | Example | Consumer cleanup |
+| --- | --- | --- |
+| `/vue` | `const { state } = bindReadonly(view)();` then `state.value` | Component or effect-scope disposal |
+| `/angular` | `const { state } = bindReadonly(view)({ destroyRef });` then `state()` | Supplied DestroyRef; injection context also works |
+| `/solid` | `const { state } = bindReadonly(view)();` then `state()` | Reactive owner disposal |
+| `/svelte` | `const value = bindReadonly(view);` then `$value` in a component | Component unsubscribe; manual subscriptions return a disposer |
+
+Selectors and custom equality remain the existing adapter contracts. The browser
+integration tests exercise all five adapters against the installed registry
+package, including settled batches and unsubscribe without disposing the parent.
+
+## Subscription-owned resources and final cleanup
+
+```ts
+import { withLifecycle } from '@ilokesto/state';
+
+const ticking = withLifecycle(summary, ({ onCleanup }) => {
+  const timer = setInterval(() => count.update(value => value + 1), 1000);
+  onCleanup(() => clearInterval(timer));
+});
+```
+
+The first subscriber starts this resource; the last unsubscribe stops it.
+Reconnecting starts it again. Create such consumers in the client/application
+lifetime, not a shared server singleton. `ticking.dispose()` is terminal and
+does not dispose `summary`. Calling state middleware `dispose(store)` is not a
+replacement for these readable handles' own `dispose()` methods.
+
+After unmounting consumers, the owner releases its handles explicitly:
+
+```ts
+ticking.dispose();
+family.dispose();
+summary.dispose();
+doubled.dispose();
+count.dispose();
+label.dispose();
+selectDouble.clear();
+```
+
+This leaves the borrowed `source` usable. For request-local ownership and initial
+state transfer, see [Scopes and SSR](/en/state/advanced/scopes-ssr).

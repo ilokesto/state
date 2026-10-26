@@ -1,7 +1,13 @@
-export { Store, createStore } from '@ilokesto/store';
+export {
+  Store, createStore, batch, derived, focus, createStoreFamily,
+  memoizeSelector, trackedDerived, withLifecycle,
+} from '@ilokesto/store';
 export type {
   ReadableStore, StoreApi, Listener, Unsubscribe, SetStateAction,
   Selector, SelectorListener, EqualityFn, Middleware,
+  DerivedOptions, SourceValues, WritableFocus, StoreFamily, StoreFamilyOptions,
+  MemoizedSelector, MemoizeSelectorOptions, TrackedDerivedOptions,
+  DisposableReadableStore, LifecycleScope, LifecycleStart,
 } from '@ilokesto/store';
 export { createReducer } from './lib/createReducer.js';
 export type { ReducerState } from './lib/createReducer.js';
