@@ -59,6 +59,31 @@ const dispatch = useCounter.writeOnly();
 dispatch({ type: 'reset' });
 ```
 
+## Custom equality and readonly binding
+
+Pass `equality(previous, next)` as the selector's second argument. Omitting it keeps the existing shallow comparison. The writers and result shapes from `create`, `bind`, and `bindReducer` stay unchanged.
+
+`bindReadonly(source)` accepts a structural `ReadableStore<T>` and provides `{ state: Signal<S>, subscribe }` without a writer. `UseReadonlyState<T>` is exported from the same subpath. Use `readOnly()` for synchronous snapshots outside the lifecycle.
+
+```ts lineNumbers
+import type { ReadableStore } from '@ilokesto/store';
+import { bindReadonly } from '@ilokesto/state/angular';
+
+declare const source: ReadableStore<{ count: number; label: string }>;
+const useCounter = bindReadonly(source);
+const select = (state: Readonly<{ count: number }>) => ({ nested: { count: state.count } });
+const equality = (previous: ReturnType<typeof select>, next: ReturnType<typeof select>) =>
+  previous.nested.count === next.nested.count;
+
+function useCount(destroyRef: import('@angular/core').DestroyRef) {
+  return useCounter(select, equality, { destroyRef }).state;
+}
+```
+
+Existing (selector, options) calls remain valid. Pass custom equality as (selector, equality, options?). An injection context or explicit DestroyRef is still required; destruction unsubscribes.
+
+Equality must be a pure equivalence relation. Returning true suppresses delivery and retains the previous selection. Equality does not apply to readOnly().
+
 ## Caveats
 
 - Without `{ destroyRef }`, the adapter calls `inject(DestroyRef)` and therefore needs an injection context.

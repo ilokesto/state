@@ -1,0 +1,215 @@
+---
+title: "External state bridges"
+description: "Connect query observers, actor snapshots, and typed URL parameters without transferring runtime ownership."
+---
+
+# External state bridges
+
+Import `createQueryBridge`, `createActorBridge`, and `createUrlBridge` from
+`@ilokesto/state` or `@ilokesto/state/utils`. These opt-in utilities use
+`@ilokesto/store` for their mirrors and subscriptions. They do not add runtime
+dependencies on TanStack Query, XState, a router, or any framework.
+
+## Shared reading and lifetime
+
+Each bridge returns a handle:
+
+```ts lineNumbers
+type SnapshotBridge<T> = {
+  readonly store: ReadableStore<T>;
+  readonly refresh: () => void;
+  readonly dispose: () => void;
+};
+```
+
+`store` exposes `getState`, `getInitialState`, `subscribe`, and
+`subscribeSelector`, but no writes or middleware methods. `subscribe` receives
+change notifications, not an immediate initial emission. Read `getState()` for
+the current value. Selector subscriptions use the registry store's equality and
+notification semantics.
+
+Creation reads the source, subscribes immediately, and reads again to catch
+changes during subscription. `getInitialState()` keeps the first read;
+`getState()` includes any change discovered by the second read. The bridge stays
+connected even when it has no local listeners. `refresh()` explicitly rereads
+the source.
+
+Call **`bridge.dispose()`**, not the middleware `dispose(store)` helper. Disposal
+is idempotent and releases only the bridge's upstream subscription. The mirror
+keeps its last value, `refresh()` becomes a no-op, and actor/URL commands throw
+after disposal. Your local subscription unsubscribe functions remain usable.
+Create a new bridge to reconnect.
+
+## Query observer
+
+```ts lineNumbers
+import { QueryClient, QueryObserver } from '@tanstack/query-core';
+import { createQueryBridge } from '@ilokesto/state';
+
+const client = new QueryClient();
+const observer = new QueryObserver(client, {
+  queryKey: ['count'],
+  queryFn: async () => 42,
+  notifyOnChangeProps: 'all',
+});
+const bridge = createQueryBridge(observer);
+const unsubscribe = bridge.store.subscribeSelector(
+  result => result.data,
+  (next, previous) => {
+    renderCount(next, previous);
+  },
+);
+
+await observer.refetch();
+unsubscribe();
+bridge.dispose();
+// Only the owner decides when the observer or client can be destroyed.
+```
+
+The structural input is `QueryObserverSource<T>`:
+
+```ts lineNumbers
+interface QueryObserverSource<T> {
+  getCurrentResult(): T;
+  subscribe(listener: (result: T) => void): () => void;
+}
+```
+
+Query result objects retain their upstream reference identity. Data, pending,
+fetching, error, and success states are mirrored as supplied; no retry, cache,
+fetch, cancellation, or error policy is implemented by the bridge. Subscribing
+can trigger the observer's normal fetch-on-mount behavior.
+
+Prefer a dedicated observer with `notifyOnChangeProps: 'all'` when all result
+fields must stay current. A borrowed observer with filtered notifications only
+updates the mirror when it notifies; call `refresh()` after an intentional silent
+change. The bridge never changes observer options.
+
+Disposal calls the returned unsubscribe function, never `observer.destroy()` or
+`client.clear()`. TanStack Query may perform its own last-subscriber cleanup;
+other listeners on the same observer remain subscribed. Integration tests use
+`@tanstack/query-core` **5.104.5**.
+
+## Actor snapshots and events
+
+```ts lineNumbers
+import { createActor, fromTransition } from 'xstate';
+import { createActorBridge } from '@ilokesto/state/utils';
+
+type CounterEvent = { type: 'add'; amount: number };
+const actor = createActor(fromTransition(
+  (count: number, event: CounterEvent) => count + event.amount,
+  0,
+));
+actor.start();
+const bridge = createActorBridge(actor);
+
+bridge.send({ type: 'add', amount: 2 });
+bridge.store.getState().context; // 2
+bridge.dispose();
+actor.send({ type: 'add', amount: 1 }); // The borrowed actor still runs.
+actor.stop(); // The owner controls its lifetime.
+```
+
+`createActorBridge<T, Event>(actor)` returns `ActorBridge<T, Event>`, a
+`SnapshotBridge<T>` with `send(event: Event): void`. Reading a snapshot never
+sends an event. The structural `ActorSource<T, Event>` supplies:
+
+```ts lineNumbers
+interface ActorSource<T, Event> {
+  getSnapshot(): T;
+  subscribe(observer: {
+    next(snapshot: T): void;
+    error(error: unknown): void;
+    complete(): void;
+  }): { unsubscribe(): void };
+  send(event: Event): void;
+}
+```
+
+The bridge preserves snapshot reference identity and methods such as machine
+snapshot `matches`. It rereads on next, error, and complete notifications, so
+XState's done/error snapshots remain readable. Errors stay in the actor snapshot;
+the bridge does not retry or restart the actor. It neither starts nor stops the
+actor. Snapshot objects are not cloned or frozen: treat them as borrowed readonly
+values. Integration tests use XState **5.33.3**.
+
+## Typed URL parameter
+
+```ts lineNumbers
+import { createUrlBridge, type UrlCodec } from '@ilokesto/state';
+
+const pageCodec: UrlCodec<number> = {
+  parse(value) {
+    if (!/^[1-9]\d*$/.test(value) || !Number.isSafeInteger(Number(value))) {
+      throw new Error('Invalid page');
+    }
+    return Number(value);
+  },
+  serialize: value => value === 1 ? null : String(value),
+};
+
+// Run in client code; the library never looks up window on its own.
+const page = createUrlBridge({
+  key: 'page',
+  codec: pageCodec,
+  defaultValue: 1,
+  environment: window,
+});
+page.set(2);         // replaceState by default
+page.set(3, 'push'); // one new history entry
+page.set(1);         // serialize returns null to remove the parameter
+page.dispose();
+```
+
+`createUrlBridge<T>(options)` returns `UrlBridge<T>`, a `SnapshotBridge<T>` with
+`set(value: T, history?: 'replace' | 'push'): void`.
+
+| Option | Contract |
+| --- | --- |
+| `key` | The single search parameter managed by this bridge. |
+| `codec` | Pure `parse(string): T` and `serialize(T): string \| null`. Throw for invalid input. |
+| `defaultValue` | Used for a missing parameter or a parser exception. |
+| `history` | Default write mode; `'replace'` unless specified. |
+| `environment` | Optional structural browser location, history, and popstate event target. A `Window` satisfies it. |
+| `url` | Optional absolute URL for SSR/in-memory use; copied, never mutated. The live environment takes precedence when supplied. |
+
+URL input uses standard `URLSearchParams` decoding, then your parser validates
+the decoded string. Duplicate parameters read the first value; a write replaces
+all duplicates for this key. Missing or invalid values use `defaultValue` without
+rewriting the URL. Invalid absolute URLs throw at construction. Serialization
+errors and serialized values rejected by the parser throw before history or the
+mirror changes. A `null` serialization deletes the key and restores the default.
+Reads after a write use the parsed serialized value, so codec normalization is
+reflected in the store.
+
+Writes retain unrelated parameters, the pathname, the hash, and `history.state`.
+Standard URL serialization can normalize query escaping. Native history failures
+propagate without committing a mirror update. Browser back/forward is observed
+through `popstate`; it never creates another history entry.
+
+`pushState` and `replaceState` do not emit `popstate`. Each bridge refreshes its
+own mirror after its writes. For external router writes or multiple bridges on
+the same page, call the affected handles' `refresh()` explicitly. The utility
+does not patch global history methods.
+
+### SSR and cleanup
+
+```ts lineNumbers
+const page = createUrlBridge({
+  key: 'page',
+  codec: pageCodec,
+  defaultValue: 1,
+  url: 'https://example.test/search?page=2',
+});
+page.store.getState(); // 2
+page.set(3); // Local URL and mirror only; no browser access.
+page.dispose();
+```
+
+Without `environment`, all state is per-handle and in memory. Without `url`
+either, the local URL starts at `http://localhost/`, so the initial value is the
+default. No browser global is accessed on import or creation. For hydration,
+create a separate client handle with `environment: window` and dispose the server
+handle when its request ends. URL disposal removes the registered popstate
+listener without changing browser history.

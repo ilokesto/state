@@ -1,4 +1,4 @@
-import type { StoreApi } from '@ilokesto/store';
+import type { EqualityFn, StoreApi } from '@ilokesto/store';
 import type { Readable, Writable } from 'svelte/store';
 
 import type { ReducerAction } from '../../types/ReduceFn.js';
@@ -13,7 +13,7 @@ export type SvelteReadable<S> = Readable<S>;
 
 export type SvelteStateStore<T> = Omit<Writable<T>, 'subscribe'> & Readable<ReadonlySnapshot<T>> & {
   setState: StateWriter<T>;
-  select: <S>(selector: Selector<T, S>) => SvelteReadable<S>;
+  select: <S>(selector: Selector<T, S>, equality?: EqualityFn<S>) => SvelteReadable<S>;
   writeOnly: () => StateWriter<T>;
   readOnly: {
     (): ReadonlySnapshot<T>;
@@ -23,7 +23,7 @@ export type SvelteStateStore<T> = Omit<Writable<T>, 'subscribe'> & Readable<Read
 
 export type SvelteReducerStore<T, Action extends ReducerAction> = Readable<ReadonlySnapshot<T>> & {
   dispatch: ActionWriter<Action>;
-  select: <S>(selector: Selector<T, S>) => SvelteReadable<S>;
+  select: <S>(selector: Selector<T, S>, equality?: EqualityFn<S>) => SvelteReadable<S>;
   writeOnly: () => ActionWriter<Action>;
   readOnly: {
     (): ReadonlySnapshot<T>;
@@ -33,3 +33,8 @@ export type SvelteReducerStore<T, Action extends ReducerAction> = Readable<Reado
 
 export type UseState<T> = SvelteStateStore<T>;
 export type UseReducer<T, Action extends ReducerAction> = SvelteReducerStore<T, Action>;
+
+export type UseReadonlyState<T> = Readable<ReadonlySnapshot<T>> & {
+  select: <S>(selector: Selector<T, S>, equality?: EqualityFn<S>) => SvelteReadable<S>;
+  readOnly: UseState<T>['readOnly'];
+};

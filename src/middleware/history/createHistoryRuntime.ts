@@ -1,7 +1,7 @@
 import { Store } from '@ilokesto/store';
 import type { StoreCommit } from '@ilokesto/store';
 import { runWithStoreActionMetadata } from '../../lib/actionMetadata.js';
-import { registerRestoreBaseline, restoreSource } from '../../lib/restoreSource.js';
+import { devtoolsRestoreSource, registerRestoreBaseline, restoreSource } from '../../lib/restoreSource.js';
 import { registerStoreCleanup } from '../../lib/storeCleanup.js';
 import { cancelStoreTimers, runWithTimerReplay } from '../../lib/timerReplay.js';
 import type { HistoryControls, HistoryStatus, HistoryStrategy } from '../history.js';
@@ -15,7 +15,7 @@ type HistoryEntry<Selection> = {
   readonly group: object | undefined;
 };
 type Replay<State, Selection> = {
-  readonly action: () => State;
+  readonly action: (current: State) => State;
   readonly entry: HistoryEntry<Selection>;
   readonly source: HistoryEntry<Selection>[];
   readonly target: HistoryEntry<Selection>[];
@@ -144,7 +144,7 @@ export function createHistoryRuntime<State, Selection, Patch>(
     const context = pendingContexts.get(commit.sequence) ?? activeContext;
     pendingContexts.delete(commit.sequence);
     if (disposed || commit.sequence <= baseline) return;
-    if (commit.source === restoreSource) {
+    if (commit.source === restoreSource || commit.source === devtoolsRestoreSource) {
       undoStack.length = 0;
       redoStack.length = 0;
       baseline = commit.sequence;
@@ -238,9 +238,9 @@ export function createHistoryRuntime<State, Selection, Patch>(
       publish();
       return;
     }
-    const next = options.restore(current, restored);
     const request: Replay<State, Selection> = {
-      action: () => {
+      action: (actual) => {
+        const next = options.restore(actual, restored);
         request.firstSequence ??= store.getCommitSequence() + 1;
         return next;
       },
@@ -289,12 +289,13 @@ export function createHistoryRuntime<State, Selection, Patch>(
     clear();
     groupDepth = 0;
     group = undefined;
-    try {
-      publish();
-    } finally {
+    const stopTerminal = metadata.subscribeCommit((commit) => {
+      if (!commit.state.disposed) return;
       for (const stop of subscriptions) stop();
       subscriptions.clear();
-    }
+      stopTerminal();
+    });
+    publish();
   });
 
   return {

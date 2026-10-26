@@ -618,6 +618,48 @@ test('cookieStorage: browser rejects an oversized cookie -> adapter reports fail
   assert.equal(result.stored, null);
 });
 
+for (const kind of ['json', 'cookie']) {
+  test(`persist: ${kind} projection and codec -> paused flush round trips Date without transient state`, { timeout: 15_000 }, async () => {
+    const result = await page.evaluate(async (kind) => {
+      const { cookieStorage, dispose, jsonStorage, persist, pipe } = api;
+      const codec = {
+        serialize: envelope => JSON.stringify({ state: envelope.state.getTime(), version: envelope.version }),
+        deserialize: text => JSON.parse(text, (key, value) =>
+          key === 'state' && typeof value === 'number' ? new Date(value) : value),
+      };
+      const storage = kind === 'json'
+        ? jsonStorage(() => localStorage, codec) : cookieStorage({ codec });
+      const create = transient => pipe.use(persist({
+        key: 'projected-date', storage, saveDebounceMs: 60_000,
+        project: state => state.date,
+        decode: value => value instanceof Date ? value : null,
+        restore: (date, current) => ({ ...current, date }),
+      })).create({ date: new Date(0), transient });
+      const first = create('private');
+      await first.persist.rehydrate();
+      first.persist.pause();
+      first.set({ date: new Date(123), transient: 'secret' });
+      await first.persist.flush();
+      const paused = first.persist.getStatus().paused;
+      const raw = kind === 'json' ? localStorage.getItem('projected-date')
+        : decodeURIComponent(document.cookie.split('; ').find(entry => entry.startsWith('projected-date=')).split('=')[1]);
+      dispose(first);
+
+      const second = create('new-session');
+      await second.persist.rehydrate();
+      const restored = second.getState();
+      await second.persist.clearStorage();
+      const missing = await storage().getItem('projected-date');
+      dispose(second);
+      return { paused, raw, date: restored.date.getTime(), transient: restored.transient, missing };
+    }, kind);
+
+    assert.deepEqual(result, {
+      paused: true, raw: '{"state":123,"version":0}', date: 123, transient: 'new-session', missing: null,
+    });
+  });
+}
+
 for (const valueKind of ['null', 'undefined']) {
   test(`persist: malformed native ${valueKind} record -> rejects hydration without overwriting`, { timeout: 15_000 }, async () => {
     const result = await page.evaluate(async (kind) => {

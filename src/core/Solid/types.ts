@@ -1,4 +1,4 @@
-import type { StoreApi } from '@ilokesto/store';
+import type { EqualityFn, StoreApi } from '@ilokesto/store';
 import type { Accessor } from 'solid-js';
 
 import type { ReducerAction } from '../../types/ReduceFn.js';
@@ -21,7 +21,7 @@ export type SolidReducerResult<S, Action> = Readonly<{
 
 export type UseState<T> = {
   (): SolidStateResult<ReadonlySnapshot<T>, T>;
-  <S>(selector: Selector<T, S>): SolidStateResult<S, T>;
+  <S>(selector: Selector<T, S>, equality?: EqualityFn<S>): SolidStateResult<S, T>;
   writeOnly: () => StateWriter<T>;
   readOnly: {
     (): ReadonlySnapshot<T>;
@@ -31,10 +31,16 @@ export type UseState<T> = {
 
 export type UseReducer<T, Action extends ReducerAction> = {
   (): SolidReducerResult<ReadonlySnapshot<T>, Action>;
-  <S>(selector: Selector<T, S>): SolidReducerResult<S, Action>;
+  <S>(selector: Selector<T, S>, equality?: EqualityFn<S>): SolidReducerResult<S, Action>;
   writeOnly: () => ActionWriter<Action>;
   readOnly: {
     (): ReadonlySnapshot<T>;
     <S>(selector: Selector<T, S>): S;
   };
+};
+
+export type UseReadonlyState<T> = {
+  (): Readonly<{ state: Accessor<ReadonlySnapshot<T>> }>;
+  <S>(selector: Selector<T, S>, equality?: EqualityFn<S>): Readonly<{ state: Accessor<S> }>;
+  readOnly: UseState<T>['readOnly'];
 };
