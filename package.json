@@ -13,6 +13,7 @@
     "test:typecheck": "pnpm build && tsc --noEmit -p test/tsconfig.json",
     "test:tooling": "node --test --test-concurrency=2 tests/tooling/*.test.mjs",
     "typecheck": "tsc --noEmit",
+    "benchmark": "pnpm build && node scripts/benchmark.mjs",
     "docs:prepare": "pnpm build",
     "docs:dev": "pnpm docs:prepare && pnpm --dir website dev",
     "docs:build": "pnpm docs:prepare && pnpm --dir website build",

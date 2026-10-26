@@ -1,0 +1,68 @@
+---
+title: "Testing and measurement"
+description: "Isolated memory persistence, notification-driven waits and reproducible measurements."
+---
+
+# Testing and measurement
+
+## Memory persistence
+
+`memoryStorage(initialEntries?)` returns a `PersistStorageFactory`, available from `/utils` and `/middleware`. Entries are keyed versioned envelopes: `{ state, version }`. Initial entries, writes and reads use `structuredClone`; unsupported values such as functions reject rather than disappearing. This is not JSON serialization and does not reproduce browser quotas, cookies, IndexedDB transactions or cross-tab events.
+
+Each factory has a separate map. Reuse a factory to test restoration across stores; each activation returns an independently disposable adapter over that map. `removeItem` removes only its key. Adapter `dispose()` is idempotent, rejects later operations and preserves shared entries. Drop the factory reference after a test to release its map.
+
+## Completion signals and cleanup
+
+`createStoreTestHarness<State>(store: StoreApi<State>): StoreTestHarness<State>` comes from `/utils`. It subscribes immediately and exposes:
+
+| Member | Contract |
+| --- | --- |
+| `states` | A copied array of initial and notified state references, not deep clones or a commit log. |
+| `waitFor(predicate, options?)` | Resolves with the current or next notified matching state; predicate exceptions reject. |
+| `dispose()` | Unsubscribes, rejects pending waits and runs middleware disposal once. |
+
+`StoreWaitOptions` accepts `timeoutMs` (default 1000; integer 0–2147483647) and `signal?: AbortSignal`. The timeout is a failure deadline, never a polling interval. Aborting rejects with `signal.reason`; success, failure, abort and disposal release the timer and abort listener. A disposed harness rejects new waits. Use a dedicated store: the harness owns that store's middleware cleanup, but does not reset state or unsubscribe other consumers.
+
+```ts lineNumbers
+import { persist, memoryStorage } from '@ilokesto/state/middleware';
+import { createStoreTestHarness, pipe } from '@ilokesto/state/utils';
+
+const storage = memoryStorage();
+const store = pipe.use(persist({
+  key: 'counter',
+  storage,
+  decode: value => typeof value === 'number' ? value : null,
+})).create<number>(0);
+const harness = createStoreTestHarness(store);
+
+try {
+  await store.persist.rehydrate();
+  const completed = harness.waitFor(value => value === 2);
+  store.set(2);
+  const observed = await completed; // 2, including synchronous notification
+  await store.persist.flush(); // wait for storage completion separately
+} finally {
+  harness.dispose();
+}
+```
+
+Register waits before triggering actions. A matching state does not prove storage or network completion: use `rehydrate()`, `flush()` or the actual operation's promise. The helper does not advance debounce/throttle clocks. State references assume immutable updates; in-place mutations are not historical snapshots.
+
+## Reproducible repository benchmark
+
+Run from the repository root with its pinned Node/pnpm and installed Bun:
+
+```bash lineNumbers
+pnpm install --frozen-lockfile
+pnpm benchmark
+# Optional positive iteration count; default 1000.
+pnpm benchmark 100
+```
+
+The script builds first and prints schema-1 JSON. It reports selector computations and notifications for one selected change per ten commits; bounded history commits, undo/redo and notifications; sequentially flushed memory-storage reads/writes/deletions/disposals and estimated JSON envelope bytes; elapsed milliseconds and observed heap deltas for each workload. Storage awaits each flush, so counts do not depend on write-queue scheduling.
+
+Package measurement reports total `dist` bytes (including declarations), manifest bytes, and minified browser ESM and gzip bytes for every code entrypoint. It retains all entry exports, bundles the registry store dependency, leaves optional peers external and records bundler warnings. The metadata subpath reports raw manifest bytes. This is not an npm tarball size or a particular consumer's tree-shaken bundle.
+
+Compare only runs with the same checkout, lockfile, runtime, machine and iteration count. Timings include setup/cleanup and have no warmup or statistical sampling. Heap deltas have no forced GC and can be negative; they are not retained-memory or leak measurements. These observations are not CI duration gates or performance guarantees. The tooling test checks operation counts, not timing or documentation prose.
+
+An implementation checkout measured on October 26, 2026 with Node 24.22.1 and Bun 1.4.2 on Apple M4 Pro (arm64), at 100 iterations, produced 101 selector computations and 10 notifications; 100 undo and 100 redo operations; and 1 storage read, 100 writes, 1 deletion and 1 disposal. Its all-export bundles were 8,529 bytes for the root (2,898 gzip), 9,110 for `/utils` (3,175 gzip) and 21,257 for `/middleware` (7,069 gzip). These are observations of that checkout, not budgets; rerun after merged export additions. A negative selector heap delta in this run illustrates why a single heap sample cannot establish memory usage.

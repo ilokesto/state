@@ -83,6 +83,39 @@ select(selector, equality?) immediately delivers the current value and subscribe
 
 Equality must be a pure equivalence relation. Returning true suppresses delivery and retains the previous selection. Equality does not apply to readOnly().
 
+## Async resource store
+
+`bindResource(resource)` returns `UseResource<Input, Output>`: a readonly Svelte store with `select`, `readOnly` and typed `run(input, options?)`. `$requestState` subscribes through the native Svelte lifecycle. `bindReadonly(resource.store)` is also available when no run helper is needed.
+
+This component runs both success and failure without an API server:
+
+```svelte lineNumbers
+<script lang="ts">
+  import { createResource } from '@ilokesto/state';
+  import { bindResource } from '@ilokesto/state/svelte';
+
+  const request = createResource(async (shouldFail: boolean) => {
+    if (shouldFail) throw new Error('Try again');
+    return 'Loaded';
+  });
+  const requestState = bindResource(request);
+</script>
+
+{#if $requestState.status === 'pending'}
+  <p>Loading...</p>
+{:else if $requestState.status === 'error'}
+  <p>{String($requestState.error)}</p>
+{:else if $requestState.status === 'success'}
+  <p>{$requestState.data}</p>
+{:else}
+  <p>Choose an action</p>
+{/if}
+<button on:click={() => requestState.run(false)}>Load / retry</button>
+<button on:click={() => requestState.run(true)}>Fail</button>
+```
+
+Retry starts another run. Unmount unsubscribes but never cancels a borrowed resource. A manual `subscribe` caller must call its returned unsubscribe function. Only the resource owner calls `cancel`/`dispose`; direct resource runs remain visible to subscribers. This is a Svelte store, not a React Suspense bridge.
+
 ## Caveats
 
 - `subscribe` immediately calls the subscriber with current state, matching Svelte expectations.

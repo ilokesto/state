@@ -157,6 +157,108 @@ const dateCodec: PersistCodec = {
 
 애플리케이션 decoder는 유효하지 않은 날짜도 거부해야 합니다. 중첩 데이터에서는 codec이 지원하는 구조를 명시적으로 처리해야 합니다. codec을 생략하면 기존 JSON 동작과 저장 바이트를 유지하며 `Date.toJSON()`도 계속 문자열이 됩니다. codec 변경에 따른 저장 형식 전환은 애플리케이션 책임이며 자동 migration이 아닙니다. IndexedDB는 이미 structured clone을 사용하므로 문자열 codec을 받거나 필요로 하지 않습니다.
 
+## 외부 저장소 동기화
+
+동기화는 opt-in입니다. 기존 어댑터와 스토어는 자동 구독이나 재읽기를 하지 않습니다. 같은 origin의 localStorage를 공유하는 탭에서는 이벤트 소스를 제공하고 `sync`를 활성화하세요.
+
+```ts lineNumbers
+import { jsonStorage, persist } from '@ilokesto/state/middleware';
+import { pipe } from '@ilokesto/state/utils';
+
+const counter = pipe.use(persist({
+  key: 'shared-counter',
+  storage: jsonStorage(() => window.localStorage, undefined, { events: () => window }),
+  decode: (value: unknown): number | null => typeof value === 'number' ? value : null,
+  sync: {},
+})).create(0);
+
+counter.persist.subscribe(status => {
+  if (status.error?.operation === 'sync') console.error(status.error.code, status.error.cause);
+});
+await counter.persist.rehydrate();
+counter.setState(1);
+await counter.persist.flush();
+```
+
+`jsonStorage(getStorage, codec?, options?: JsonStorageOptions)`는 기존 인자와 저장 바이트를 유지합니다. `options.events`는 window와 같은 `addEventListener`/`removeEventListener` 소스를 반환하는 지연 getter입니다. 어댑터는 저장 영역과 키를 검사하며 `Storage.clear()` 이벤트도 처리합니다. 네이티브 storage 이벤트는 쓴 document에는 발생하지 않으므로 같은 document의 여러 스토어가 아니라 별도 탭 같은 독립 browsing context를 지원합니다. 별도 프로필/시크릿 context는 localStorage를 공유하지 않습니다. sessionStorage 이벤트는 자체 브라우저 저장 범위 안에서만 공유됩니다.
+
+사용자 정의 `PersistStorage`는 `subscribe(key: string, listener: () => void): () => void`를 선택적으로 구현할 수 있습니다. 삭제를 포함한 **외부 변경 알림만** 전달하고 구독 해제 함수를 반환해야 합니다. `sync`를 설정하지 않으면 이 기능은 필요 없습니다. 구독 기능 없이 자동 동기화를 활성화하면 복원이 `STORAGE`로 거부됩니다. 네이티브 AsyncStorage/MMKV 헬퍼는 프로세스 간 이벤트 전송을 임의로 추가하지 않습니다.
+
+`persist.sync(options?: PersistRehydrateOptions): Promise<void>`는 복원 성공 후 현재 저장소를 수동으로 다시 읽으며 이벤트 없는 어댑터에도 사용할 수 있습니다. 성공 후 아무 작업도 하지 않는 `rehydrate()`와 별도입니다. 자동 이벤트는 `sync: { conflict?: 'keep-current' | 'use-stored' }`에 설정한 정책을 사용하고 수동 호출은 자신의 인자를 사용합니다.
+
+| 동기화 읽기 시작 또는 완료 시 로컬 편집 | 결과 |
+| --- | --- |
+| 없음 | 검증한 저장값을 다시 쓰지 않고 복원 |
+| 충돌 정책 없음 | `CONFLICT`로 거부하고 로컬 상태와 대기 저장 유지 |
+| `keep-current` | 로컬 상태를 유지하고 일반 큐로 저장 |
+| `use-stored` | 로컬 상태를 명시적으로 교체하고 대기 저장 폐기; 해당 미완료 flush는 `CONFLICT`로 거부 |
+
+자동 오류는 상태의 `error.operation === 'sync'`로 관찰하며 복원 상태는 `hydrated`를 유지합니다. 거부된 동기화 뒤에도 대기 로컬 편집은 일반 저장 동작을 유지합니다. 사용자가 선택하기 전에 어느 쪽도 덮어쓰지 않아야 한다면 선택 UI를 표시하는 동안 저장을 일시 중지하세요. `await counter.persist.sync({ conflict: 'keep-current' })` 또는 `await counter.persist.sync({ conflict: 'use-stored' })`로 해결하며 암묵적인 병합은 없습니다.
+
+변경 알림마다 과거 이벤트 payload 대신 현재 저장값을 다시 읽습니다. 이 스토어의 활성 쓰기/삭제가 끝날 때까지 기다리고 판단 중에는 다음 저장을 보류합니다. 이미 시작한 네이티브 쓰기는 롤백할 수 없으므로 읽기는 그 작업이 **끝난 후**의 저장값을 관찰합니다. 분산 트랜잭션이나 탭 전체의 총순서를 보장하지 않습니다. 동시 편집의 조정은 애플리케이션 책임일 수 있습니다.
+
+외부 값도 복원과 동일한 envelope/버전 검사, migration, decoder, projection `restore`, 전체 상태 검증, history 기준점 초기화를 거칩니다. 외부 복원은 echo 쓰기나 migration 재저장을 하지 않으며 이후 사용자 편집이 현재 버전으로 저장됩니다. 삭제 또는 만료 읽기는 메모리를 유지하고 그 자체로 저장값을 되살리지 않습니다. 미저장 로컬 편집에는 충돌 정책이 계속 적용됩니다. 새 동기화는 이전 읽기를 대체하며 대체된 호출은 적용 없이 완료됩니다. `clearStorage()`는 대기 읽기를 `CLEARED`로 취소하고 삭제 장벽 중 이벤트를 무시합니다. dispose는 `DISPOSED`로 취소하고 구독을 해제합니다. 늦은 읽기는 이전 데이터를 복원할 수 없습니다.
+
+## 주입하는 네이티브 저장소
+
+`asyncStorage(getStorage, codec?)`와 `mmkvStorage(getStorage, codec?)`는 지연 저장소 팩토리를 반환합니다. React Native import나 네이티브 의존성 설치 없이 `jsonStorage`와 같은 기본 JSON envelope 및 선택적 전체-envelope `PersistCodec`을 사용합니다.
+
+```ts lineNumbers
+import { asyncStorage, mmkvStorage } from '@ilokesto/state/middleware';
+import type { AsyncStorageLike, MMKVStorageLike } from '@ilokesto/state/middleware';
+
+export function nativeStorageFactories(asyncBackend: AsyncStorageLike, mmkvBackend: MMKVStorageLike) {
+  return {
+    asynchronous: asyncStorage(() => asyncBackend),
+    synchronous: mmkvStorage(() => mmkvBackend),
+  };
+}
+```
+
+`AsyncStorageLike`는 `getItem(key): Promise<string | null>`, `setItem(key, text): Promise<void>`, `removeItem(key): Promise<void>`를 요구합니다. `MMKVStorageLike`는 `getString(key): string | undefined`, `set(key, text): void`, `remove(key): boolean | void`를 요구합니다. 이 시그니처에 맞는 연산을 주입하세요. `remove` 대신 `delete`를 제공하는 backend를 사용한다면 애플리케이션에서 명시적인 structural adapter를 전달할 수 있습니다. 라이브러리는 네이티브 버전을 추측하지 않습니다.
+
+네이티브 객체는 빌려 사용하며 dispose하거나 전체 삭제하지 않습니다. 설정한 키만 읽고 쓰고 삭제합니다. 네이티브 예외와 Promise 거부는 영속화 오류로 전달하며 `flush()`는 네이티브 쓰기 Promise를 기다립니다. codec 결과도 decoder를 통과해야 하는 미검증 값입니다. 이 헬퍼는 암호화나 자동 계정 분리를 제공하지 않습니다.
+
+## 명시적인 TTL과 계정 전환
+
+`ttlStorage(storage: PersistStorageFactory, options: TTLStorageOptions)`는 어댑터를 명시적인 태그 형식으로 감쌉니다. `TTLStorageOptions`에는 양의 유한 `ttlMs`와 선택적인 `now: () => number` 시계(기본 `Date.now`)가 있습니다. 기존 어댑터나 키는 자동으로 바꾸지 않습니다.
+
+```ts lineNumbers
+import { jsonStorage, ttlStorage } from '@ilokesto/state/middleware';
+
+const shortLivedStorage = ttlStorage(
+  jsonStorage(() => window.localStorage),
+  { ttlMs: 30 * 60 * 1000 },
+);
+```
+
+선택 시 저장 형식은 `{ state: { __persistTTL: 1, expiresAt, value: projectedState }, version }`입니다. TTL은 migration/decoder 전에 감싼 값을 꺼냅니다. 기존의 감싸지 않은 항목과 잘못된 metadata는 암묵적으로 migration하거나 만료를 부여하지 않고 거부합니다. 기존 키에 이 wrapper를 적용하기 전에 명시적인 애플리케이션 migration을 선택하거나 기존 항목을 삭제하세요. TTL 아래의 codec은 내부 상태만이 아니라 이 wrapper 구조를 지원해야 합니다.
+
+읽기가 끝난 후 `now() >= expiresAt`이면 `null`을 반환합니다. 동시 쓰기가 이미 교체했을 수 있으므로 만료 읽기는 저장소를 삭제하지 않습니다. 백그라운드 타이머, 자동 메모리 초기화, 읽기 시 만료 갱신도 없습니다. 쓰기의 만료 시간은 지연된 네이티브 I/O 완료가 아니라 wrapper가 쓰기를 받은 때부터 계산합니다. 물리적인 정리는 `clearStorage()`를 사용하세요. 선택적인 외부 변경 알림은 전달하지만 TTL 자체가 시계 이벤트를 만들지는 않습니다.
+
+계정 키와 스토어 소유권은 애플리케이션에서 결정합니다. 먼저 이전 생산자/UI 편집을 중단하고 저장을 일시 중지한 뒤, 로그아웃 시 계정 저장값을 지우려면 `clearStorage()`를 기다리세요. 그 다음 이전 스토어를 dispose하고 새 스토어를 만드세요. clear 완료 전에 dispose하면 진행 중인 네이티브 쓰기가 정리 이후에 끝날 수 있습니다. clear 실패 시 같은 키를 재사용하기 전에 오류를 처리하세요. 계정 데이터를 보관하려면 대신 dispose 전에 `flush()`를 기다리고 clear를 생략합니다.
+
+```ts lineNumbers
+import { dispose, jsonStorage, persist } from '@ilokesto/state/middleware';
+import type { PersistStore } from '@ilokesto/state/middleware';
+import { pipe } from '@ilokesto/state/utils';
+
+export async function switchAccount(previous: PersistStore<number>, nextAccountKey: string) {
+  previous.persist.pause();
+  await previous.persist.clearStorage();
+  dispose(previous);
+  const next = pipe.use(persist({
+    key: nextAccountKey,
+    storage: jsonStorage(() => window.localStorage),
+    decode: (value: unknown): number | null => typeof value === 'number' ? value : null,
+  })).create(0);
+  await next.persist.rehydrate();
+  return next;
+}
+```
+
+`previous`에 대한 업데이트를 중단한 뒤 이 함수를 호출하세요. 라이브러리는 키를 바꾸거나 계정 저장소를 migration하거나 이전 계정의 메모리 상태를 재사용하지 않습니다. 다른 탭의 저장소 삭제는 인증 로그아웃 신호가 아니므로 인증과 스토어 dispose는 별도로 조정하세요.
+
 ## 수명주기 제어
 
 | 제어 | 계약 |
@@ -164,6 +266,7 @@ const dateCodec: PersistCodec = {
 | `await rehydrate()` | 명시적 복원. 동시 호출은 작업 공유, 성공 후 재호출은 아무 작업 없음, 실패 후 재시도 가능 |
 | `await rehydrate({ conflict: 'keep-current' })` | 복원 충돌 시 현재 상태를 유지하고 저장 |
 | `await rehydrate({ conflict: 'use-stored' })` | 검증한 저장값으로 현재 상태를 명시적으로 교체 |
+| `await sync(options?)` | 복원 후 다시 읽고 미저장 편집에 명시적인 충돌 정책 적용 |
 | `await flush()` | 호출 시점의 저장 대상 완료 대기, 실패한 대기 쓰기 재시도 |
 | `pause(): void` | 자동 저장 일시 중지. 상태 commit과 복원은 계속 실행 |
 | `resume(): void` | 설정된 저장 debounce를 적용하여 최신 대기 값 자동 저장 재개 |

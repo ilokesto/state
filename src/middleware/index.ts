@@ -12,7 +12,15 @@ export type {
 } from './history.js';
 export { logger } from './logger.js';
 export { persist } from './persist/index.js';
+export { memoryStorage } from '../utils/memoryStorage.js';
 export { jsonStorage } from './persist/storage/jsonStorage.js';
+export type { JsonStorageOptions } from './persist/storage/jsonStorage.js';
+export { asyncStorage } from './persist/storage/asyncStorage.js';
+export type { AsyncStorageLike } from './persist/storage/asyncStorage.js';
+export { mmkvStorage } from './persist/storage/mmkvStorage.js';
+export type { MMKVStorageLike } from './persist/storage/mmkvStorage.js';
+export { ttlStorage } from './persist/storage/ttlStorage.js';
+export type { TTLStorageOptions } from './persist/storage/ttlStorage.js';
 export { cookieStorage } from './persist/storage/cookieStorage.js';
 export type { CookieStorageOptions } from './persist/storage/cookieStorage.js';
 export { indexedDBStorage } from './persist/storage/indexedDBStorage.js';

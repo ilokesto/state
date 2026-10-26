@@ -81,6 +81,44 @@ function useCount() {
 
 equality는 순수한 동등 관계여야 합니다. true를 반환하면 새 값은 전달되지 않고 이전 selection이 유지됩니다. readOnly()에는 비교가 적용되지 않습니다.
 
+## Async resource accessor
+
+`bindResource(resource)`는 readonly accessor factory에 `run(input, options?)`을 추가한 `UseResource<Input, Output>`을 반환합니다. Solid owner 안에서 호출하면 `Accessor<ResourceState<Output>>`를 받으며 기존 selector와 equality 계약도 유지됩니다. 관찰만 필요하면 `bindReadonly(resource.store)`도 사용할 수 있습니다.
+
+다음 component는 native reactive derivation을 사용하며 서버 없이 두 결과를 실행합니다.
+
+```tsx lineNumbers
+import { createMemo } from 'solid-js';
+import { createResource } from '@ilokesto/state';
+import { bindResource } from '@ilokesto/state/solid';
+
+const request = createResource(async (shouldFail: boolean) => {
+  if (shouldFail) throw new Error('Try again');
+  return 'Loaded';
+});
+const useRequest = bindResource(request);
+
+export function ResourcePanel() {
+  const { state } = useRequest();
+  const message = createMemo(() => {
+    const current = state();
+    if (current.status === 'pending') return 'Loading...';
+    if (current.status === 'error') return String(current.error);
+    if (current.status === 'success') return current.data;
+    return 'Choose an action';
+  });
+  return (
+    <section>
+      <p>{message()}</p>
+      <button onClick={() => useRequest.run(false)}>Load / retry</button>
+      <button onClick={() => useRequest.run(true)}>Fail</button>
+    </section>
+  );
+}
+```
+
+이 binding은 Solid 자체의 별도 `createResource` API를 사용하거나 React Suspense를 흉내 내지 않습니다. retry는 `run`을 다시 호출합니다. owner cleanup은 구독만 해제하며 빌린 resource를 취소하지 않습니다. `cancel`/`dispose`는 resource 소유자가 결정합니다. resource에서 직접 시작한 실행도 관찰합니다.
+
 ## 주의할 점
 
 - subscribed accessor는 `getOwner()`가 존재해야 합니다.

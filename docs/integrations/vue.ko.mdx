@@ -86,6 +86,37 @@ function useCount() {
 
 equality는 순수한 동등 관계여야 합니다. true를 반환하면 새 값은 전달되지 않고 이전 selection이 유지됩니다. readOnly()에는 비교가 적용되지 않습니다.
 
+## Async resource composable
+
+`bindResource(resource)`는 기존 readonly composable에 타입이 있는 `run(input, options?)`을 추가한 `UseResource<Input, Output>`을 반환합니다. `setup`에서 호출하면 `ComputedRef<ResourceState<Output>>`를 받습니다. selector와 custom equality도 지원합니다. 관찰만 필요하면 `bindReadonly(resource.store)`도 동일하게 사용할 수 있습니다.
+
+다음 예제는 서버 없이 성공과 실패를 직접 실행합니다.
+
+```vue lineNumbers
+<script setup lang="ts">
+import { createResource } from '@ilokesto/state';
+import { bindResource } from '@ilokesto/state/vue';
+
+const request = createResource(async (shouldFail: boolean) => {
+  if (shouldFail) throw new Error('Try again');
+  return 'Loaded';
+});
+const useRequest = bindResource(request);
+const { state } = useRequest();
+</script>
+
+<template>
+  <p v-if="state.status === 'pending'">Loading...</p>
+  <p v-else-if="state.status === 'error'">{{ String(state.error) }}</p>
+  <p v-else-if="state.status === 'success'">{{ state.data }}</p>
+  <p v-else>Choose an action</p>
+  <button @click="useRequest.run(false)">Load / retry</button>
+  <button @click="useRequest.run(true)">Fail</button>
+</template>
+```
+
+retry는 `run`을 다시 호출합니다. Vue scope 종료는 구독만 해제하고 실행은 취소하지 않으므로 다른 component가 shared resource를 계속 사용할 수 있습니다. binding 생성은 실행을 시작하거나 소유권을 가져오지 않습니다. `cancel`/`dispose`는 소유자만 호출합니다. resource에서 직접 시작한 실행도 관찰합니다. 이 composable에는 React Suspense 동작이 없습니다.
+
 ## 주의할 점
 
 - reactive read는 `getCurrentScope()`가 존재해야 합니다.

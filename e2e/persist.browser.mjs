@@ -660,6 +660,104 @@ for (const kind of ['json', 'cookie']) {
   });
 }
 
+test('persist: two native browsing contexts -> synchronize validated projections without echoes and detach on disposal', { timeout: 20_000 }, async () => {
+  // Two pages are independent browsing contexts sharing an origin and storage partition.
+  // Playwright BrowserContexts instead isolate localStorage and cannot exchange storage events.
+  const other = await context.newPage();
+  await other.goto(origin);
+  for (const [tab, transient] of [[page, 'left'], [other, 'right']]) {
+    await tab.evaluate(async (transient) => {
+      const api = {
+        ...await import('/state/dist/middleware/index.js'),
+        ...await import('/state/dist/utils/index.js'),
+      };
+      window.platformAPI = api;
+      window.writeCount = 0;
+      const factory = api.jsonStorage(() => localStorage, undefined, { events: () => window });
+      window.syncedStore = api.pipe.use(api.persist({
+        key: 'tabs',
+        storage: () => {
+          const adapter = factory();
+          return {
+            ...adapter,
+            async setItem(key, value) {
+              window.writeCount += 1;
+              await adapter.setItem(key, value);
+            },
+          };
+        },
+        sync: {},
+        project: state => ({ count: state.count }),
+        decode: value => value && typeof value.count === 'number' ? { count: value.count } : null,
+        restore: (saved, current) => ({ ...current, ...saved }),
+      })).create({ count: 0, transient });
+      await syncedStore.persist.rehydrate();
+      window.watchSync = (code = null) => {
+        window.syncObserved = new Promise((resolve, reject) => {
+          const timer = setTimeout(() => { stop(); reject(new Error('Missing native synchronization')); }, 5_000);
+          const stop = syncedStore.persist.subscribe(status => {
+            if ((status.error?.code ?? null) !== code) return;
+            clearTimeout(timer);
+            stop();
+            resolve();
+          });
+        });
+      };
+    }, transient);
+  }
+  await other.evaluate(() => watchSync());
+
+  await page.evaluate(async () => {
+    syncedStore.set({ count: 7, transient: 'left' });
+    await syncedStore.persist.flush();
+  });
+  await other.evaluate(() => syncObserved);
+
+  assert.deepEqual(await other.evaluate(() => syncedStore.getState()), { count: 7, transient: 'right' });
+  assert.deepEqual(await Promise.all([page, other].map(tab => tab.evaluate(() => writeCount))), [1, 0]);
+  await page.evaluate(() => watchSync());
+  await other.evaluate(async () => {
+    syncedStore.set({ count: 11, transient: 'right' });
+    await syncedStore.persist.flush();
+  });
+  await page.evaluate(() => syncObserved);
+  assert.deepEqual(await page.evaluate(() => syncedStore.getState()), { count: 11, transient: 'left' });
+  assert.deepEqual(await Promise.all([page, other].map(tab => tab.evaluate(() => writeCount))), [1, 1]);
+
+  await other.evaluate(() => watchSync('INVALID_DATA'));
+  await page.evaluate(() => localStorage.setItem('tabs', '{"state":{"count":"bad"},"version":0}'));
+  await other.evaluate(() => syncObserved);
+  assert.equal(await other.evaluate(() => syncedStore.getState().count), 11);
+  await other.evaluate(() => watchSync());
+  await page.evaluate(() => syncedStore.persist.clearStorage());
+  await other.evaluate(() => syncObserved);
+  assert.equal(await other.evaluate(() => localStorage.getItem('tabs')), null);
+  assert.equal(await other.evaluate(() => syncedStore.getState().count), 11);
+
+  await other.evaluate(() => {
+    platformAPI.dispose(syncedStore);
+    window.deletedTabEvent = new Promise((resolve, reject) => {
+      const timer = setTimeout(() => { stop(); reject(new Error('Missing native storage event')); }, 5_000);
+      const callback = event => {
+        if (event.key !== 'tabs') return;
+        clearTimeout(timer);
+        stop();
+        resolve();
+      };
+      const stop = () => window.removeEventListener('storage', callback);
+      window.addEventListener('storage', callback);
+    });
+  });
+  await page.evaluate(async () => {
+    syncedStore.set({ count: 15, transient: 'left' });
+    await syncedStore.persist.flush();
+  });
+  await other.evaluate(() => deletedTabEvent);
+  assert.equal(await other.evaluate(() => syncedStore.getState().count), 11);
+  assert.equal(await other.evaluate(() => writeCount), 1);
+  await page.evaluate(() => platformAPI.dispose(syncedStore));
+});
+
 for (const valueKind of ['null', 'undefined']) {
   test(`persist: malformed native ${valueKind} record -> rejects hydration without overwriting`, { timeout: 15_000 }, async () => {
     const result = await page.evaluate(async (kind) => {

@@ -98,6 +98,58 @@ React uses the same equality for subscription filtering and client/server snapsh
 
 Equality must be a pure equivalence relation. Returning true suppresses delivery and retains the previous selection. Equality does not apply to readOnly().
 
+## Async resources and optional Suspense
+
+`bindResource(resource)` returns `UseResource<Input, Output>`: the readonly hook (including selectors and `readOnly`) plus `run(input, options?)` and `useSuspense()`. A normal `useRequest()` returns every `ResourceState` variant and can observe work started anywhere. `bindReadonly(resource.store)` remains sufficient when you only need observation.
+
+`useSuspense()` returns `idle` or `success`, throws the original error to an error boundary, and suspends only for pending work started through **this binding's `run`**. Create the binding once and share it. Start work in an event or service, never during render. The returned run promise is the stable Suspense promise for that execution; a new run replaces it. A pre-aborted run does not replace active work.
+
+The example intentionally offers a failing action so loading, error and retry are all executable without a server:
+
+```tsx lineNumbers
+import { Component, Suspense, useState, type ReactNode } from 'react';
+import { createResource } from '@ilokesto/state';
+import { bindResource } from '@ilokesto/state/react';
+
+const request = createResource(async (shouldFail: boolean) => {
+  if (shouldFail) throw new Error('Try again');
+  return 'Loaded';
+});
+const useRequest = bindResource(request);
+
+class RequestBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  render() { return this.state.failed ? <p>Request failed. Retry below.</p> : this.props.children; }
+}
+
+function Result() {
+  const state = useRequest.useSuspense();
+  return <p>{state.status === 'success' ? state.data : 'Choose an action'}</p>;
+}
+
+export function ResourcePanel() {
+  const [attempt, setAttempt] = useState(0);
+  const load = (shouldFail: boolean) => {
+    void useRequest.run(shouldFail);
+    setAttempt(previous => previous + 1);
+  };
+  return (
+    <section>
+      <RequestBoundary key={attempt}>
+        <Suspense fallback={<p>Loading...</p>}><Result /></Suspense>
+      </RequestBoundary>
+      <button onClick={() => load(false)}>Load / retry</button>
+      <button onClick={() => load(true)}>Fail</button>
+    </section>
+  );
+}
+```
+
+Retry explicitly starts a new run and resets the boundary; resetting the boundary alone does not retry. Cancelling or disposing pending work returns `idle`, never a permanent suspension. Disposal after completion retains the terminal snapshot, just like the neutral resource. A pending run started directly through `request.run` (or another binding) produces a descriptive error in `useSuspense`; use the normal hook for that integration. This avoids subscribing during an uncommitted render. Unmount, including an abandoned suspended mount, releases only React's subscription: it never cancels a borrowed resource. The resource owner alone decides when to call `cancel` or `dispose`.
+
+The Suspense helper uses the existing initial-state server snapshot (`idle`); it does not start server work or provide a server data cache.
+
 ## Caveats
 
 - The returned function is a React hook because it uses `useSyncExternalStore`; call it only inside components or custom hooks.

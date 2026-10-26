@@ -1,0 +1,310 @@
+---
+title: "Scopes and SSR"
+description: "Request ownership, validated initial-state transfer, and tested hydration boundaries."
+---
+
+# Scopes and SSR
+
+Import `createScope` and `createStateFactory` from `@ilokesto/state`. These APIs
+have no framework runtime imports. Define a factory at module scope, but create
+the store and its owner inside each request. Never export a mutable server
+singleton containing user data.
+
+## Ownership
+
+```ts
+import { createScope, createStore } from '@ilokesto/state';
+
+const owner = createScope();
+const counter = owner.create(() => createStore({ count: 1 }));
+const consumer = createScope();
+const borrowed = consumer.borrow(counter);
+
+consumer.dispose(); // Does not dispose counter.
+borrowed.update(state => ({ count: state.count + 1 }));
+owner.dispose(); // Runs counter's registered middleware cleanup.
+```
+
+`scope.create(factory)` synchronously acquires ownership and preserves the exact
+store type, including middleware capabilities. The callback must construct the
+store for this owner. Returning a store already owned by another scope throws,
+even if that owner has been disposed. Reacquiring the same store in the same
+scope does not duplicate cleanup. `borrow(store)` also accepts `ReadableStore`
+and preserves identity without acquiring ownership.
+
+`scope.dispose()` marks the scope closed before running all owned middleware
+cleanups in reverse acquisition order. Failures are collected into an
+`AggregateError`; repeated disposal is harmless. `scope.disposed` reports whether
+it is closed. Creating or borrowing after closure throws. A factory failure does
+not close the scope. If a factory closes its own scope, its returned store is
+disposed before creation fails.
+
+Disposal has the same boundary as `dispose(store)`: it releases registered
+middleware resources, not arbitrary consumer subscriptions, and does not freeze
+the store or invalidate existing references. Unmount consumers or unsubscribe
+first, then dispose their owner. Flush persisted writes explicitly before
+disposal if they must be saved. Closing a borrowing scope neither unsubscribes
+framework consumers nor disposes their store.
+
+## One validated initial state
+
+```ts
+// counter.ts -- shared by server and client
+import { createStateFactory } from '@ilokesto/state';
+
+export const counterFactory = createStateFactory({
+  decode(input: unknown): { count: number; label: string } {
+    if (
+      typeof input !== 'object' || input === null ||
+      !('count' in input) || typeof input.count !== 'number' ||
+      !Number.isSafeInteger(input.count) || input.count < 0 ||
+      !('label' in input) || typeof input.label !== 'string'
+    ) throw new TypeError('Invalid counter');
+    return { count: input.count, label: input.label };
+  },
+});
+```
+
+The decoder is mandatory and must throw for invalid domain data. It must be
+deterministic: no random defaults, current time, browser globals, or
+request-independent mutable caches. It runs both on `create(input: unknown)` and
+on `hydrate(serialized: string)`. Decoding already-decoded data must preserve its
+canonical JSON representation, including property order. Hydration rejects a
+decoder that changes the transferred value, before constructing a mismatched
+client store. Successful decoded values are copied as JSON
+data so even a decoder returning a cached object cannot share nested state across
+requests. Each call creates a fresh store; an optional `create(initialState)`
+callback can build a middleware store instead. It must preserve the supplied
+initial state and return a new instance. Returning a previously used instance
+from the same state factory throws.
+
+```ts
+import { createScope } from '@ilokesto/state';
+import { counterFactory } from './counter';
+
+export function createRequestPayload(input: unknown): string {
+  const requestScope = createScope();
+  try {
+    const counter = requestScope.create(() => counterFactory.create(input));
+    return counterFactory.serialize(counter);
+  } finally {
+    requestScope.dispose();
+  }
+}
+
+export function createClientState(payload: string) {
+  const scope = createScope();
+  const counter = scope.create(() => counterFactory.hydrate(payload));
+  return { scope, counter };
+}
+```
+
+`serialize(store: ReadableStore<State>): string` transfers `getInitialState()`,
+not `getState()`. Its envelope is `{ "version": 1, "state": ... }`; this version
+describes the transfer format, not a persisted schema. React's existing server
+snapshot still selects the initial state. The other adapters read current state.
+For matching HTML in every framework, finish request data loading **before**
+store construction and do not write to the store between construction, server
+rendering, and initial client hydration. To transfer a later snapshot, construct
+a fresh request store from that snapshot before rendering; do not rewrite an
+existing store's initial state.
+
+`hydrate` validates the envelope and calls the domain decoder before constructing
+the client store. It does not write to an existing store, run persistence
+migrations, access storage, or call `persist.rehydrate()`. With persistence, first
+hydrate the DOM from the server payload, then explicitly call
+`store.persist.rehydrate()` according to the application's conflict policy.
+See [persistence migrations](/en/state/advanced/persist-migrations).
+
+## Transfer boundary
+
+Only JSON data is supported: null, booleans, strings, finite numbers other than
+negative zero, dense arrays, and plain objects with enumerable data properties.
+Dates, maps, sets, functions, undefined, bigint, symbols, accessors, sparse arrays,
+extra array properties, class instances, cycles, and properties named
+`__proto__`, `constructor`, or `prototype` are rejected, not silently converted.
+Encode rich domain values explicitly as JSON fields in your application.
+
+Each serialization/parse boundary permits at most 1,000,000 UTF-16 code units,
+100,000 visited values, and a nesting depth of 64. The envelope itself counts
+toward these limits. Escaped output is checked again against the length limit.
+Malformed input and unsupported shapes throw `TypeError` or the JSON parser's
+`SyntaxError`; decoder exceptions propagate. There is no fallback to default
+state on validation failure.
+
+Serialized `<`, `>`, `&`, U+2028, and U+2029 are escaped, so the returned string
+can be the text of an `application/json` script element. Read it using
+`textContent`, not `eval`, and pass the entire string to `hydrate`. Do not
+interpolate the payload into an HTML attribute or executable JavaScript. The
+payload is visible to the browser: transfer only fields the user may see.
+Validation is not authorization or protection against an attacker changing
+valid values; enforce permissions on the server independently.
+
+## Framework evidence and lifecycle boundaries
+
+`e2e/ssr.browser.mjs` uses real Node server renderers, two concurrent requests
+with distinct state, and Chromium client hydration. It checks equal server/client
+text, reuse of the actual server DOM node, post-hydration updates, borrowed
+ownership, zero subscriptions after unmount, and a second mount with a different
+selector followed by another update. `e2e/selectors.browser.mjs` separately
+checks custom equality and React selector/equality replacement.
+
+| Adapter | Server/client path | Selector replacement | Consumer cleanup |
+| --- | --- | --- | --- |
+| React 19 | `renderToString` / `hydrateRoot`, with client StrictMode | The next render accepts a new selector/equality without remounting | Root unmount removes subscriptions; StrictMode does not own the store |
+| Vue 3 | `renderToString(createSSRApp(...))` / `createSSRApp().mount(...)` | Composables capture their selector; create a new consumer scope/component for a new selector | Component/effect-scope stop |
+| Angular 21 | `renderApplication`, `provideServerRendering`, `provideClientHydration` / `bootstrapApplication` | Signals capture their selector; recreate in a new injection lifecycle | `DestroyRef`, exercised through application destruction |
+| Svelte 5 | Compiled server `render` / compiled client `hydrate` | A selected readable captures its selector; create and subscribe a new readable | Compiled component unmount unsubscribes |
+| Solid 1 | `renderToString` / `hydrate` with hydration keys | Accessors capture their selector; create a new reactive owner | Owner disposal |
+
+The tests cover these installed major versions and synchronous initial content,
+not every peer-version combination, streaming boundaries, Suspense, navigation,
+or framework-specific deployment. Server scopes are disposed in `finally`;
+framework server rendering and garbage collection own server-side consumer
+lifetimes. A state scope does not override a framework's server cleanup behavior.
+No automatic global request context, AsyncLocalStorage, or framework provider
+is installed.
+
+Create an application owner outside replayable React effects. A StrictMode
+effect cleanup must not dispose a scope that its repeated setup will reuse.
+Components borrow the application's store; the actual application teardown
+unmounts the root and then closes its owner.
+
+## Next.js App Router recipe
+
+These are application recipes, not additional package entrypoints or claims of
+a tested Next/Nuxt/SvelteKit deployment. Use the shared `counter.ts` above in an
+existing application. These examples use plain stores with no external resources.
+
+```tsx
+// app/page.tsx
+import { createScope } from '@ilokesto/state';
+import { counterFactory } from './counter';
+import { Counter } from './Counter';
+
+export default function Page() {
+  const scope = createScope();
+  try {
+    const store = scope.create(() => counterFactory.create({ count: 1, label: 'loaded' }));
+    const payload = counterFactory.serialize(store);
+    return <Counter key={payload} payload={payload} />;
+  } finally {
+    scope.dispose();
+  }
+}
+```
+
+```tsx
+// app/Counter.tsx
+'use client';
+import { useMemo, useState } from 'react';
+import { bind } from '@ilokesto/state/react';
+import { counterFactory } from './counter';
+
+export function Counter({ payload }: { payload: string }) {
+  const [store] = useState(() => counterFactory.hydrate(payload));
+  const useCounter = useMemo(() => bind(store), [store]);
+  const [count] = useCounter(state => state.count);
+  return <button onClick={() => store.update(state => ({ ...state, count: state.count + 1 }))}>
+    {count}
+  </button>;
+}
+```
+
+The serialized prop initializes separate server/client stores from the same
+validated value. The `key` intentionally resets the client boundary when a new
+payload arrives. Do not allocate resource-owning middleware in a replayable
+render initializer; use a separately managed application lifetime for that case.
+
+## Nuxt recipe
+
+```ts
+// plugins/counter.ts -- universal plugin, created once per Nuxt app/request
+import { createScope } from '@ilokesto/state';
+import { bind } from '@ilokesto/state/vue';
+import { counterFactory } from '~/counter';
+
+export default defineNuxtPlugin(nuxtApp => {
+  const scope = createScope();
+  const payload = useState('counter:ssr', () => {
+    const store = scope.create(() => counterFactory.create({ count: 1, label: 'loaded' }));
+    return counterFactory.serialize(store);
+  });
+  const store = scope.create(() => counterFactory.hydrate(payload.value));
+  if (import.meta.server) nuxtApp.hook('app:rendered', () => scope.dispose());
+  else nuxtApp.vueApp.onUnmount(() => scope.dispose());
+  return { provide: { counter: bind(store) } };
+});
+```
+
+```vue
+<!-- pages/index.vue -->
+<script setup lang="ts">
+const { $counter } = useNuxtApp();
+const { state: count, setState } = $counter(state => state.count);
+</script>
+<template>
+  <button @click="setState(state => ({ ...state, count: state.count + 1 }))">
+    {{ count }}
+  </button>
+</template>
+```
+
+Nuxt transfers the string through its own payload mechanism. Keep the plugin
+request-local; the factory alone may be shared. Applications with fallible
+resource-owning middleware must also close their request owner on their
+framework's render-error/abort path, not only `app:rendered`.
+
+## SvelteKit recipe
+
+```ts
+// src/routes/+page.server.ts
+import { createScope } from '@ilokesto/state';
+import { counterFactory } from '$lib/counter';
+
+export function load() {
+  const scope = createScope();
+  try {
+    const store = scope.create(() => counterFactory.create({ count: 1, label: 'loaded' }));
+    return { payload: counterFactory.serialize(store) };
+  } finally {
+    scope.dispose();
+  }
+}
+```
+
+```svelte
+<!-- src/routes/+page.svelte -->
+<script lang="ts">
+  import Counter from '$lib/Counter.svelte';
+  let { data } = $props();
+</script>
+
+{#key data.payload}
+  <Counter payload={data.payload} />
+{/key}
+```
+
+```svelte
+<!-- src/lib/Counter.svelte -->
+<script lang="ts">
+  import { onDestroy } from 'svelte';
+  import { createScope } from '@ilokesto/state';
+  import { bind } from '@ilokesto/state/svelte';
+  import { counterFactory } from './counter';
+  let { payload }: { payload: string } = $props();
+  const scope = createScope();
+  const store = scope.create(() => counterFactory.hydrate(payload));
+  const counter = bind(store);
+  const count = counter.select(state => state.count);
+  onDestroy(() => scope.dispose());
+</script>
+
+<button onclick={() => counter.update(state => ({ ...state, count: state.count + 1 }))}>
+  {$count}
+</button>
+```
+
+The keyed component deliberately reconstructs state when loader data changes.
+Svelte owns the readable subscription; the component owns the store. Avoid
+putting either in a server module-level variable.
