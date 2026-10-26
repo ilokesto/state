@@ -4,6 +4,8 @@ import type { ReducerState } from '../../lib/createReducer.js';
 import type { ReduceFn, ReducerAction } from '../../types/ReduceFn.js';
 import type { UseReadonlyState, UseReducer, UseState } from './types.js';
 export type { UseReadonlyState, UseReducer, UseState } from './types.js';
+export { bindResource } from './bindResource.js';
+export type { UseResource } from './bindResource.js';
 
 import { createFrameworkAdapter } from '../shared/createFrameworkAdapter.js';
 import { createPersistStatusStore } from '../shared/createPersistStatusStore.js';

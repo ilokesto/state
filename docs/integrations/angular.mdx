@@ -84,6 +84,47 @@ Existing (selector, options) calls remain valid. Pass custom equality as (select
 
 Equality must be a pure equivalence relation. Returning true suppresses delivery and retains the previous selection. Equality does not apply to readOnly().
 
+## Async resource signal
+
+`bindResource(resource)` returns `UseResource<Input, Output>`: the readonly signal factory plus typed `run(input, options?)`. In an injection context, `useRequest().state` is a `Signal<ResourceState<Output>>`. An explicit `{ destroyRef }`, selectors, equality and `bindReadonly(resource.store)` keep their existing contracts.
+
+This standalone component can exercise success, error and retry without a server:
+
+```ts lineNumbers
+import { Component, computed } from '@angular/core';
+import { createResource } from '@ilokesto/state';
+import { bindResource } from '@ilokesto/state/angular';
+
+const request = createResource(async (shouldFail: boolean) => {
+  if (shouldFail) throw new Error('Try again');
+  return 'Loaded';
+});
+const useRequest = bindResource(request);
+
+@Component({
+  selector: 'resource-panel',
+  standalone: true,
+  template: `
+    <p>{{ message() }}</p>
+    <button (click)="load(false)">Load / retry</button>
+    <button (click)="load(true)">Fail</button>
+  `,
+})
+export class ResourcePanel {
+  readonly state = useRequest().state;
+  readonly message = computed(() => {
+    const current = this.state();
+    if (current.status === 'pending') return 'Loading...';
+    if (current.status === 'error') return String(current.error);
+    if (current.status === 'success') return current.data;
+    return 'Choose an action';
+  });
+  load(shouldFail: boolean) { void useRequest.run(shouldFail); }
+}
+```
+
+Retry calls `run` again. `DestroyRef` releases the subscription, not the shared execution. The binding never automatically calls `cancel`/`dispose`; that decision belongs to the resource owner. Runs started on the resource itself remain observable. Angular signals represent pending/error explicitly rather than throwing React Suspense promises.
+
 ## Caveats
 
 - Without `{ destroyRef }`, the adapter calls `inject(DestroyRef)` and therefore needs an injection context.
