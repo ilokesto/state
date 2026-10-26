@@ -1,0 +1,212 @@
+---
+title: "외부 상태 브리지"
+description: "외부 런타임의 소유권을 유지하면서 query observer, actor snapshot, 타입이 있는 URL 매개변수를 연결합니다."
+---
+
+# 외부 상태 브리지
+
+`createQueryBridge`, `createActorBridge`, `createUrlBridge`는
+`@ilokesto/state` 또는 `@ilokesto/state/utils`에서 가져옵니다.
+이 opt-in 유틸리티는 mirror와 구독에 `@ilokesto/store`를 사용합니다.
+TanStack Query, XState, router, framework를 runtime dependency로 추가하지 않습니다.
+
+## 공통 읽기 API와 수명
+
+각 브리지는 다음 handle을 반환합니다.
+
+```ts lineNumbers
+type SnapshotBridge<T> = {
+  readonly store: ReadableStore<T>;
+  readonly refresh: () => void;
+  readonly dispose: () => void;
+};
+```
+
+`store`는 `getState`, `getInitialState`, `subscribe`, `subscribeSelector`를
+제공하며 write와 middleware 메서드는 노출하지 않습니다. `subscribe`는 변경만
+알리고 초기 값을 즉시 emit하지 않습니다. 현재 값은 `getState()`로 읽습니다.
+Selector 구독은 registry store의 equality 및 notification 규칙을 따릅니다.
+
+생성 시 source를 읽고 즉시 구독한 다음 다시 읽어 구독 중 발생한 변경을 반영합니다.
+`getInitialState()`는 첫 번째 읽기를 유지하며, `getState()`는 두 번째 읽기에서
+발견한 변경까지 포함합니다. 로컬 listener가 없어도 upstream 구독은 유지됩니다.
+`refresh()`로 source를 명시적으로 다시 읽을 수 있습니다.
+
+Middleware용 `dispose(store)`가 아니라 **`bridge.dispose()`**를 호출하세요.
+여러 번 호출해도 안전하며 해당 브리지의 upstream 구독만 해제합니다.
+Mirror는 마지막 값을 유지하고 `refresh()`는 아무 작업도 하지 않습니다.
+Dispose 이후 actor와 URL command는 예외를 던집니다. 로컬 구독의 unsubscribe
+함수는 계속 사용할 수 있습니다. 다시 연결하려면 새 브리지를 만드세요.
+
+## Query observer
+
+```ts lineNumbers
+import { QueryClient, QueryObserver } from '@tanstack/query-core';
+import { createQueryBridge } from '@ilokesto/state';
+
+const client = new QueryClient();
+const observer = new QueryObserver(client, {
+  queryKey: ['count'],
+  queryFn: async () => 42,
+  notifyOnChangeProps: 'all',
+});
+const bridge = createQueryBridge(observer);
+const unsubscribe = bridge.store.subscribeSelector(
+  result => result.data,
+  (next, previous) => {
+    renderCount(next, previous);
+  },
+);
+
+await observer.refetch();
+unsubscribe();
+bridge.dispose();
+// Observer와 client의 종료 시점은 소유자가 결정합니다.
+```
+
+입력은 다음 구조적 타입 `QueryObserverSource<T>`입니다.
+
+```ts lineNumbers
+interface QueryObserverSource<T> {
+  getCurrentResult(): T;
+  subscribe(listener: (result: T) => void): () => void;
+}
+```
+
+Query result 객체는 upstream의 reference identity를 유지합니다.
+Data, pending, fetching, error, success 상태를 그대로 전달하며 브리지에서
+retry, cache, fetch, cancellation, error policy를 구현하지 않습니다.
+구독 자체가 observer의 일반적인 fetch-on-mount 동작을 시작할 수 있습니다.
+
+모든 result 필드가 최신이어야 한다면 `notifyOnChangeProps: 'all'`로 설정한
+전용 observer를 권장합니다. 알림을 필터링하는 borrowed observer는 알림을 보낼
+때만 mirror를 갱신합니다. 의도적인 무알림 변경 이후에는 `refresh()`를 호출하세요.
+브리지는 observer options를 변경하지 않습니다.
+
+Dispose는 반환받은 unsubscribe 함수만 호출하며 `observer.destroy()`나
+`client.clear()`를 직접 호출하지 않습니다. TanStack Query가 마지막 구독 해제에
+따른 자체 정리를 실행할 수 있지만 같은 observer의 다른 listener는 유지됩니다.
+통합 테스트는 `@tanstack/query-core` **5.104.5**를 사용합니다.
+
+## Actor snapshot과 event
+
+```ts lineNumbers
+import { createActor, fromTransition } from 'xstate';
+import { createActorBridge } from '@ilokesto/state/utils';
+
+type CounterEvent = { type: 'add'; amount: number };
+const actor = createActor(fromTransition(
+  (count: number, event: CounterEvent) => count + event.amount,
+  0,
+));
+actor.start();
+const bridge = createActorBridge(actor);
+
+bridge.send({ type: 'add', amount: 2 });
+bridge.store.getState().context; // 2
+bridge.dispose();
+actor.send({ type: 'add', amount: 1 }); // Borrowed actor는 계속 실행됩니다.
+actor.stop(); // 수명은 소유자가 관리합니다.
+```
+
+`createActorBridge<T, Event>(actor)`는 `SnapshotBridge<T>`에
+`send(event: Event): void`가 추가된 `ActorBridge<T, Event>`를 반환합니다.
+Snapshot 읽기는 event를 보내지 않습니다. 구조적 `ActorSource<T, Event>`는
+다음 메서드를 제공합니다.
+
+```ts lineNumbers
+interface ActorSource<T, Event> {
+  getSnapshot(): T;
+  subscribe(observer: {
+    next(snapshot: T): void;
+    error(error: unknown): void;
+    complete(): void;
+  }): { unsubscribe(): void };
+  send(event: Event): void;
+}
+```
+
+Snapshot reference identity와 machine snapshot의 `matches` 같은 메서드를
+유지합니다. Next, error, complete 알림마다 다시 읽으므로 XState의 done/error
+snapshot도 읽을 수 있습니다. 오류는 actor snapshot에 남으며 브리지가 retry나
+restart를 수행하지 않습니다. Actor를 자동 start하거나 stop하지 않습니다.
+Snapshot은 복제하거나 freeze하지 않으므로 borrowed readonly 값으로 취급하세요.
+통합 테스트는 XState **5.33.3**을 사용합니다.
+
+## 타입이 있는 URL 매개변수
+
+```ts lineNumbers
+import { createUrlBridge, type UrlCodec } from '@ilokesto/state';
+
+const pageCodec: UrlCodec<number> = {
+  parse(value) {
+    if (!/^[1-9]\d*$/.test(value) || !Number.isSafeInteger(Number(value))) {
+      throw new Error('Invalid page');
+    }
+    return Number(value);
+  },
+  serialize: value => value === 1 ? null : String(value),
+};
+
+// Client 코드에서 실행합니다. 라이브러리는 window를 자동 참조하지 않습니다.
+const page = createUrlBridge({
+  key: 'page',
+  codec: pageCodec,
+  defaultValue: 1,
+  environment: window,
+});
+page.set(2);         // 기본 replaceState
+page.set(3, 'push'); // 새 history entry
+page.set(1);         // serialize의 null 반환으로 매개변수 삭제
+page.dispose();
+```
+
+`createUrlBridge<T>(options)`는 `SnapshotBridge<T>`에
+`set(value: T, history?: 'replace' | 'push'): void`가 추가된 `UrlBridge<T>`를 반환합니다.
+
+| Option | 계약 |
+| --- | --- |
+| `key` | 해당 브리지가 관리하는 단일 search parameter입니다. |
+| `codec` | 순수 함수 `parse(string): T`, `serialize(T): string \| null`입니다. 잘못된 입력에는 예외를 던지세요. |
+| `defaultValue` | 매개변수가 없거나 parser가 예외를 던질 때 사용합니다. |
+| `history` | 기본 쓰기 방식이며 생략하면 `'replace'`입니다. |
+| `environment` | 선택적 location, history, popstate event target입니다. `Window`가 이 구조적 타입을 만족합니다. |
+| `url` | SSR/in-memory용 선택적 절대 URL입니다. 복사하며 원본을 변경하지 않습니다. Environment가 있으면 현재 브라우저 URL을 우선합니다. |
+
+URL 입력은 표준 `URLSearchParams`로 decode한 후 parser에서 검증합니다.
+중복 매개변수는 첫 번째 값을 읽으며 write는 해당 key의 모든 중복을 하나로 바꿉니다.
+없거나 잘못된 값은 URL을 다시 쓰지 않고 `defaultValue`로 처리합니다.
+잘못된 절대 URL은 생성 시 예외를 던집니다. Serialize 오류나 parser가 거부하는
+직렬화 결과는 history 또는 mirror를 바꾸기 전에 예외를 던집니다.
+Serialize가 `null`을 반환하면 key를 삭제하고 기본값을 복원합니다.
+Write 후에는 직렬화된 값을 다시 parse하므로 codec의 정규화 결과가 store에 반영됩니다.
+
+Write는 다른 매개변수, pathname, hash, `history.state`를 유지합니다.
+표준 URL 직렬화가 query escaping 표현을 정규화할 수 있습니다.
+Native history 오류는 mirror 갱신 없이 호출자에게 전달됩니다.
+브라우저 뒤로/앞으로 이동은 `popstate`로 관찰하며 새 history entry를 만들지 않습니다.
+
+`pushState`와 `replaceState`는 `popstate`를 emit하지 않습니다. 브리지는 자신의
+write 이후 자신의 mirror를 갱신합니다. 외부 router write 또는 같은 페이지의
+다른 브리지에 영향을 주는 write 이후에는 해당 handle의 `refresh()`를 명시적으로
+호출하세요. 전역 history 메서드를 패치하지 않습니다.
+
+### SSR과 cleanup
+
+```ts lineNumbers
+const page = createUrlBridge({
+  key: 'page',
+  codec: pageCodec,
+  defaultValue: 1,
+  url: 'https://example.test/search?page=2',
+});
+page.store.getState(); // 2
+page.set(3); // 로컬 URL과 mirror만 변경하며 browser에 접근하지 않습니다.
+page.dispose();
+```
+
+`environment`가 없으면 상태는 handle별 메모리에만 존재합니다. `url`도 없으면
+로컬 URL은 `http://localhost/`에서 시작하므로 초기 값은 기본값입니다.
+Import나 생성 시 browser global에 접근하지 않습니다. Hydration에는
+`environment: window`로 별도 client handle을 만들고 요청 종료 시 server handle을
+dispose하세요. URL dispose는 등록한 popstate listener를 해제하며 history는 바꾸지 않습니다.
