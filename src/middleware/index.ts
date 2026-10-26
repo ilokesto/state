@@ -9,6 +9,7 @@ export type {
 } from './history.js';
 export { logger } from './logger.js';
 export { persist } from './persist/index.js';
+export { memoryStorage } from '../utils/memoryStorage.js';
 export { jsonStorage } from './persist/storage/jsonStorage.js';
 export { cookieStorage } from './persist/storage/cookieStorage.js';
 export type { CookieStorageOptions } from './persist/storage/cookieStorage.js';

@@ -1,4 +1,7 @@
 export { pipe } from './pipe/index.js';
+export { memoryStorage } from './memoryStorage.js';
+export { createStoreTestHarness } from './createStoreTestHarness.js';
+export type { StoreTestHarness, StoreWaitOptions } from './createStoreTestHarness.js';
 export { createQueryBridge } from './createQueryBridge.js';
 export type { QueryObserverSource } from './createQueryBridge.js';
 export { createActorBridge } from './createActorBridge.js';
