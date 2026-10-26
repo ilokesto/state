@@ -1,4 +1,4 @@
-import type { StoreApi, ReadableStore } from '@ilokesto/store';
+import type { EqualityFn, ReadableStore, StoreApi } from '@ilokesto/store';
 import { useMemo, useSyncExternalStore } from 'react';
 
 import { createDispatch } from '../shared/createDispatch.js';
@@ -9,19 +9,20 @@ import {
   type ReadonlySnapshot,
 } from '../shared/readonlySnapshot.js';
 import { shallow } from '../shared/shallow.js';
-import type { UseReducer, UseState } from './types.js';
+import type { UseReadonlyState, UseReducer, UseState } from './types.js';
 
 type Selector<T, S> = (state: ReadonlySnapshot<T>) => S;
 
-function createShallowSelector<T, S>(
+function createEqualSelector<T, S>(
   selector: (state: ReadonlySnapshot<T>) => S,
+  equality: EqualityFn<S>,
 ): (state: ReadonlySnapshot<T>) => S {
   let previous: Readonly<{ value: S }> | undefined;
 
   return (state: ReadonlySnapshot<T>): S => {
     const next = selector(state);
 
-    if (previous && shallow(previous.value, next)) {
+    if (previous && equality(previous.value, next)) {
       return previous.value;
     }
 
@@ -30,34 +31,34 @@ function createShallowSelector<T, S>(
   };
 }
 
-export function useStoreState<T, S, Writer>(
+function useStoreSelection<T, S>(
   store: ReadableStore<T>,
   selector: (state: ReadonlySnapshot<T>) => S,
-  write: Writer,
+  equality: EqualityFn<S> = shallow,
 ) {
   const subscribe = useMemo(
     () => (listener: () => void) =>
       store.subscribeSelector(
         (state) => selector(readonlySnapshot(state)),
         listener,
-        shallow,
+        equality,
       ),
-    [store, selector],
+    [store, selector, equality],
   );
 
   const getSnapshot = useMemo(() => {
-    const shallowSelector = createShallowSelector(selector);
-    return () => shallowSelector(readonlySnapshot(store.getState()));
-  }, [store, selector]);
+    const select = createEqualSelector(selector, equality);
+    return () => select(readonlySnapshot(store.getState()));
+  }, [store, selector, equality]);
 
   const getServerSnapshot = useMemo(() => {
-    const shallowSelector = createShallowSelector(selector);
-    return () => shallowSelector(readonlySnapshot(store.getInitialState()));
-  }, [store, selector]);
+    const select = createEqualSelector(selector, equality);
+    return () => select(readonlySnapshot(store.getInitialState()));
+  }, [store, selector, equality]);
 
   const value = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
-  return [value, write] as const;
+  return value;
 }
 
 export function createUseState<T, Action extends ReducerAction>(
@@ -77,11 +78,11 @@ export function createUseState<T, Action extends ReducerAction>(
 
   function createUseSelectedState<Writer>(writer: Writer) {
     function useSelectedState(): readonly [ReadonlySnapshot<T>, Writer];
-    function useSelectedState<S>(selector: Selector<T, S>): readonly [S, Writer];
-    function useSelectedState(selector?: Selector<T, unknown>) {
+    function useSelectedState<S>(selector: Selector<T, S>, equality?: EqualityFn<S>): readonly [S, Writer];
+    function useSelectedState(selector?: Selector<T, unknown>, equality?: EqualityFn<unknown>) {
       const select = selector ?? identity<ReadonlySnapshot<T>>;
 
-      return useStoreState(store, select, writer);
+      return [useStoreSelection(store, select, equality), writer] as const;
     }
 
     return useSelectedState;
@@ -98,4 +99,19 @@ export function createUseState<T, Action extends ReducerAction>(
     writeOnly: () => write,
     readOnly,
   }) satisfies UseState<T>;
+}
+
+export function createReadonlyState<T>(store: ReadableStore<T>): UseReadonlyState<T> {
+  function useSelectedState(): ReadonlySnapshot<T>;
+  function useSelectedState<S>(selector: Selector<T, S>, equality?: EqualityFn<S>): S;
+  function useSelectedState(selector?: Selector<T, unknown>, equality?: EqualityFn<unknown>) {
+    return useStoreSelection(store, selector ?? identity<ReadonlySnapshot<T>>, equality);
+  }
+  function readOnly(): ReadonlySnapshot<T>;
+  function readOnly<S>(selector: Selector<T, S>): S;
+  function readOnly(selector?: Selector<T, unknown>) {
+    const state = readonlySnapshot(store.getState());
+    return selector ? selector(state) : state;
+  }
+  return Object.assign(useSelectedState, { readOnly });
 }
