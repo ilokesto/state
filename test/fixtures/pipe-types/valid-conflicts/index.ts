@@ -41,7 +41,7 @@ const conflictTarget = definePipeableMiddleware(
 
 const historyConflictsAreExact: IsExact<
   PipeRegisteredMetadataFor<typeof historyMiddleware>['conflicts'],
-  readonly ['@ilokesto/state/debounce', '@ilokesto/state/throttle']
+  readonly []
 > = true;
 const debounceConflictsAreExact: IsExact<
   PipeRegisteredMetadataFor<typeof debounceMiddleware>['conflicts'],

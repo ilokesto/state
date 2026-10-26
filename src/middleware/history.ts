@@ -95,7 +95,7 @@ type HistoryMetadata = PipeMiddlewareMetadata<
   readonly [],
   readonly [HistoryCapability],
   'reject',
-  readonly ['@ilokesto/state/debounce', '@ilokesto/state/throttle']
+  readonly []
 >;
 type HistoryPipeMiddleware = PipeableMiddleware<
   PipeAnyMiddleware<readonly [], readonly [HistoryCapability]>,
@@ -147,7 +147,8 @@ const historyCapability: HistoryCapability = {
  * metadata subscriptions, and optional typed reversible patches.
  *
  * Replay traverses middleware. Rejected writes retain their entries; reentrant
- * user commits are recorded separately. Timer middleware remains incompatible.
+ * user commits are recorded separately. Replay cancels queued timer work and
+ * traverses validation synchronously without being delayed by timer middleware.
  */
 export function history(options?: HistoryLimitOptions): HistoryPipeMiddleware;
 export function history<State, Selection = Readonly<State>, Patch = Selection>(
@@ -203,7 +204,7 @@ export function history<State, Selection = Readonly<State>, Patch = Selection>(
     adds: [historyCapability],
     after: [],
     before: [],
-    conflicts: ['@ilokesto/state/debounce', '@ilokesto/state/throttle'],
+    conflicts: [],
     duplicate: 'reject',
     id: '@ilokesto/state/history',
     requires: [],

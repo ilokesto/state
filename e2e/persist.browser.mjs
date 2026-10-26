@@ -104,6 +104,62 @@ afterEach(async () => {
   await context?.close();
 });
 
+test('timers/history/persist: explicit timer flush and replay -> save only actual commits and cancel pending callbacks', { timeout: 15_000 }, async () => {
+  await page.clock.install();
+  const result = await page.evaluate(async () => {
+    const { debounce, history, jsonStorage, persist, pipe, throttle } = api;
+    const store = pipe.use(debounce(10))
+      .use(throttle(10, { leading: false, trailing: true }))
+      .use(history())
+      .use(persist({
+        key: 'timed',
+        storage: jsonStorage(() => localStorage),
+        decode: value => typeof value === 'object' && value !== null &&
+          typeof value.count === 'number' ? value : null,
+      })).create({ count: 0 });
+    window.timedStore = store;
+    await store.persist.rehydrate();
+    store.set({ count: 1 });
+    store.debounce.flush();
+    await store.persist.flush();
+    const beforeCommit = localStorage.getItem('timed');
+    const trailingPending = store.throttle.pending();
+    store.throttle.flush();
+    await store.persist.flush();
+    const saved = JSON.parse(localStorage.getItem('timed'));
+    store.set({ count: 2 });
+    store.debounce.flush();
+    store.set({ count: 3 });
+    store.undo();
+    await store.persist.flush();
+    return { beforeCommit, trailingPending, saved };
+  });
+  await page.clock.runFor(20);
+  const replayed = await page.evaluate(() => {
+    const store = window.timedStore;
+    const result = {
+      state: store.getState(),
+      saved: JSON.parse(localStorage.getItem('timed')),
+      pending: [store.debounce.pending(), store.throttle.pending()],
+      canRedo: store.canRedo(),
+    };
+    store.set({ count: 9 });
+    api.dispose(store);
+    return result;
+  });
+  await page.clock.runFor(20);
+  const disposedState = await page.evaluate(() => window.timedStore.getState());
+
+  assert.deepEqual(result, {
+    beforeCommit: null, trailingPending: true, saved: { state: { count: 1 }, version: 0 },
+  });
+  assert.deepEqual(replayed, {
+    state: { count: 0 }, saved: { state: { count: 0 }, version: 0 },
+    pending: [false, false], canRedo: true,
+  });
+  assert.deepEqual(disposedState, { count: 0 });
+});
+
 test('persist: native structured values -> flush and reconnect preserve every value', { timeout: 15_000 }, async () => {
   const result = await page.evaluate(async () => {
     const { dispose, indexedDBStorage, persist, pipe } = api;

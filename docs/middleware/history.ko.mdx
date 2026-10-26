@@ -147,9 +147,13 @@ Replay 기록 억제는 replay dispatch에만 적용하고 subscriber의 사용�
 
 Persistence 복원은 본문이 current value와 같아도 새 baseline을 설정합니다. 복원 state는 기록하지 않지만 복원 이후의 재진입 사용자 수정은 기록합니다. `clearHistory()`는 호출 경계까지의 entry와 대기 중인 commit을 버리며 이후 commit은 새로 기록합니다.
 
-## 조합 제약
+## Timer 조합과 dispose
 
-History에는 동기 commit 경계가 필요합니다. 선언 순서와 관계없이 `debounce()` 또는 `throttle()`과 같은 pipe chain에 둘 수 없습니다. 이 조합은 `MIDDLEWARE_CONFLICT` code의 `PipeConfigurationError`를 던지며, pipe는 chain을 유효하게 만들기 위해 middleware 순서를 바꾸지 않습니다.
+History는 `debounce()`와 `throttle()`을 어느 선언 순서에서도 지원하며 실제 commit을 기록합니다. 대기 요청, 취소한 update, 드롭된 호출, 검증에서 거부한 candidate는 entry를 만들지 않습니다.
+
+Undo/redo는 요청한 stack이 비어 있어도 해당 store의 **모든** timer에서 대기 작업과 cooldown을 취소합니다. Flush하지 않고 이미 commit된 history만 replay합니다. 이후 일반 middleware chain을 동기로 통과하며 timer 지연만 우회하고 validation은 실행합니다. 거부된 replay는 entry를 유지하고 validation 변환 결과로 반대 entry를 만듭니다. Replay subscriber의 사용자 쓰기는 별도 dispatch이므로 계속 timer를 따릅니다.
+
+Group과 pause 범위는 timer 예약 시점이 아닌 commit 시점에 적용합니다. 지연 작업을 동기 그룹에 포함하려면 callback 안에서 timer를 flush하세요. Dispose 전에 commit과 저장을 마치려면 pipeline 순서대로 timer를 flush한 뒤 persistence가 있다면 `store.persist.flush()`를 기다리세요. Persistence flush만으로 timer가 실행되지는 않습니다.
 
 History는 commit subscription과 메타데이터 subscription을 소유합니다. 더 이상 필요 없을 때 `dispose(store)`를 호출하세요. Dispose는 보관한 entry를 지우고 마지막 `disposed: true` snapshot을 알린 뒤 subscriber를 해제합니다. 이후 일반 쓰기는 가능하지만 history 기록과 control은 비활성화되며 `group`은 callback만 실행합니다. Dispose는 idempotent합니다. 소유권은 [Middleware](/ko/state/middleware)를 참고하세요.
 

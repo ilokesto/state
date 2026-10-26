@@ -106,7 +106,7 @@ test('Given logger and debounce, when curried forms are used via pipe, then it p
       requires: [],
     });
     expect(getPipeableMiddlewareMetadata(curriedDebounce)).toEqual({
-      adds: [],
+      adds: ['@ilokesto/state/debounce-controls'],
       after: [],
       before: [],
       conflicts: [],

@@ -104,19 +104,6 @@ function assertRequiredMiddlewareExamples(examples: readonly PipeExample[], docu
   }
 }
 
-function assertNoHistoryWithDelayedMiddleware(markdown: string, documentName: string): void {
-  const fences = /```(?:ts|typescript)\r?\n([\s\S]*?)```/g;
-
-  for (const match of markdown.matchAll(fences)) {
-    const code = match[1];
-    if (code !== undefined && /\bhistory\b/.test(code) && /\b(?:debounce|throttle)\b/.test(code)) {
-      throw new Error(
-        `${documentName} must not present history with debounce or throttle in one TypeScript example`,
-      );
-    }
-  }
-}
-
 function compileExamples(documents: readonly DocumentExamples[]): CompilerRun {
   const temporaryProject = mkdtempSync(join(tmpdir(), 'ilokesto-state-pipe-docs-'));
 
@@ -147,8 +134,6 @@ test('Given marked bilingual pipe examples and a fresh package build, when compi
   const koreanExamples = extractMarkedPipeExamples(readFileSync(koreanReadmePath, 'utf8'), 'Korean README');
   assertRequiredMiddlewareExamples(englishExamples, 'English README');
   assertRequiredMiddlewareExamples(koreanExamples, 'Korean README');
-  assertNoHistoryWithDelayedMiddleware(readFileSync(readmePath, 'utf8'), 'English README');
-  assertNoHistoryWithDelayedMiddleware(readFileSync(koreanReadmePath, 'utf8'), 'Korean README');
 
   // When
   const result = compileExamples([
@@ -159,11 +144,10 @@ test('Given marked bilingual pipe examples and a fresh package build, when compi
   expect(result.diagnostics).toBe('');
 }, { timeout: 180_000 });
 
-test('Given marked Korean pipe examples, when checked, then includes required middleware examples without delayed history', () => {
+test('Given marked Korean pipe examples, when checked, then includes required middleware examples', () => {
   // Given
   const examples = extractMarkedPipeExamples(readFileSync(koreanReadmePath, 'utf8'), 'Korean README');
   assertRequiredMiddlewareExamples(examples, 'Korean README');
-  assertNoHistoryWithDelayedMiddleware(readFileSync(koreanReadmePath, 'utf8'), 'Korean README');
 
   // When / Then
   expect(examples).toHaveLength(requiredMiddlewareExampleIds.length + 2);
@@ -180,7 +164,7 @@ test('Given bilingual pipe documentation, when their marked examples are compare
   );
 }, { timeout: 20_000 });
 
-test('Given malformed middleware documentation, when examples are checked, then malformed, missing, duplicate, and delayed history markers fail', () => {
+test('Given malformed middleware documentation, when examples are checked, then malformed, missing, and duplicate markers fail', () => {
   // Given / When / Then
   expect(() => extractMarkedPipeExamples("```ts\nimport { pipe } from '@ilokesto/state/utils';\npipe;\n```", 'English README'))
     .toThrow('Each English README middleware or pipe TypeScript fence must have a pipe-example marker');
@@ -191,6 +175,4 @@ test('Given malformed middleware documentation, when examples are checked, then 
   );
   expect(() => extractMarkedPipeExamples('<!-- pipe-example:duplicate -->\n```ts\nconst a = 1;\n```\n<!-- pipe-example:duplicate -->\n```ts\nconst b = 2;\n```', 'English README'))
     .toThrow('Duplicate pipe example marker: duplicate');
-  expect(() => assertNoHistoryWithDelayedMiddleware("```ts\nimport { history, throttle } from '@ilokesto/state/middleware';\nimport { pipe } from '@ilokesto/state/utils';\npipe.use(history()).use(throttle(100)).create({ count: 0 });\n```", 'English README'))
-    .toThrow('English README must not present history with debounce or throttle in one TypeScript example');
 }, { timeout: 20_000 });

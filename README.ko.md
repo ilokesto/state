@@ -57,8 +57,10 @@ Action 중심 상태에는 `createReducer()`와 `bindReducer()`를 사용하세�
 기존 `create()` 헬퍼도 유지합니다. 명시적인 연결과 FIFO 알림의 변경 사항은
 [2.0 마이그레이션 안내](./docs/advanced/migration.ko.mdx)를 참고하세요.
 
-`pipe.use(...).create(initialState)` 빌더 문법을 사용하세요. `history()`는
-`debounce()`나 `throttle()`과 같은 체인에 둘 수 없으며 `debounce()`는 `persist()`보다 앞에 둡니다.
+`pipe.use(...).create(initialState)` 빌더 문법을 사용하세요. `history()`는 timer의 실제
+commit을 기록하며 undo/redo는 pending timer를 취소하고 validation을 거쳐 replay합니다.
+Timer control은 `store.debounce`, `store.throttle`의 `flush`, `cancel`, `pending`입니다.
+`debounce()`는 `persist()`보다 앞에 둡니다.
 영속화에는 `key`, 저장소 팩토리, `decode`와 명시적인 비동기 `rehydrate()`, `flush()`가 필요합니다.
 호환성을 깨는 patch 마이그레이션은 아래 문서에 설명되어 있습니다.
 미들웨어 리소스는 `dispose(store)`로 정리하며 저장이 필요하면 먼저 `flush()`를 기다리세요.
@@ -104,14 +106,17 @@ export async function restoreCounter() {
 
 <!-- pipe-example:history-pipe -->
 ```ts
-import { history, logger } from '@ilokesto/state/middleware';
+import { debounce, history, logger } from '@ilokesto/state/middleware';
 import { pipe } from '@ilokesto/state/utils';
 
 const counterStore = pipe
   .use(logger())
   .use(history({ limit: 20 }))
+  .use(debounce(250, { mode: 'quiet' }))
   .create({ count: 0 });
 
+counterStore.set({ count: 1 });
+counterStore.debounce.flush();
 counterStore.undo();
 ```
 

@@ -1,7 +1,7 @@
 import { expect, jest, test } from 'bun:test';
 
 import { Store } from '@ilokesto/store';
-import { debounce, history, HistoryConfigurationError } from '../src/middleware';
+import { debounce, dispose, history, HistoryConfigurationError, throttle } from '../src/middleware';
 import type { HistoryControls } from '../src/middleware';
 import { PipeConfigurationError } from '../src/utils/pipe/errors';
 import { definePipeableMiddleware, getPipeableMiddlewareMetadata } from '../src/utils/pipe/metadata';
@@ -109,7 +109,7 @@ test('Given history pipe metadata, when it is registered and composed, then capa
     adds: ['@ilokesto/state/history-controls'],
     after: [],
     before: [],
-    conflicts: ['@ilokesto/state/debounce', '@ilokesto/state/throttle'],
+    conflicts: [],
     duplicate: 'reject',
     id: '@ilokesto/state/history',
     requires: [],
@@ -122,7 +122,31 @@ test('Given history pipe metadata, when it is registered and composed, then capa
   );
 });
 
-test('Given delayed middleware IDs, when either pipe order is declared, then conflicts reject before setup effects', () => {
+test('history: timers in either pipe order -> commit and replay without a metadata conflict', () => {
+  jest.useFakeTimers();
+  try {
+    for (const timing of [debounce(10), throttle(10)]) {
+      const stores = [
+        pipe.use(history()).use(timing).create({ count: 0 }),
+        pipe.use(timing).use(history()).create({ count: 0 }),
+      ];
+      for (const store of stores) {
+        store.set({ count: 1 });
+        jest.advanceTimersByTime(10);
+        store.undo();
+        expect(store.getState()).toEqual({ count: 0 });
+        store.redo();
+        expect(store.getState()).toEqual({ count: 1 });
+        dispose(store);
+      }
+    }
+  } finally {
+    jest.clearAllTimers();
+    jest.useRealTimers();
+  }
+});
+
+test('pipe: explicitly conflicting custom middleware -> rejects either order before setup effects', () => {
   // Given
   jest.useFakeTimers();
   let throttleSetups = 0;
@@ -130,28 +154,23 @@ test('Given delayed middleware IDs, when either pipe order is declared, then con
     throttleSetups += 1;
     return store;
   };
-  const delayed = [
-    debounce(10),
-    definePipeableMiddleware(throttleMiddleware, {
-      id: '@ilokesto/state/throttle',
-    } as const),
-  ] as const;
+  const source = definePipeableMiddleware(throttleMiddleware, {
+    id: '@test/source', conflicts: ['@test/target'],
+  } as const);
+  const target = definePipeableMiddleware((store) => throttleMiddleware(store), {
+    id: '@test/target',
+  } as const);
 
   try {
     // When / Then
-    for (const middleware of delayed) {
-      const id = getPipeableMiddlewareMetadata(middleware)?.id ?? '';
-      expectConflict(
-        () => useAtRuntime(useAtRuntime(pipe, history()), middleware),
-        '@ilokesto/state/history',
-        id,
-      );
-      expectConflict(
-        () => useAtRuntime(useAtRuntime(pipe, middleware), history()),
-        '@ilokesto/state/history',
-        id,
-      );
-    }
+    expectConflict(
+      () => useAtRuntime(useAtRuntime(pipe, source), target),
+      '@test/source', '@test/target',
+    );
+    expectConflict(
+      () => useAtRuntime(useAtRuntime(pipe, target), source),
+      '@test/source', '@test/target',
+    );
     expect(throttleSetups).toBe(0);
     expect(jest.getTimerCount()).toBe(0);
   } finally {

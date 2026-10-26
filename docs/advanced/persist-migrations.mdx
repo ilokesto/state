@@ -98,6 +98,6 @@ It uses a metadata-free async storage factory, restores a saved counter, resolve
 - `flush()` waits for its call-time target, not future edits, and never forces a state debounce timer. Failed writes retain pending state and retry on a new commit or `flush()`.
 - `clearStorage()` deletes only its key after earlier writes and preserves memory. Waiting flush operations superseded by clearing reject with `CLEARED`.
 - `dispose(store)` owns only that store's adapter and pending work. Reusing a factory does not share connections or cleanup ownership. Await `flush()` first when saving before disposal is required; disposal does not undo a completed transaction.
-- Restoration is an immediate validated commit and a new history baseline. The restriction on `history()` together with `debounce()` or `throttle()` remains.
+- Restoration is an immediate validated commit and a new history baseline. History also supports debounce/throttle commits; undo/redo cancel pending timer work and replay through validation. To save queued timer work, flush the timer before awaiting `store.persist.flush()`.
 
 See [persist](/en/state/middleware/persist) for the complete status, error, adapter, and SSR contracts.

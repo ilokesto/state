@@ -57,8 +57,10 @@ For action-driven state use `createReducer()` and `bindReducer()`. Existing
 `create()` helpers remain available; the [2.0 migration guide](./docs/advanced/migration.mdx)
 explains explicit binding and FIFO notifications.
 
-Use the builder form `pipe.use(...).create(initialState)`. `history()` cannot share
-a chain with `debounce()` or `throttle()`. Declare `debounce()` before `persist()`.
+Use the builder form `pipe.use(...).create(initialState)`. `history()` records
+timer commits; undo/redo cancel pending timers and replay through validation.
+Timer controls are `store.debounce` and `store.throttle` (`flush`, `cancel`, `pending`).
+Declare `debounce()` before `persist()`.
 Persistence requires `key`, a storage factory, and `decode`, with explicit async
 `rehydrate()` and `flush()`. Its breaking patch migration is documented below.
 Call `dispose(store)` to release middleware resources; await `flush()` first if saving.
@@ -104,14 +106,17 @@ export async function restoreCounter() {
 
 <!-- pipe-example:history-pipe -->
 ```ts
-import { history, logger } from '@ilokesto/state/middleware';
+import { debounce, history, logger } from '@ilokesto/state/middleware';
 import { pipe } from '@ilokesto/state/utils';
 
 const counterStore = pipe
   .use(logger())
   .use(history({ limit: 20 }))
+  .use(debounce(250, { mode: 'quiet' }))
   .create({ count: 0 });
 
+counterStore.set({ count: 1 });
+counterStore.debounce.flush();
 counterStore.undo();
 ```
 

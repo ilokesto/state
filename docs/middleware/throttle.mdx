@@ -5,15 +5,26 @@ description: "Pass the leading update and drop updates until the throttle window
 
 # throttle
 
-`throttle` uses leading-drop behavior: the first update passes through immediately, then later updates are dropped until the wait window ends. Dropped updates are not queued or retried.
+By default, `throttle` preserves leading-drop behavior: the first update passes through immediately, then later updates are dropped until the fixed wait window ends. Dropped updates are not evaluated, queued, or retried. Trailing accumulation is opt-in.
 
 ## Signature
 
 ```ts lineNumbers
-throttle(wait?: number): PipeAnyMiddleware
+throttle(wait?: number, options?: ThrottleOptions): ThrottlePipeMiddleware
 ```
 
-`wait` is measured in milliseconds and defaults to `300`. When supplied, it must be a finite non-negative number.
+`wait` is measured in milliseconds and defaults to `300`. It must be finite and non-negative; `0` reopens the window when queued timers run. Invalid waits throw `RangeError`.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `leading` | `true` | Commit the first call immediately. |
+| `trailing` | `false` | Accumulate later calls for one commit at window expiry. |
+
+Set `{ leading: false, trailing: true }` for trailing-only windows. Both `false` throws `TypeError`. Both `true` commits a lone leading call only once. Calls never extend the fixed deadline.
+
+The middleware adds `ThrottleControls`; `ThrottleStore<State>` describes the resulting store. Its immutable `store.throttle` namespace exposes `TimerControls`: `flush(): void`, `cancel(): void`, and `pending(): boolean`. Existing `throttle` properties reject setup rather than being overwritten.
+
+Flush commits queued work synchronously through downstream middleware and reopens the window; cancel discards it without evaluating updaters and also reopens the window. `pending()` means queued updates, not a cooldown. Trailing values replace the accumulated result while updater functions compose in order against the latest state at flush time. Earlier updaters still run before later replacement values.
 
 ## Example
 
@@ -32,10 +43,26 @@ store.setState({ count: 2 }); // dropped during the wait window
 dispose(store);
 ```
 
+## Trailing updates and errors
+
+```ts
+const trailing = pipe.use(throttle(250, { trailing: true })).create({ count: 0 });
+trailing.update((state) => ({ count: state.count + 1 })); // leading
+trailing.update((state) => ({ count: state.count + 1 })); // queued
+trailing.throttle.pending(); // true
+trailing.throttle.flush(); // count: 2
+```
+
+Batches detach before evaluating updaters. Reentrant writes create independent work and survive errors in the old batch. Updater errors discard that batch and propagate from `flush()` or the host timer callback; subscriber errors leave committed state intact. Leading errors keep the cooldown until expiry, flush, or cancel. See [debounce](/en/state/middleware/debounce) for shared accumulation and validation-order semantics.
+
 ## Cleanup ownership
 
 `throttle` owns the pending timer for the store it prepares. Call `dispose(store)` when that specific store is no longer needed to cancel the timer and reopen the gate. Disposal is scoped to the supplied store, does not invalidate it or unsubscribe consumers, and is safe to call repeatedly. It still attempts every registered cleanup after a failure, then throws an `AggregateError` containing each original thrown value when any cleanup fails.
 
+Disposal invalidates an in-flight trailing updater batch as well as pending callbacks. Leading calls pass through immediately and preserve lazy evaluation by downstream middleware. Later writes can start fresh windows; already committed values are not rolled back.
+
 ## Composition constraints
 
-`history()` cannot share a chain with `throttle()` because history records only successful synchronous commits. Either declaration order is rejected with `PipeConfigurationError` code `MIDDLEWARE_CONFLICT`; pipe preserves the declared order instead of rearranging middleware.
+`history()` works in either order and records actual commits. Undo/redo cancel pending timer work and cooldowns, even without an entry, then replay immediately through validation. Reentrant user writes remain timed; history group and pause scopes apply when work commits.
+
+`store.throttle.flush()` only forwards this timer's work; another downstream timer may still defer it. `store.persist.flush()` only waits for committed saves. To save a pending trailing update, flush the timer before awaiting persistence.
