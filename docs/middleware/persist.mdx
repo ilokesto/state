@@ -93,6 +93,70 @@ await editor.persist.flush();
 
 Create image preview `blob:` URLs from restored blobs in the UI and revoke them when no longer needed. Do not persist those URLs. IndexedDB success means **transaction complete**, not merely request success. Uncloneable values, quota errors, and failed transactions reject saving. There is no automatic fallback to localStorage. JSON adapters do not preserve these native values: `Date.toJSON()` becomes a string, while `Map`, `Set`, `Blob`, and other unsupported values reject.
 
+## Persist a typed projection
+
+Full-state configurations remain unchanged. To save a subset, provide all three functions: `project(state: State): Persisted`, `decode(value: unknown): Persisted | null`, and `restore(persisted: Persisted, current: State): State`. The exported configuration type is `ProjectedPersistConfig<State, Persisted, Steps>`; `Steps` defaults to an empty migration tuple.
+
+```ts lineNumbers
+import { jsonStorage, persist } from '@ilokesto/state/middleware';
+import { pipe } from '@ilokesto/state/utils';
+
+type Preferences = { theme: 'light' | 'dark'; search: string };
+type SavedPreferences = Pick<Preferences, 'theme'>;
+
+const decode = (value: unknown): SavedPreferences | null => {
+  if (typeof value !== 'object' || value === null || !('theme' in value)) return null;
+  return value.theme === 'light' || value.theme === 'dark' ? { theme: value.theme } : null;
+};
+
+const preferences = pipe.use(persist({
+  key: 'preferences',
+  storage: jsonStorage(() => window.localStorage),
+  project: (state: Preferences) => ({ theme: state.theme }),
+  decode,
+  restore: (saved, current) => ({ ...current, theme: saved.theme }),
+  saveDebounceMs: 200,
+})).create<Preferences>({ theme: 'light', search: '' });
+
+await preferences.persist.rehydrate();
+preferences.setState({ theme: 'dark', search: 'not persisted' });
+await preferences.persist.flush();
+```
+
+The stored envelope remains `{ state: projectedValue, version }`. `restore` explicitly decides what to retain; there is no automatic shallow or deep merge. It receives current memory state during hydration, and its result passes registered full-state validation before committing. Decoder rejection never invokes `restore`. Migration steps transform the persisted projection, and migration rewrites save only that projection.
+
+Keep `project`, `decode`, and `restore` pure. Projection runs when the serialized writer processes a captured committed state, not inside the synchronous state commit. Coalesced commits need not invoke it. Projection failures leave the target pending with `INVALID_DATA`; restoration failures report `VALIDATION`. A changed projection does not migrate existing records implicitly: retain a compatible decoder or explicitly add data migrations.
+
+## Explicit string codecs
+
+`PersistCodec` is exported from `@ilokesto/state/middleware` with these final signatures:
+
+```ts
+type PersistCodec = {
+  readonly serialize: (value: PersistedValue) => string;
+  readonly deserialize: (text: string) => unknown;
+};
+```
+
+Pass it as `jsonStorage(getStorage, codec)` or `cookieStorage({ codec, ...attributes })`. The codec owns serialization of the entire envelope; its unknown result still goes through envelope/version validation, migrations, and `decode`. Codec exceptions surface as `STORAGE` errors with their original cause.
+
+This codec stores a `Date` state as milliseconds and restores its native type:
+
+```ts lineNumbers
+import type { PersistCodec } from '@ilokesto/state/middleware';
+
+const dateCodec: PersistCodec = {
+  serialize: (envelope) => {
+    if (!(envelope.state instanceof Date)) throw new TypeError('Expected Date');
+    return JSON.stringify({ state: envelope.state.getTime(), version: envelope.version });
+  },
+  deserialize: (text) => JSON.parse(text, (key, value: unknown) =>
+    key === 'state' && typeof value === 'number' ? new Date(value) : value),
+};
+```
+
+The application's decoder must still reject invalid dates. For nested data, the codec must explicitly handle the shapes it supports. Without a codec, JSON behavior and stored bytes are unchanged, including `Date.toJSON()` becoming a string. Changing a codec is an application-owned storage-format decision, not an automatic migration. IndexedDB already uses structured clone and does not accept or need this string codec.
+
 ## Lifecycle controls
 
 | Control | Contract |
@@ -101,6 +165,9 @@ Create image preview `blob:` URLs from restored blobs in the UI and revoke them 
 | `await rehydrate({ conflict: 'keep-current' })` | Keep and save the current state after a restoration conflict |
 | `await rehydrate({ conflict: 'use-stored' })` | Explicitly replace current state with validated stored state |
 | `await flush()` | Wait for the save target at call time; retry failed pending writes |
+| `pause(): void` | Pause automatic saving; state commits and hydration continue |
+| `resume(): void` | Resume saving the latest pending value, using the configured save debounce |
+| `retry(): Promise<void>` | Retry the call-time target with the same guarantees as `flush()` |
 | `await clearStorage()` | Delete only this key after older writes; keep the in-memory state |
 | `getStatus()` | Read the latest immutable lifecycle snapshot |
 | `subscribe(listener)` | Observe future snapshots; returns an unsubscribe function |
@@ -109,9 +176,15 @@ Edits before restoration completes stop restoration as a conflict by default. Ne
 
 Saving is serial: one write runs while the waiting slot retains only the latest committed value. A failed write remains pending and is retried on a new commit or explicit `flush()`, without infinite automatic retries. `flush()` does not wait forever for future edits or force a state debounce timer to run. A successful `clearStorage()` prevents earlier pending writes from resurrecting the deleted value; a later user commit can save again. Waiting flush operations superseded by clearing reject with `CLEARED`.
 
+`saveDebounceMs?: number` is available in both full-state and projected configurations. Omitted or `0` preserves immediate saving. A positive finite duration up to `2147483647` milliseconds restarts a save-only timer on each commit; it never delays state or subscriber notifications. It does not change the separate `debounce()` middleware or its ordering rules.
+
+`pause()` cancels that timer but retains the latest pending state. An already started write and an outstanding flush obligation continue. `flush()` and `retry()` bypass both pause and the save timer without changing `paused`; they require successful hydration and may save a newer coalesced value to satisfy the captured target. Future commits do not extend a completed target. `resume()` restarts the save interval, or saves immediately without a configured delay.
+
+`clearStorage()` is never paused: it discards older pending values and timers, rejects their flush promises, and queues deletion after active writes. Later writes remain behind the deletion barrier. Disposal cancels timers and rejects unfinished flush/retry operations with `DISPOSED`; synchronous `pause()` and `resume()` throw that error after disposal. Flush before disposal when saving is required.
+
 ## Observe status and errors
 
-`getStatus()` and `subscribe()` replace `hasHydrated()` and `onRehydrateStorage`. Hydration is `idle`, `hydrating`, `hydrated`, `conflict`, or `error`; saving is `idle`, `writing`, or `error`. `pending` reports unsaved work, `disposed` reports terminal persistence disposal, and `error` is a `PersistError` or `null`.
+`getStatus()` and `subscribe()` replace `hasHydrated()` and `onRehydrateStorage`. Hydration is `idle`, `hydrating`, `hydrated`, `conflict`, or `error`; saving is `idle`, `writing`, or `error`. `pending` reports unsaved work, `paused` reports whether automatic saving is paused, `disposed` reports terminal persistence disposal, and `error` is a `PersistError` or `null`.
 
 This fragment extends the `editor` example:
 
@@ -136,7 +209,7 @@ The owner of a store calls `dispose(store)` when that instance is no longer need
 
 ## Middleware and migration
 
-Persistence observes actual commits, not attempted writes. Validation rejection and throttle drops are not saved; deferred and reentrant commits are. Restoration follows read, envelope validation, migration, decode, registered state validation, and immediate commit. It bypasses debounce/throttle, runs state validation once, and becomes a new history baseline. User edits made by restoration listeners remain ordinary saved commits.
+Persistence observes actual commits, not attempted writes. Validation rejection and throttle drops are not saved; deferred and reentrant commits are. Restoration follows read, envelope validation, migration, decode, explicit projection restoration when configured, registered state validation, and immediate commit. It bypasses debounce/throttle, runs state validation once, and becomes a new history baseline. User edits made by restoration listeners remain ordinary saved commits.
 
 Declare `debounce()` before `persist()`; the reverse order remains rejected with `MIDDLEWARE_ORDER`. The existing restriction on `history()` combined with `debounce()` or `throttle()` remains.
 

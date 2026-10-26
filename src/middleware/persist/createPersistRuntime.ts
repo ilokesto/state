@@ -4,18 +4,18 @@ import { validateState } from '../../lib/stateValidation.js';
 import { registerStoreCleanup } from '../../lib/storeCleanup.js';
 import { PersistError } from './Persist.js';
 import type {
-  MigrationFn, PersistControls, PersistRehydrateOptions, PersistStatus, SafePersistConfig,
+  MigrationFn, PersistControls, PersistRehydrateOptions, PersistStatus, ProjectedPersistConfig,
 } from './Persist.js';
 import { PersistWriter } from './PersistWriter.js';
 import { decodePersisted } from './persistUtils.js';
 import type { PersistStorage } from './storage/PersistStorage.js';
 
-export function createPersistRuntime<State>(
+export function createPersistRuntime<State, Persisted>(
   store: Store<State>,
-  options: SafePersistConfig<State, readonly MigrationFn[]>,
+  options: ProjectedPersistConfig<State, Persisted, readonly MigrationFn[]>,
 ): PersistControls {
   let status: PersistStatus = Object.freeze({
-    hydration: 'idle', saving: 'idle', pending: false, disposed: false, error: null,
+    hydration: 'idle', saving: 'idle', pending: false, paused: false, disposed: false, error: null,
   });
   let adapter: PersistStorage | undefined;
   let ongoing: Promise<void> | undefined;
@@ -51,10 +51,13 @@ export function createPersistRuntime<State>(
     adapter ??= options.storage();
     return adapter;
   };
-  const writer = new PersistWriter(storage, options.key, publish);
+  const writer = new PersistWriter(storage, options.key, publish, options.saveDebounceMs ?? 0);
+  const enqueue = (state: State): void => {
+    writer.enqueue(() => ({ state: options.project(state), version }));
+  };
   const unsubscribe = store.subscribeCommit((commit) => {
     if (commit.source === restoreSource) return;
-    writer.enqueue({ state: commit.state, version });
+    enqueue(commit.state);
   });
 
   const hydrate = async (attempt: number, resolution?: PersistRehydrateOptions): Promise<void> => {
@@ -72,7 +75,7 @@ export function createPersistRuntime<State>(
       throw new PersistError('hydrate', 'STORAGE', 'Could not read persisted state', cause);
     }
     assertCurrent();
-    let decoded: ReturnType<typeof decodePersisted<State>>;
+    let decoded: ReturnType<typeof decodePersisted<Persisted>>;
     try {
       decoded = decodePersisted(payload, options.decode, options.migrate ?? []);
     } catch (cause) {
@@ -82,7 +85,7 @@ export function createPersistRuntime<State>(
     let restored: State | undefined;
     if (decoded !== null) {
       try {
-        const validated = validateState(store, decoded.state);
+        const validated = validateState(store, options.restore(decoded.state, store.getState()));
         if ('issues' in validated) {
           throw new PersistError('hydrate', 'VALIDATION', 'Restored state failed validation', validated.issues);
         }
@@ -113,10 +116,10 @@ export function createPersistRuntime<State>(
       }
       // Reentrant user commits take priority over a migration rewrite.
       if (decoded.migrated && attempt === generation && !writer.hasPending()) {
-        writer.enqueue({ state: store.getState(), version });
+        enqueue(store.getState());
       }
     } else if (keepCurrent) {
-      writer.enqueue({ state: store.getState(), version });
+      enqueue(store.getState());
     }
     assertActive();
     publish({ hydration: 'hydrated', pending: writer.hasPending(), error: notificationError });
@@ -157,15 +160,20 @@ export function createPersistRuntime<State>(
     adapter?.dispose?.();
   });
 
+  const flush = (): Promise<void> => {
+    if (status.disposed) return Promise.reject(new PersistError('dispose', 'DISPOSED', 'Persistence has been disposed'));
+    if (status.hydration !== 'hydrated') {
+      return Promise.reject(new PersistError('write', 'NOT_HYDRATED', 'Complete hydration before flushing'));
+    }
+    return writer.flush();
+  };
+
   return {
     rehydrate,
-    flush: () => {
-      if (status.disposed) return Promise.reject(new PersistError('dispose', 'DISPOSED', 'Persistence has been disposed'));
-      if (status.hydration !== 'hydrated') {
-        return Promise.reject(new PersistError('write', 'NOT_HYDRATED', 'Complete hydration before flushing'));
-      }
-      return writer.flush();
-    },
+    flush,
+    retry: flush,
+    pause: () => { assertActive(); writer.pause(); },
+    resume: () => { assertActive(); writer.resume(); },
     clearStorage: () => {
       generation += 1;
       cancelHydration?.(new PersistError('clear', 'CLEARED', 'Hydration was invalidated by clearStorage'));
