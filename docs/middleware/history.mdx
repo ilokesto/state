@@ -147,9 +147,13 @@ Replay suppression applies only to the replay dispatch, not to user writes from 
 
 Persistence restoration establishes a fresh baseline even when the restored body is equal to the current value. Restored state is not recorded; reentrant user edits after restoration are. `clearHistory()` discards entries and pending commits up to its call boundary; later commits start fresh.
 
-## Composition constraints
+## Timer composition and disposal
 
-History needs a synchronous commit boundary. It cannot share a pipe chain with `debounce()` or `throttle()` in either declaration order. Those combinations throw `PipeConfigurationError` with code `MIDDLEWARE_CONFLICT`; pipe does not reorder middleware to make the chain valid.
+History works with `debounce()` and `throttle()` in either declaration order and records actual commits. Pending requests, cancelled updates, dropped calls, and rejected candidates do not create entries.
+
+Undo/redo cancel pending work and cooldowns in **all** timers on this store, even when the requested stack is empty. They do not flush it: replay operates only on committed history. Replay then traverses the normal middleware chain synchronously, bypassing timer delays but still running validation. Rejected replay retains its entry, and validation transformations determine the reverse entry. User writes from replay subscribers are separate dispatches and still obey timing.
+
+Group and pause scopes are evaluated at commit time, not when a timer request is queued. To include delayed work in a synchronous group, flush its timer inside that callback. To commit and save before disposal, flush each timer in pipeline order, then await `store.persist.flush()` if persistence is installed. Persistence flush alone does not run timers.
 
 History owns a commit subscription and its metadata subscriptions. Call `dispose(store)` when it is no longer needed. Disposal clears retained entries, emits a final `disposed: true` snapshot, and releases subscribers. Later ordinary writes still work, but history recording and controls are inactive; a later `group` simply runs its callback. Disposal is idempotent. See [Middleware](/en/state/middleware) for ownership details.
 

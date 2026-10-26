@@ -53,8 +53,8 @@ await store.persist.rehydrate();
 | [`logger`](/ko/state/middleware/logger) | 개발 중 state update 로그 | production에서는 비활성화되며 diff는 debug output입니다. |
 | [`validate`](/ko/state/middleware/validate) | synchronous Standard Schema validation | async schema 결과는 거부됩니다. |
 | [`debounce`](/ko/state/middleware/debounce) | 빠른 update 지연 및 병합 | timer 전 read는 이전 state를 볼 수 있습니다. |
-| [`history`](/ko/state/middleware/history) | 동기 변경의 undo와 redo | debounce 또는 throttle과 같은 체인을 쓸 수 없습니다. |
-| [`throttle`](/ko/state/middleware/throttle) | leading-edge rate limiting | wait window 중 update는 드롭됩니다. |
+| [`history`](/ko/state/middleware/history) | Commit된 변경의 undo와 redo | Replay는 pending timer 작업을 취소하고 validation을 통과합니다. |
+| [`throttle`](/ko/state/middleware/throttle) | 선택적 trailing update가 있는 rate limiting | 기본값은 leading-drop이며 trailing 누적은 명시적으로 켭니다. |
 | [`devtools`](/ko/state/middleware/devtools) | Redux DevTools inspection | browser extension에 의존하며 production에서는 비활성화됩니다. |
 | [`persist`](/ko/state/middleware/persist) | 저장소 팩토리를 통한 비동기 영속화 | 명시적으로 복원하고 저장 보장이 필요하면 `flush()`를 기다립니다. |
 | `dispose(store)` | middleware 소유 resource 해제 | 해당 store가 더 이상 필요 없을 때 호출합니다. |
@@ -63,7 +63,7 @@ await store.persist.rehydrate();
 
 허용된 업데이트만 기록하려면 logger를 validation 뒤에 두세요. 영속화는 실제 commit을 관찰하며 거절된 업데이트는 저장하지 않고 지연된 commit은 발생 시 저장합니다. `debounce`는 `persist`보다 먼저 선언하세요. 반대 순서는 계속 `MIDDLEWARE_ORDER`로 거부됩니다. 복원은 검증 후 debounce나 throttle을 통과하지 않고 즉시 commit합니다.
 
-`history()`는 성공한 동기 commit만 기록하므로 선언 순서와 관계없이 `debounce()` 또는 `throttle()`과 같은 pipe 체인을 쓸 수 없습니다. 이 조합은 `MIDDLEWARE_CONFLICT`로 거부되며 pipe가 유효하게 만들려고 chain을 재정렬하지 않습니다.
+`history()`는 실제 commit을 기록하며 `debounce()`나 `throttle()`과 어느 순서에서도 함께 사용할 수 있습니다. Undo/redo는 pending timer 작업을 취소하고 validation을 거쳐 동기 replay합니다. `store.debounce`와 `store.throttle`은 `flush`, `cancel`, `pending`을 제공하며 `store.persist.flush()`와 역할이 다릅니다. Debounce 기본값은 기존 고정 window이고 `{ mode: 'quiet' }`에서만 호출마다 마감 시각을 다시 설정합니다.
 
 ## Store 정리
 

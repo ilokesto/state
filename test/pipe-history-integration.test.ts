@@ -1,7 +1,7 @@
 import { expect, jest, test } from 'bun:test';
 import { Store } from '@ilokesto/store';
 
-import { debounce, history, throttle } from '../src/middleware';
+import { debounce, dispose, history, throttle } from '../src/middleware';
 import { definePipeableMiddleware, getPipeableMiddlewareMetadata } from '../src/utils/pipe/metadata';
 import { pipe } from '../src/utils/pipe';
 
@@ -19,7 +19,7 @@ function useAtRuntime(builder: object, middleware: object): object {
   return nextBuilder;
 }
 
-test('Given history and delay middleware metadata, when compatible and invalid pipe chains are declared, then controls are available only after their provider and conflicts reject before setup', () => {
+test('history and timer metadata: compatible chains -> expose controls while provider and duplicate constraints remain enforced', () => {
   // Given
   jest.useFakeTimers();
   let observedUndo = false;
@@ -54,13 +54,13 @@ test('Given history and delay middleware metadata, when compatible and invalid p
       adds: ['@ilokesto/state/history-controls'],
       after: [],
       before: [],
-      conflicts: ['@ilokesto/state/debounce', '@ilokesto/state/throttle'],
+      conflicts: [],
       duplicate: 'reject',
       id: '@ilokesto/state/history',
       requires: [],
     });
     expect(getPipeableMiddlewareMetadata(throttle(10))).toEqual({
-      adds: [],
+      adds: ['@ilokesto/state/throttle-controls'],
       after: [],
       before: [],
       conflicts: [],
@@ -77,19 +77,14 @@ test('Given history and delay middleware metadata, when compatible and invalid p
       expect.objectContaining({ code: 'DUPLICATE_MIDDLEWARE', id: '@ilokesto/state/history' }),
     );
     for (const delayed of [debounce(10), throttle(10)]) {
-      expect(() => useAtRuntime(useAtRuntime(pipe, history()), delayed)).toThrow(
-        expect.objectContaining({
-          code: 'MIDDLEWARE_CONFLICT',
-          id: '@ilokesto/state/history',
-        }),
-      );
-      expect(() => useAtRuntime(useAtRuntime(pipe, delayed), history())).toThrow(
-        expect.objectContaining({
-          code: 'MIDDLEWARE_CONFLICT',
-          id: '@ilokesto/state/history',
-        }),
-      );
+      const timed = pipe.use(history()).use(delayed).create({ count: 0 });
+      timed.set({ count: 1 });
+      jest.advanceTimersByTime(10);
+      timed.undo();
+      expect(timed.getState()).toEqual({ count: 0 });
+      dispose(timed);
     }
+    dispose(store);
     expect(jest.getTimerCount()).toBe(0);
   } finally {
     jest.clearAllTimers();

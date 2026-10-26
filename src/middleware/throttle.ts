@@ -1,83 +1,47 @@
 import type { Store } from '@ilokesto/store';
-import { getStore } from '../lib/getStore.js';
-import { registerStoreCleanup } from '../lib/storeCleanup.js';
 import { definePipeableMiddleware } from '../utils/pipe/metadata.js';
 import type { PipeableMiddleware } from '../utils/pipe/metadata.js';
-import type { PipeAnyMiddleware, PipeMiddlewareMetadata } from '../utils/pipe/types.js';
+import type { PipeAnyMiddleware, PipeCapability, PipeMiddlewareMetadata } from '../utils/pipe/types.js';
+import { createTimerRuntime, validateTimerSettings } from './timer/createTimerRuntime.js';
+import type { TimerControls, TimerOptions } from './timer/createTimerRuntime.js';
 
+export type ThrottleOptions = TimerOptions;
+export type ThrottleControls = { readonly throttle: TimerControls };
+export type ThrottleStore<State> = Store<State> & ThrottleControls;
+
+type ThrottleCapability = PipeCapability<'@ilokesto/state/throttle-controls', ThrottleControls>;
 type ThrottlePipeMiddleware = PipeableMiddleware<
-  PipeAnyMiddleware,
-  PipeMiddlewareMetadata<'@ilokesto/state/throttle', readonly [], readonly [], 'reject', readonly []>
+  PipeAnyMiddleware<readonly [], readonly [ThrottleCapability]>,
+  PipeMiddlewareMetadata<
+    '@ilokesto/state/throttle', readonly [], readonly [ThrottleCapability], 'reject', readonly []
+  >
 >;
 
-function validateWait(wait: number | undefined): void {
-  if (wait !== undefined && (!Number.isFinite(wait) || wait < 0)) {
-    throw new RangeError('Throttle wait must be a finite non-negative number');
-  }
-}
-
-function applyThrottle<T>(initialState: T | Store<T>, wait = 300): Store<T> {
-  validateWait(wait);
-  const store = getStore(initialState);
-  let gateOpen = true;
-  let timeout: ReturnType<typeof setTimeout> | null = null;
-  let unregisterTimeout: (() => void) | null = null;
-
-  store.pushMiddleware((nextState, next) => {
-    if (!gateOpen) {
-      return;
-    }
-
-    gateOpen = false;
-    timeout = setTimeout(() => {
-      timeout = null;
-      gateOpen = true;
-      unregisterTimeout?.();
-      unregisterTimeout = null;
-    }, wait);
-    unregisterTimeout = registerStoreCleanup(store, () => {
-      if (timeout !== null) {
-        clearTimeout(timeout);
-      }
-
-      timeout = null;
-      gateOpen = true;
-      unregisterTimeout = null;
-    });
-    next(nextState);
-  });
-
-  return store;
-}
-
 /**
- * Create a pipe middleware that throttles state updates with leading-edge
- * behavior.
- *
- * The first update passes through immediately; subsequent updates are dropped
- * until the wait period elapses. Dropped updates are not retried.
- *
- * @param wait - Throttle window in milliseconds. Defaults to `300`.
- * @returns Pipe middleware registered with `@ilokesto/state/throttle` metadata.
- *
- * @example
- * ```ts
- * import { throttle } from '@ilokesto/state/middleware';
- * import { pipe } from '@ilokesto/state/utils';
- *
- * const store = pipe.use(throttle(250)).create({ count: 0 });
- * ```
+ * Pass the leading update and drop subsequent updates by default. Opt into
+ * trailing accumulation with `{ trailing: true }`. Controls live on
+ * `store.throttle`; pending reports queued work rather than the cooldown.
  */
-export function throttle(wait?: number): ThrottlePipeMiddleware {
-  validateWait(wait);
-  const middleware: PipeAnyMiddleware = (initialState) => applyThrottle(initialState, wait);
+export function throttle(wait = 300, options: ThrottleOptions = {}): ThrottlePipeMiddleware {
+  const settings = {
+    wait, mode: 'fixed' as const,
+    leading: options.leading ?? true, trailing: options.trailing ?? false,
+  };
+  validateTimerSettings(settings);
+  const middleware: PipeAnyMiddleware<readonly [], readonly [ThrottleCapability]> = <State>(store: Store<State>) => {
+    if ('throttle' in store) throw new TypeError('Throttle control conflicts with an existing Store property');
+    Object.defineProperty(store, 'throttle', {
+      configurable: false, enumerable: true, writable: false,
+      value: createTimerRuntime(store, settings),
+    });
+    return store as ThrottleStore<State>;
+  };
+  const capability: ThrottleCapability = {
+    id: '@ilokesto/state/throttle-controls',
+    shape: { throttle: { flush: () => undefined, cancel: () => undefined, pending: () => false } },
+  };
   return definePipeableMiddleware(middleware, {
-    adds: [],
-    after: [],
-    before: [],
-    conflicts: [],
-    duplicate: 'reject',
-    id: '@ilokesto/state/throttle',
-    requires: [],
+    adds: [capability], after: [], before: [], conflicts: [],
+    duplicate: 'reject', id: '@ilokesto/state/throttle', requires: [],
   } as const);
 }

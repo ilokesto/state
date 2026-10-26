@@ -1,5 +1,8 @@
 export { debounce } from './debounce.js';
+export type { DebounceControls, DebounceOptions, DebounceStore } from './debounce.js';
 export { throttle } from './throttle.js';
+export type { ThrottleControls, ThrottleOptions, ThrottleStore } from './throttle.js';
+export type { TimerControls, TimerOptions } from './timer/createTimerRuntime.js';
 export { devtools } from './devtools.js';
 export type { DevtoolsAction, DevtoolsOptions, DevtoolsSerializeOptions } from './devtools.js';
 export { dispose } from '../lib/storeCleanup.js';

@@ -71,7 +71,7 @@ Every value passed to `.use()` must be registered with `definePipeableMiddleware
 
 `PipeConfigurationError` exposes a contextual primary `id`, related `ids`, and a code: `DUPLICATE_CAPABILITY`, `DUPLICATE_MIDDLEWARE`, `INVALID_METADATA`, `INVALID_MIDDLEWARE_RESULT`, `INVALID_STORE_INPUT`, `MISSING_CAPABILITY`, `MIDDLEWARE_CONFLICT`, `MIDDLEWARE_CYCLE`, or `MIDDLEWARE_ORDER`. The primary ID can name a middleware or a capability, and is empty when no identifier applies; `ids` contains the related contextual identifiers and can also be empty.
 
-`history()` cannot share a chain with `debounce()` or `throttle()` in either order because history needs synchronous commits; those combinations use `MIDDLEWARE_CONFLICT`. Declare `debounce()` before `persist()`; the reverse order remains rejected with `MIDDLEWARE_ORDER`. Persistence observes actual commits. Restoration bypasses timing middleware and establishes a new history baseline; `flush()` does not force debounce timers.
+`history()` works with `debounce()` and `throttle()` in either order: it records actual commits, cancels pending timers on undo/redo, and replays synchronously through validation. Declare `debounce()` before `persist()`; the reverse order remains rejected with `MIDDLEWARE_ORDER`. Persistence observes actual commits. Restoration bypasses timing middleware and establishes a new history baseline; `store.persist.flush()` does not run timers. Use the timer's own `flush()` to forward pending work.
 
 ## Use with validation
 

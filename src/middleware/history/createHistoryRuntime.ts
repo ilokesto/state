@@ -3,6 +3,7 @@ import type { StoreCommit } from '@ilokesto/store';
 import { runWithStoreActionMetadata } from '../../lib/actionMetadata.js';
 import { devtoolsRestoreSource, registerRestoreBaseline, restoreSource } from '../../lib/restoreSource.js';
 import { registerStoreCleanup } from '../../lib/storeCleanup.js';
+import { cancelStoreTimers, runWithTimerReplay } from '../../lib/timerReplay.js';
 import type { HistoryControls, HistoryStatus, HistoryStrategy } from '../history.js';
 
 type HistoryStep<Selection> = {
@@ -113,7 +114,7 @@ export function createHistoryRuntime<State, Selection, Patch>(
   // A single global "replaying" flag would incorrectly suppress user writes.
   store.unshiftMiddleware((action, next) => {
     if (disposed) {
-      next(action);
+      runWithTimerReplay(store, false, () => next(action));
       return;
     }
     const parent = activeContext;
@@ -125,7 +126,7 @@ export function createHistoryRuntime<State, Selection, Patch>(
     const before = store.getCommitSequence();
     activeContext = context;
     try {
-      next(action);
+      runWithTimerReplay(store, context.replay !== undefined, () => next(action));
     } finally {
       for (let sequence = Math.max(before, observedSequence) + 1;
         !disposed && sequence <= store.getCommitSequence(); sequence += 1) {
@@ -219,6 +220,9 @@ export function createHistoryRuntime<State, Selection, Patch>(
       replayQueue.push({ source, target, direction, sequence: store.getCommitSequence() });
       return;
     }
+    // Replay operates only on committed history. Discard pending user intent,
+    // including when there is no entry, rather than silently committing it.
+    cancelStoreTimers(store);
     const entry = source.at(-1);
     if (!entry) return;
     const current = store.getState();

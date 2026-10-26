@@ -82,7 +82,7 @@ test('Given curried throttles, when default and custom waits elapse, then they r
     // Then
     expect(defaultStore.getState()).toEqual({ count: 3 });
     expect(getPipeableMiddlewareMetadata(throttle(10))).toEqual({
-      adds: [],
+      adds: ['@ilokesto/state/throttle-controls'],
       after: [],
       before: [],
       conflicts: [],

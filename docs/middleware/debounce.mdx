@@ -5,15 +5,23 @@ description: "Delay rapid updates and apply the latest accumulated state."
 
 # debounce
 
-`debounce` collects rapid update requests and applies them after a wait window. It is useful for text inputs, resize-driven values, or other high-frequency updates where intermediate states do not need to notify immediately.
+`debounce` collects updates in a **fixed window starting at the first call**, preserving its existing behavior. Later calls do not restart that window. Use `{ mode: 'quiet' }` for a true quiet window measured from the last call.
 
 ## Signature
 
 ```ts lineNumbers
-debounce(wait?: number): PipeAnyMiddleware
+debounce(wait?: number, options?: DebounceOptions): DebouncePipeMiddleware
 ```
 
 `wait` is measured in milliseconds and defaults to `300`. When supplied, it must be a finite non-negative number; `0` is valid. Invalid waits throw `RangeError` before middleware or timer setup.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `mode` | `'fixed'` | `'quiet'` restarts the deadline on every call. |
+| `leading` | `false` | Commit the first call immediately and open a wait window. |
+| `trailing` | `true` | Accumulate subsequent calls and commit them when the window ends. |
+
+Both edges cannot be `false`; that configuration throws `TypeError`. With both enabled, a lone leading call is not repeated on the trailing edge. In quiet mode, even dropped calls extend a leading-only cooldown. The registered middleware adds `DebounceControls`; `DebounceStore<State>` describes the resulting store.
 
 ## Example
 
@@ -29,6 +37,20 @@ store.setState({ query: 'i' });
 store.setState({ query: 'il' });
 store.setState({ query: 'ilo' });
 ```
+
+## Controls
+
+```ts
+const search = pipe.use(debounce(250, { mode: 'quiet' })).create({ query: '' });
+search.set({ query: 'ilokesto' });
+search.debounce.pending(); // true
+search.debounce.flush(); // synchronous commit, then reopen the window
+search.debounce.cancel(); // discard pending work without evaluating updaters
+```
+
+The immutable `store.debounce` namespace exposes `TimerControls`: `flush(): void`, `cancel(): void`, and `pending(): boolean`. `pending()` reports queued updates, not a leading-only cooldown. Flush and cancel reopen the window even when there are no queued updates. A property collision rejects setup rather than overwriting an existing `debounce` property.
+
+Flush commits only this timer's work through the downstream middleware; another timer later in the chain can still delay it. It does not restart the entire middleware chain. Place validation after the timer to validate the final accumulated candidate; validation before it instead validates individual requests.
 
 ## Using with persist
 
@@ -53,16 +75,24 @@ const store = pipe
 await store.persist.rehydrate();
 ```
 
-The reverse declaration order remains rejected with `MIDDLEWARE_ORDER`. Restoration commits immediately without waiting for debounce. `flush()` waits for committed save targets; it does not force a pending debounce timer to run. The restriction on `history()` with `debounce()` or `throttle()` remains.
+The reverse declaration order remains rejected with `MIDDLEWARE_ORDER`. Restoration commits immediately without waiting for debounce. `store.persist.flush()` waits for committed save targets; it does not run a pending timer. To commit and save, call `store.debounce.flush()` first, then await `store.persist.flush()`.
 
 ## Function updates
 
-Function updates are kept in order and replayed against an accumulated current state when the timer fires. That means updater functions still compose with one another inside the debounce window.
+Function updates are evaluated in order against the latest committed state at flush time. Value updates replace the accumulated value; later updaters continue from that replacement. Earlier updaters still run even when a later value replaces their result. Cancel never evaluates queued updaters.
+
+The batch is detached before evaluation. Reentrant writes from an updater or subscriber create a new window and survive the old flush, including when that flush throws. An updater error discards the detached batch without committing it; synchronous `flush()` propagates the error and timer expiry reports it through the host timer callback. Subscriber errors do not roll back an already committed value. A leading error leaves its cooldown open until expiry, flush, or cancel.
+
+During a trailing flush, reentrant writes queue for the next trailing window even when leading is enabled. A nested `flush()` leaves that work queued until the current flush returns; a later flush or deadline commits it against the resulting state.
 
 ## Timing caveat
 
-Until the timer fires, `getState()` still returns the previous committed state. Do not use `debounce` for state where every intermediate write must be immediately observable. `history()` cannot share this pipe chain because history requires synchronous commits.
+Until a trailing commit, `getState()` still returns the previous committed state. Do not use trailing debounce for state where every write must be immediately observable.
+
+`history()` works in either declaration order and records actual commits, not scheduled requests. Undo/redo cancel all pending timer work without evaluating it, even when no history entry exists, then replay synchronously through validation. Reentrant user writes still obey timing. Group and pause scopes apply at commit time: flush inside a synchronous group to include delayed work in that group.
 
 ## Cleanup
 
 `debounce` owns its pending timer. When the store is no longer needed, call `dispose(store)` from `@ilokesto/state/middleware` to cancel it. Disposal is scoped to that store and is safe to repeat. It still attempts every registered cleanup after a failure, then throws an `AggregateError` containing each original thrown value when any cleanup fails.
+
+Disposal also invalidates a trailing batch currently evaluating an updater, so that batch cannot commit afterward. Leading calls pass their action through immediately without eagerly evaluating it. The Store remains reusable: later writes start fresh timer windows. Cancel or disposal does not undo a value that already committed.

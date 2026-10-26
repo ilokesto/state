@@ -376,6 +376,6 @@ The owner of a store calls `dispose(store)` when that instance is no longer need
 
 Persistence observes actual commits, not attempted writes. Validation rejection and throttle drops are not saved; deferred and reentrant commits are. Restoration follows read, envelope validation, migration, decode, explicit projection restoration when configured, registered state validation, and immediate commit. It bypasses debounce/throttle, runs state validation once, and becomes a new history baseline. User edits made by restoration listeners remain ordinary saved commits.
 
-Declare `debounce()` before `persist()`; the reverse order remains rejected with `MIDDLEWARE_ORDER`. The existing restriction on `history()` combined with `debounce()` or `throttle()` remains.
+Declare `debounce()` before `persist()`; the reverse order remains rejected with `MIDDLEWARE_ORDER`. History supports either timer: undo/redo cancel pending timer work and replay synchronously through validation, and the resulting commit is persisted. Timer `flush()` forwards pending state updates; `store.persist.flush()` only waits for committed saves. Flush timers in pipeline order before awaiting persistence when pending updates must be saved.
 
 All adapters support the same migration pipeline. Data version is the migration array length, distinct from IndexedDB schema version and internal commit sequence. See [Persist migrations](/en/state/advanced/persist-migrations) for the breaking API migration table and runnable examples.

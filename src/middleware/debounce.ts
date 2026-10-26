@@ -1,117 +1,50 @@
 import type { Store } from '@ilokesto/store';
-import { getStore } from '../lib/getStore.js';
-import { registerStoreCleanup } from '../lib/storeCleanup.js';
 import { definePipeableMiddleware } from '../utils/pipe/metadata.js';
 import type { PipeableMiddleware } from '../utils/pipe/metadata.js';
-import type { PipeAnyMiddleware, PipeMiddlewareMetadata } from '../utils/pipe/types.js';
+import type { PipeAnyMiddleware, PipeCapability, PipeMiddlewareMetadata } from '../utils/pipe/types.js';
+import { createTimerRuntime, validateTimerSettings } from './timer/createTimerRuntime.js';
+import type { TimerControls, TimerOptions } from './timer/createTimerRuntime.js';
 
-type Dispatch<A> = (value: A) => void;
-type StoreSetStateAction<T> = Parameters<Store<T>['setState']>[0];
+export type DebounceOptions = TimerOptions & {
+  /** Fixed windows start at the first call (default); quiet windows restart on each call. */
+  readonly mode?: 'fixed' | 'quiet';
+};
+export type DebounceControls = { readonly debounce: TimerControls };
+export type DebounceStore<State> = Store<State> & DebounceControls;
 
-function validateWait(wait: number | undefined): void {
-  if (wait !== undefined && (!Number.isFinite(wait) || wait < 0)) {
-    throw new RangeError('Debounce wait must be a finite non-negative number');
-  }
-}
-
+type DebounceCapability = PipeCapability<'@ilokesto/state/debounce-controls', DebounceControls>;
 type DebouncePipeMiddleware = PipeableMiddleware<
-  PipeAnyMiddleware,
-  PipeMiddlewareMetadata<'@ilokesto/state/debounce', readonly [], readonly [], 'reject', readonly []>
+  PipeAnyMiddleware<readonly [], readonly [DebounceCapability]>,
+  PipeMiddlewareMetadata<
+    '@ilokesto/state/debounce', readonly [], readonly [DebounceCapability], 'reject', readonly []
+  >
 >;
 
-const applyDebounce = <T>(initialState: T | Store<T>, wait = 300): Store<T> => {
-  validateWait(wait);
-  const store = getStore(initialState);
-
-  let timeout: ReturnType<typeof setTimeout> | null = null;
-  let scheduleGeneration = 0;
-  let updates: Array<StoreSetStateAction<T>> = [];
-  let savedNext: Dispatch<StoreSetStateAction<T>> | null = null;
-  let unregisterTimeout: (() => void) | null = null;
-
-  store.pushMiddleware((nextState: StoreSetStateAction<T>, next) => {
-    updates.push(nextState);
-    savedNext = next;
-
-    if (timeout) {
-      return;
-    }
-
-    const currentGeneration = ++scheduleGeneration;
-    timeout = setTimeout(() => {
-      let currentState = store.getState() as T;
-      const pendingNext = savedNext;
-
-      try {
-        updates.forEach((update) => {
-          if (typeof update === 'function') {
-            currentState = (update as (prev: Readonly<T>) => T)(currentState);
-          } else {
-            currentState = update;
-          }
-        });
-      } finally {
-        if (scheduleGeneration === currentGeneration) {
-          updates = [];
-          timeout = null;
-          savedNext = null;
-          unregisterTimeout?.();
-          unregisterTimeout = null;
-        }
-      }
-
-      if (pendingNext) {
-        pendingNext(currentState);
-      }
-    }, wait);
-    unregisterTimeout = registerStoreCleanup(store, () => {
-      if (timeout) {
-        clearTimeout(timeout);
-      }
-
-      timeout = null;
-      updates = [];
-      savedNext = null;
-      unregisterTimeout = null;
-    });
-  });
-
-  return store;
-};
-
 /**
- * Create a pipe middleware that debounces state updates.
- *
- * Coalesces all updates within the wait period into a single commit.
- * Function updaters are applied sequentially against the latest state at
- * flush time; value updates overwrite previous ones. If an updater throws,
- * its error surfaces and later updates remain schedulable. When used with
- * `persist`, `persist` must be declared after `debounce` in the pipe chain.
- *
- * @param wait - Debounce delay in milliseconds. Must be a finite non-negative
- *   number; `0` is valid. Defaults to `300`.
- * @returns Pipe middleware registered with `@ilokesto/state/debounce` metadata.
- * @throws {RangeError} If `wait` is not a finite non-negative number. Throws
- *   during the factory call, before middleware or timer setup.
- *
- * @example
- * ```ts
- * import { debounce } from '@ilokesto/state/middleware';
- * import { pipe } from '@ilokesto/state/utils';
- *
- * const store = pipe.use(debounce(200)).create({ count: 0 });
- * ```
+ * Coalesce updates in a fixed window by default. Opt into `mode: 'quiet'` to
+ * restart the wait on each call. Values replace; updater functions accumulate.
+ * Controls live on `store.debounce`, independently of `store.persist.flush`.
  */
-export function debounce(wait?: number): DebouncePipeMiddleware {
-  validateWait(wait);
-  const middleware: PipeAnyMiddleware = (initialState) => applyDebounce(initialState, wait);
+export function debounce(wait = 300, options: DebounceOptions = {}): DebouncePipeMiddleware {
+  const settings = {
+    wait, mode: options.mode ?? 'fixed',
+    leading: options.leading ?? false, trailing: options.trailing ?? true,
+  };
+  validateTimerSettings(settings);
+  const middleware: PipeAnyMiddleware<readonly [], readonly [DebounceCapability]> = <State>(store: Store<State>) => {
+    if ('debounce' in store) throw new TypeError('Debounce control conflicts with an existing Store property');
+    Object.defineProperty(store, 'debounce', {
+      configurable: false, enumerable: true, writable: false,
+      value: createTimerRuntime(store, settings),
+    });
+    return store as DebounceStore<State>;
+  };
+  const capability: DebounceCapability = {
+    id: '@ilokesto/state/debounce-controls',
+    shape: { debounce: { flush: () => undefined, cancel: () => undefined, pending: () => false } },
+  };
   return definePipeableMiddleware(middleware, {
-    adds: [],
-    after: [],
-    before: [],
-    conflicts: [],
-    duplicate: 'reject',
-    id: '@ilokesto/state/debounce',
-    requires: [],
+    adds: [capability], after: [], before: [], conflicts: [],
+    duplicate: 'reject', id: '@ilokesto/state/debounce', requires: [],
   } as const);
 }

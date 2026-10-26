@@ -5,15 +5,26 @@ description: "선행 update를 통과시키고 throttle window가 끝날 때까�
 
 # throttle
 
-`throttle`은 leading-drop 방식으로 동작합니다. 첫 번째 update는 즉시 통과하고, 이후 update는 wait window가 끝날 때까지 드롭됩니다. 드롭된 update는 대기열에 넣거나 다시 시도하지 않습니다.
+`throttle`의 기본값은 기존 leading-drop 방식입니다. 첫 update는 즉시 통과하고 이후 update는 고정 wait window가 끝날 때까지 드롭합니다. 드롭된 update는 평가하거나 대기열에 넣거나 재시도하지 않습니다. Trailing 누적은 명시적으로 켜야 합니다.
 
 ## Signature
 
 ```ts lineNumbers
-throttle(wait?: number): PipeAnyMiddleware
+throttle(wait?: number, options?: ThrottleOptions): ThrottlePipeMiddleware
 ```
 
-`wait`의 단위는 밀리초이며 기본값은 `300`입니다. 전달했다면 유한한 0 이상의 숫자여야 합니다.
+`wait`는 밀리초 단위이며 기본값은 `300`입니다. 유한한 0 이상의 숫자여야 하고 `0`이면 대기 timer가 실행될 때 window를 다시 엽니다. 잘못된 wait는 `RangeError`를 던집니다.
+
+| 옵션 | 기본값 | 의미 |
+| --- | --- | --- |
+| `leading` | `true` | 첫 호출을 즉시 commit합니다. |
+| `trailing` | `false` | 이후 호출을 누적하여 window 만료 시 한 번 commit합니다. |
+
+Trailing-only window에는 `{ leading: false, trailing: true }`를 사용하세요. 둘 다 `false`이면 `TypeError`이며 둘 다 `true`여도 leading 호출 하나를 반복하지 않습니다. 호출은 고정 마감 시각을 연장하지 않습니다.
+
+Middleware는 `ThrottleControls`를 추가하며 결과 store는 `ThrottleStore<State>`로 표현합니다. 변경할 수 없는 `store.throttle` namespace는 `TimerControls`인 `flush(): void`, `cancel(): void`, `pending(): boolean`을 제공합니다. 기존 `throttle` property가 있으면 덮어쓰지 않고 setup을 거부합니다.
+
+Flush는 대기 작업을 뒤쪽 middleware로 동기 전달하고 window를 다시 엽니다. Cancel은 updater를 평가하지 않고 버린 뒤 window를 다시 엽니다. `pending()`은 cooldown이 아닌 대기 update를 의미합니다. Trailing value는 누적 결과를 교체하고 updater는 flush 시점의 최신 state에서 순서대로 조합합니다. 뒤에 교체 value가 있어도 앞의 updater는 실행합니다.
 
 ## 예제
 
@@ -32,10 +43,26 @@ store.setState({ count: 2 }); // wait window 중 드롭
 dispose(store);
 ```
 
+## Trailing update와 오류
+
+```ts
+const trailing = pipe.use(throttle(250, { trailing: true })).create({ count: 0 });
+trailing.update((state) => ({ count: state.count + 1 })); // leading
+trailing.update((state) => ({ count: state.count + 1 })); // 대기
+trailing.throttle.pending(); // true
+trailing.throttle.flush(); // count: 2
+```
+
+Updater 평가 전에 batch를 분리합니다. 재진입 쓰기는 독립적인 작업을 만들며 기존 batch의 오류에도 유지됩니다. Updater 오류는 해당 batch를 버리고 `flush()` 또는 host timer callback에서 전파합니다. Subscriber 오류는 commit된 state를 유지합니다. Leading 오류 후 cooldown은 만료, flush 또는 cancel까지 유지됩니다. 공통 누적 규칙과 validation 순서는 [debounce](/ko/state/middleware/debounce)를 참고하세요.
+
 ## Cleanup 소유권
 
 `throttle`은 자신이 준비한 store의 pending timer를 소유합니다. 해당 store가 더 이상 필요 없으면 `dispose(store)`를 호출해 timer를 취소하고 gate를 다시 여세요. Disposal은 전달한 store에만 적용되고 store를 무효화하거나 consumer를 unsubscribe하지 않으며 반복 호출해도 안전합니다. Cleanup 하나가 실패해도 등록된 모든 cleanup을 시도하며, 하나라도 실패하면 각 원래 thrown value가 담긴 `AggregateError`를 throw합니다.
 
+Disposal은 대기 callback뿐 아니라 실행 중인 trailing updater batch도 무효화합니다. Leading 호출은 즉시 전달하며 뒤쪽 middleware의 지연 평가를 유지합니다. 이후 쓰기는 새 window를 시작할 수 있으며 이미 commit된 값은 rollback하지 않습니다.
+
 ## 조합 제약
 
-`history()`는 성공한 동기 commit만 기록하므로 `throttle()`과 같은 chain에 둘 수 없습니다. 선언 순서와 관계없이 `MIDDLEWARE_CONFLICT` code의 `PipeConfigurationError`로 거부되며, pipe는 middleware 순서를 바꾸지 않고 선언한 순서를 유지합니다.
+`history()`는 어느 순서에서도 함께 사용할 수 있으며 실제 commit을 기록합니다. Undo/redo는 entry가 없어도 pending timer 작업과 cooldown을 취소한 뒤 validation을 거쳐 즉시 replay합니다. 재진입 사용자 쓰기는 계속 timer를 따르고 history group과 pause 범위는 commit 시점에 적용합니다.
+
+`store.throttle.flush()`는 해당 timer의 작업만 전달하며 뒤의 다른 timer는 여전히 지연할 수 있습니다. `store.persist.flush()`는 commit된 저장만 기다립니다. 대기 trailing update를 저장하려면 timer를 flush한 뒤 persistence를 기다리세요.

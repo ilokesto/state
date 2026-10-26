@@ -98,6 +98,6 @@ node packages/state/examples/persist-lifecycle.mjs
 - `flush()`는 미래 편집이 아닌 호출 시점의 저장 대상을 기다리고 상태 debounce 타이머를 강제로 실행하지 않습니다. 실패한 쓰기는 대기 상태를 유지하며 새 commit이나 `flush()`로 재시도합니다.
 - `clearStorage()`는 이전 쓰기 뒤에 해당 키만 삭제하고 메모리를 유지합니다. 삭제로 대체된 대기 중 `flush()`는 `CLEARED`로 거부됩니다.
 - `dispose(store)`는 해당 스토어의 어댑터와 대기 작업만 소유합니다. 팩토리를 재사용해도 연결과 정리 소유권은 공유하지 않습니다. 정리 전 저장 보장이 필요하면 `flush()`를 먼저 기다리세요. 정리는 완료된 트랜잭션을 되돌리지 않습니다.
-- 복원은 검증 후 즉시 commit되며 새 history 기준점이 됩니다. `history()`와 `debounce()` 또는 `throttle()`의 조합 제한은 유지됩니다.
+- 복원은 검증 후 즉시 commit되며 새 history 기준점이 됩니다. History는 debounce/throttle commit도 지원합니다. Undo/redo는 pending timer 작업을 취소하고 validation을 거쳐 replay합니다. 대기 timer 작업까지 저장하려면 timer를 flush한 뒤 `store.persist.flush()`를 기다리세요.
 
 상태, 오류, 어댑터, SSR 계약은 [persist](/ko/state/middleware/persist)를 참고하세요.
