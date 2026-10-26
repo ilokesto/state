@@ -139,7 +139,7 @@ counter.redo(); // 0 -> 5
 
 그룹의 inverse patch는 역순으로 적용합니다. Replay가 성공하면 실제 전후 selection으로 반대쪽 entry를 다시 만들어 검증 변환이나 건너뛴 변경에도 정확한 역전이를 보관합니다. 전략은 이후 selection 변경에 대한 rebasing을 정의할 수 있습니다. Delta 예제는 상대 변경을 적용하지만 기본 snapshot은 selection 전체를 교체합니다.
 
-이미 commit된 전이를 기록할 때 `select`, `isEqual`, `filter`, `diff`가 예외를 던지면 history는 entry를 비우고 Store 알림 오류로 실패를 보고합니다. Replay의 `apply`나 `restore`가 dispatch 전에 예외를 던지면 state와 stack은 바뀌지 않습니다.
+이미 commit된 전이를 기록할 때 `select`, `isEqual`, `filter`, `diff`가 예외를 던지면 history는 entry를 비우고 Store 알림 오류로 실패를 보고합니다. Replay의 `apply`는 dispatch 전에 실행하고, `restore`는 middleware가 updater를 전달할 때 현재 state를 사용해 실행합니다. 어느 훅이든 예외를 던지면 replay entry를 소비하지 않으며 다시 시도할 수 있습니다. 별도로 발생한 middleware commit은 일반적인 undo 가능한 변경으로 남습니다.
 
 ## 재진입과 persistence
 

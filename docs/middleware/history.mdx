@@ -139,7 +139,7 @@ counter.redo(); // 0 -> 5
 
 Grouped patches apply backwards in reverse order. After successful replay, the opposite entry is rebuilt from the actual before/after selections, so validation transformations and skipped changes have an accurate reverse transition. A strategy may define rebasing onto later selected changes; the delta example applies relative changes, while default snapshots replace the entire selection.
 
-If `select`, `isEqual`, `filter`, or `diff` throws while recording an already committed transition, history clears its entries and reports the failure through Store notification errors. If a replay's `apply` or `restore` throws before dispatch, state and stacks remain unchanged.
+If `select`, `isEqual`, `filter`, or `diff` throws while recording an already committed transition, history clears its entries and reports the failure through Store notification errors. Replay `apply` runs before dispatch; `restore` runs when middleware forwards the updater, using the current state. If either throws, the replay does not consume its entry and can be retried. Any separate middleware commits remain ordinary undoable changes.
 
 ## Reentrancy and persistence
 
