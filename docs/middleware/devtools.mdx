@@ -1,16 +1,17 @@
 ---
 title: "devtools"
-description: "Connect state updates to the Redux DevTools extension in development."
+description: "Inspect reducer payloads, sanitize observations, and replay state with Redux DevTools."
 ---
 
 # devtools
 
-`devtools` integrates a store with the Redux DevTools browser extension. It initializes the extension with current state, sends updates, and handles selected DevTools dispatch messages.
+`devtools` connects a store to the Redux DevTools browser extension. It initializes the extension with current state, observes committed updates, and handles DevTools commands.
 
 ## Signature
 
 ```ts lineNumbers
-devtools(name: string): PipeAnyMiddleware
+devtools(name: string, options?: DevtoolsOptions): PipeAnyMiddleware
+devtools(options: DevtoolsOptions & { readonly name: string }): PipeAnyMiddleware
 ```
 
 ## Example
@@ -27,10 +28,65 @@ const store = pipe
 
 ## Supported DevTools actions
 
-- `RESET`: resets to the original initial state or the passed store initial state, then re-initializes DevTools.
-- `COMMIT`: re-initializes DevTools with the current state.
-- `ROLLBACK`: parses the DevTools state payload and sets the store state.
+| Command | State and middleware behavior |
+| --- | --- |
+| `RESET` | Writes the store's original initial state through `setState`, then re-initializes DevTools. |
+| `COMMIT` | Re-initializes DevTools with current state without changing the store. |
+| `ROLLBACK` | Decodes `message.state` and writes it through the existing middleware pipeline. |
+| `JUMP_TO_STATE`, `JUMP_TO_ACTION` | Decodes and validates `message.state`, immediately replaces the state, and clears local undo/redo history. |
 
-## Production and browser caveats
+Jumps restore the selected snapshot; they do not execute a reducer action. They use the registered `validate()` schema, including its transformations and `onError` behavior, before changing state or the history baseline. Without `validate()`, the store accepts any decoded state: JSON parsing is not application-schema validation.
 
-`devtools` is disabled when `process.env.NODE_ENV === "production"`. It also requires `window.__REDUX_DEVTOOLS_EXTENSION__`, so it is a browser-only development aid.
+An accepted jump is visible to subscribers and persistence. It is saved according to the normal persistence hydration/flush contract, but is not sent back to DevTools. A user update triggered by a jump's subscriber is still observed and saved normally. A rejected jump changes neither state nor history.
+
+Jumps bypass ordinary middleware, including reducers, debounce, throttle, and logger. Pending application updates are not cancelled and may commit after a jump. `RESET` and `ROLLBACK` retain their existing middleware behavior, including timing middleware and local history recording; their synchronous writes do not echo back to DevTools.
+
+## Observation and payloads
+
+- Reducer dispatches send an object with the original action fields and payload, and a namespaced type such as `{ type: 'counter:increment', payload: { amount: 2 } }`.
+- Direct writes keep the existing `counter:anonymous action` label.
+- Persistence restoration keeps the `counter:persist/rehydrate` label.
+- Rejected updates and unchanged state do not generate a send. Nested dispatches retain their own payloads and committed snapshots.
+
+Deferred or coalesced commits outside the synchronous dispatch scope use the direct-write label, since they no longer represent one active reducer action.
+
+Labels are for observation, not a persistence format. `JUMP_TO_ACTION` restores the supplied state instead of redispatching the displayed payload.
+
+## Options
+
+`DevtoolsOptions`, `DevtoolsAction`, and `DevtoolsSerializeOptions` are exported from `@ilokesto/state/middleware`.
+
+| Option | Contract |
+| --- | --- |
+| `enabled` | Defaults to `false` when `process.env.NODE_ENV === 'production'`, otherwise `true`. An explicit value overrides that default. |
+| `stateSanitizer(state: unknown)` | Returns the outgoing state used by initialization, commits, and persistence restoration. |
+| `actionSanitizer(action: DevtoolsAction)` | Returns the outgoing action, which can be a legacy string label or a reducer action object. |
+| `serialize` | Forwards Redux DevTools serialization settings to `connect`: a boolean, or `{ options, replacer, reviver }`. |
+| `deserializeState(text: string)` | Synchronously decodes replay state. Defaults to `JSON.parse`, with `serialize.reviver` when supplied. |
+
+```ts lineNumbers
+import { devtools } from '@ilokesto/state/middleware';
+import { pipe } from '@ilokesto/state/utils';
+
+const store = pipe.use(devtools({
+  name: 'session',
+  stateSanitizer: (state) =>
+    typeof state === 'object' && state !== null
+      ? { ...state, token: '[redacted]' }
+      : state,
+  actionSanitizer: (action) =>
+    typeof action === 'string' ? action : { type: action.type },
+})).create({ token: 'private', count: 0 });
+```
+
+Sanitizers receive detached `structuredClone` copies, so mutating a sanitizer input cannot mutate the store, initial state, or dispatched payload. Explicit serialization also uses detached copies before calling the extension. Values passed through these options must be structured-cloneable; functions and other unsupported values cause that observation to be skipped and reported with `console.error`, without rolling back a committed update. Sanitizers are applied locally rather than forwarded to the extension.
+
+Serialization only configures DevTools output, not persistence. For non-JSON extension encodings, including advanced `serialize: true` values, provide a matching `deserializeState`; the default parser does not decode Redux DevTools' JSAN markers. Sanitization is not reversible: a redacted snapshot may be unsuitable for replay, and should be rejected by the store's validation schema.
+
+## Invalid messages and cleanup
+
+Messages must be objects with a string `type`. `DISPATCH` messages additionally require an object `payload` with a string `type`. `ROLLBACK` and both jump commands require a string `state`. Malformed envelopes throw `TypeError`; malformed JSON throws `SyntaxError` before mutation. Decoder and validator exceptions propagate. Well-formed non-dispatch messages and unknown command names are ignored.
+
+`dispose(store)` unsubscribes the store's commit observer and extension listener once. Retained callbacks and later writes cannot send or apply commands after disposal. Cleanup is scoped to that store; it never calls the extension's global `disconnect()`, which could disconnect other stores.
+
+The extension must be available as `window.__REDUX_DEVTOOLS_EXTENSION__`. With no browser or extension, or with `enabled: false`, the middleware does not connect or observe state.
