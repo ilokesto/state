@@ -82,7 +82,7 @@ export class PersistError extends Error {
   readonly code: 'STORAGE' | 'INVALID_DATA' | 'VALIDATION' | 'CONFLICT' |
     'NOT_HYDRATED' | 'DISPOSED' | 'CLEARED' | 'NOTIFICATION';
   /** Operation that failed, independent of hydration and write status. */
-  readonly operation: 'hydrate' | 'write' | 'clear' | 'notify' | 'dispose';
+  readonly operation: 'hydrate' | 'sync' | 'write' | 'clear' | 'notify' | 'dispose';
 
   constructor(
     operation: PersistError['operation'],
@@ -125,6 +125,8 @@ export type PersistStatus = {
 export type PersistControls = {
   /** Shares an ongoing attempt; success is a no-op thereafter; failures retry. */
   readonly rehydrate: (options?: PersistRehydrateOptions) => Promise<void>;
+  /** Rereads current storage after hydration; rejects unsaved edits without an explicit policy. */
+  readonly sync: (options?: PersistRehydrateOptions) => Promise<void>;
   /** Saves the call-time target without advancing state middleware timers. */
   readonly flush: () => Promise<void>;
   /** Pauses automatic saves without cancelling an active write or explicit flush. */
@@ -168,6 +170,10 @@ export type SafePersistConfig<
   readonly migrate?: ValidMigrationTuple<Steps>;
   /** Debounces storage writes only, in milliseconds; omitted or zero saves immediately. */
   readonly saveDebounceMs?: number;
+  /** Opts into external invalidations; requires an adapter with subscribe.
+   * Omit conflict to report CONFLICT and retain pending local edits.
+   */
+  readonly sync?: PersistRehydrateOptions;
 };
 
 /** Opt-in projection with explicit reconstruction of the complete state.

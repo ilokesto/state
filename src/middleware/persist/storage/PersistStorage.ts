@@ -25,6 +25,10 @@ export interface PersistStorage {
   setItem(key: string, value: PersistedValue): Promise<void>;
   /** Deletes only this key and resolves after deletion is committed. */
   removeItem(key: string): Promise<void>;
+  /** Optional external-only invalidations, including deletion; never send this adapter's writes.
+   * Listeners reread current storage rather than trusting delayed event payloads.
+   */
+  subscribe?(key: string, listener: () => void): () => void;
   /** Releases this instance's resources and cancels unfinished work. */
   dispose?(): void;
 }

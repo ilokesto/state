@@ -16,6 +16,7 @@ const persistCapability: PersistCapability = {
   shape: {
     persist: {
       rehydrate: async () => undefined,
+      sync: async () => undefined,
       flush: async () => undefined,
       pause: () => undefined,
       resume: () => undefined,
