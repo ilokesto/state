@@ -4,6 +4,45 @@ import { dispose, history, persist } from '../src/middleware';
 import { pipe } from '../src/utils/pipe';
 import { AsyncMemoryStorage, decodeCounter } from './helpers/persistStorage';
 
+test('undo: restore throws after queued middleware replacement -> retains intervention and allows retry', () => {
+  const store = pipe.use(history({
+    select: (state: Readonly<{ count: number; locked: boolean }>) => state.count,
+    restore: (current, count) => {
+      if (current.locked) throw new Error('restore locked');
+      return { ...current, count };
+    },
+  })).create({ count: 0, locked: false });
+  store.set({ count: 1, locked: false });
+  let intervene = false;
+  store.pushMiddleware((action, next) => {
+    if (intervene) {
+      intervene = false;
+      store.replaceState({ count: 5, locked: true });
+    }
+    next(action);
+  });
+  let once = true;
+  const stop = store.subscribe(() => {
+    if (!once) return;
+    once = false;
+    intervene = true;
+    store.undo();
+  });
+
+  expect(() => store.set({ count: 2, locked: false })).toThrow(AggregateError);
+  stop();
+  expect(store.getState()).toEqual({ count: 5, locked: true });
+  store.set({ count: 5, locked: false });
+  store.undo();
+
+  expect(store.getState()).toEqual({ count: 2, locked: false });
+  store.undo();
+  expect(store.getState()).toEqual({ count: 1, locked: false });
+  store.redo();
+  expect(store.getState()).toEqual({ count: 2, locked: false });
+  dispose(store);
+});
+
 test('undo: middleware edits an untracked field before forwarding -> preserves the latest untracked value', () => {
   const store = pipe.use(history({
     select: (state: Readonly<{ count: number; label: string }>) => state.count,

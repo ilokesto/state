@@ -236,8 +236,9 @@ export function createHistoryRuntime<State, Selection, Patch>(
     }
     const request: Replay<State, Selection> = {
       action: (actual) => {
+        const next = options.restore(actual, restored);
         request.firstSequence ??= store.getCommitSequence() + 1;
-        return options.restore(actual, restored);
+        return next;
       },
       entry, source, target, direction, firstSequence: undefined, scheduled: false, consumed: false,
     };
