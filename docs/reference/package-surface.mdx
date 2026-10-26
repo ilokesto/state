@@ -11,7 +11,7 @@ The ten public entrypoint paths are defined by this package's `package.json` exp
 
 | Import | Purpose |
 |---|---|
-| `@ilokesto/state` | Framework-neutral `Store`, `createStore`, `createReducer`, `createResource`, `createEffect`, `listenActions`, `createQueryBridge`, `createActorBridge`, `createUrlBridge`, `pipe`, `definePipeableMiddleware`, `PipeConfigurationError`, and `dispose`, plus their public state contracts. |
+| `@ilokesto/state` | Framework-neutral `Store`, `createStore`, `createReducer`, `createScope`, `createStateFactory`, `createResource`, `createEffect`, `listenActions`, `createQueryBridge`, `createActorBridge`, `createUrlBridge`, `pipe`, `definePipeableMiddleware`, `PipeConfigurationError`, and `dispose`, plus their public state contracts. |
 | `@ilokesto/state/react` | React `create`, `bind`, `bindReducer`, `bindReadonly`, `bindPersistStatus` and `UseState`, `UseReducer`, `UseReadonlyState` types. |
 | `@ilokesto/state/vue` | Vue `create`, `bind`, `bindReducer`, `bindReadonly`, `bindPersistStatus` and `UseState`, `UseReducer`, `UseReadonlyState` types. |
 | `@ilokesto/state/svelte` | Svelte `create`, `bind`, `bindReducer`, `bindReadonly`, `bindPersistStatus` and `UseState`, `UseReducer`, `UseReadonlyState` types. |
@@ -48,7 +48,7 @@ The root exports `Resource`, `ResourceState`, `ResourceResult`, `ResourceTask`,
 
 Import framework-neutral construction APIs from the root. Framework adapter APIs such as `create`, `bind`, and `bindReducer` come from a framework subpath, never the root.
 
-Root runtime exports are `Store`, `createStore`, `createReducer`, `createResource`, `createEffect`, `listenActions`, `createQueryBridge`, `createActorBridge`, `createUrlBridge`, `pipe`, `definePipeableMiddleware`, `PipeConfigurationError`, and `dispose`. Root type exports are `ReadableStore`, `StoreApi`, `Listener`, `Unsubscribe`, `SetStateAction`, `Selector`, `SelectorListener`, `EqualityFn`, `Middleware`, `ReducerState`, `ReduceFn`, and `ReducerAction`. Pipe and testing types come from `/utils`, and persistence types come from `/middleware`.
+Root runtime exports are `Store`, `createStore`, `createReducer`, `createScope`, `createStateFactory`, `createResource`, `createEffect`, `listenActions`, `createQueryBridge`, `createActorBridge`, `createUrlBridge`, `pipe`, `definePipeableMiddleware`, `PipeConfigurationError`, and `dispose`. Root type exports are `ReadableStore`, `StoreApi`, `Listener`, `Unsubscribe`, `SetStateAction`, `Selector`, `SelectorListener`, `EqualityFn`, `Middleware`, `ReducerState`, `ReduceFn`, and `ReducerAction`. Pipe and testing types come from `/utils`, and persistence types come from `/middleware`.
 
 ```ts lineNumbers
 // Available from the framework subpath
@@ -57,6 +57,10 @@ import { logger } from '@ilokesto/state/middleware';
 ```
 
 Use `createStore` or `createReducer` from the root and connect the result with `bind` or `bindReducer` from a framework subpath. See [Vanilla state and binding](/en/state/reference/vanilla) and the [migration guide](/en/state/advanced/migration).
+
+For request ownership and validated initial-state transfer, use `createScope` and
+`createStateFactory`. Their public types are `StateScope`, `StateFactory`, and
+`StateFactoryOptions`. See [Scopes and SSR](/en/state/advanced/scopes-ssr).
 
 ## Peer dependencies
 

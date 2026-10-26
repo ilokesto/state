@@ -11,7 +11,7 @@ description: "Entrypoint, peer dependency, root export입니다."
 
 | Import | Purpose |
 |---|---|
-| `@ilokesto/state` | 프레임워크 독립적인 `Store`, `createStore`, `createReducer`, `createResource`, `createEffect`, `listenActions`, `createQueryBridge`, `createActorBridge`, `createUrlBridge`, `pipe`, `definePipeableMiddleware`, `PipeConfigurationError`, `dispose`와 공개 상태 계약을 내보냅니다. |
+| `@ilokesto/state` | 프레임워크 독립적인 `Store`, `createStore`, `createReducer`, `createScope`, `createStateFactory`, `createResource`, `createEffect`, `listenActions`, `createQueryBridge`, `createActorBridge`, `createUrlBridge`, `pipe`, `definePipeableMiddleware`, `PipeConfigurationError`, `dispose`와 공개 상태 계약을 내보냅니다. |
 | `@ilokesto/state/react` | React `create`, `bind`, `bindReducer`, `bindReadonly`, `bindPersistStatus`와 `UseState`, `UseReducer`, `UseReadonlyState` type입니다. |
 | `@ilokesto/state/vue` | Vue `create`, `bind`, `bindReducer`, `bindReadonly`, `bindPersistStatus`와 `UseState`, `UseReducer`, `UseReadonlyState` type입니다. |
 | `@ilokesto/state/svelte` | Svelte `create`, `bind`, `bindReducer`, `bindReadonly`, `bindPersistStatus`와 `UseState`, `UseReducer`, `UseReadonlyState` type입니다. |
@@ -48,7 +48,7 @@ Root는 `Resource`, `ResourceState`, `ResourceResult`, `ResourceTask`,
 
 프레임워크 독립 생성 API는 root에서 가져오세요. `create`, `bind`, `bindReducer`, `bindReadonly`, `bindPersistStatus` 같은 프레임워크 adapter API는 root가 아니라 프레임워크 subpath에서 가져옵니다.
 
-Root runtime export는 `Store`, `createStore`, `createReducer`, `createResource`, `createEffect`, `listenActions`, `createQueryBridge`, `createActorBridge`, `createUrlBridge`, `pipe`, `definePipeableMiddleware`, `PipeConfigurationError`, `dispose`입니다. Root type export는 `ReadableStore`, `StoreApi`, `Listener`, `Unsubscribe`, `SetStateAction`, `Selector`, `SelectorListener`, `EqualityFn`, `Middleware`, `ReducerState`, `ReduceFn`, `ReducerAction`입니다. Pipe와 테스트 type은 `/utils`, persistence type은 `/middleware`에서 가져옵니다.
+Root runtime export는 `Store`, `createStore`, `createReducer`, `createScope`, `createStateFactory`, `createResource`, `createEffect`, `listenActions`, `createQueryBridge`, `createActorBridge`, `createUrlBridge`, `pipe`, `definePipeableMiddleware`, `PipeConfigurationError`, `dispose`입니다. Root type export는 `ReadableStore`, `StoreApi`, `Listener`, `Unsubscribe`, `SetStateAction`, `Selector`, `SelectorListener`, `EqualityFn`, `Middleware`, `ReducerState`, `ReduceFn`, `ReducerAction`입니다. Pipe와 테스트 type은 `/utils`, persistence type은 `/middleware`에서 가져옵니다.
 
 ```ts lineNumbers
 // 프레임워크 subpath에서 사용 가능
@@ -57,6 +57,10 @@ import { logger } from '@ilokesto/state/middleware';
 ```
 
 Root의 `createStore` 또는 `createReducer`로 상태를 만들고 프레임워크 subpath의 `bind` 또는 `bindReducer`로 연결하세요. [프레임워크 독립 상태와 연결](/ko/state/reference/vanilla), [이전 가이드](/ko/state/advanced/migration)를 참고하세요.
+
+요청별 소유권과 검증된 초기 상태 전달은 `createScope`, `createStateFactory`를
+사용합니다. 공개 타입은 `StateScope`, `StateFactory`, `StateFactoryOptions`입니다.
+[Scope와 SSR](/ko/state/advanced/scopes-ssr)을 참고하세요.
 
 ## Peer dependencies
 
