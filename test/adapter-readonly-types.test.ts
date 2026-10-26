@@ -9,6 +9,25 @@ type InvalidFixtureContract = Readonly<{
 }>;
 
 const fixtureRoot = join(import.meta.dir, 'fixtures', 'adapter-readonly-types');
+
+for (const target of ['source', 'dist']) {
+  test('selector bindings: ' + target + ' declarations -> equality inference and writable contracts compile', () => {
+    const result = compileAdapterFixture(target + '-selectors-valid');
+
+    expect(result.success, result.diagnostics).toBe(true);
+  });
+
+  test('readonly bindings: ' + target + ' declarations -> writers and writable binding reject readable inputs', () => {
+    const result = compileAdapterFixture(target + '-selectors-invalid');
+
+    expect(result.success).toBe(false);
+    expect(result.diagnostics.split('error TS').length - 1).toBe(20);
+    expect(result.diagnostics.split('error TS2339').length - 1).toBe(9);
+    expect(result.diagnostics.split('error TS2345').length - 1).toBe(5);
+    expect(result.diagnostics.split('error TS7053').length - 1).toBe(1);
+    expect(result.diagnostics.split('error TS2540').length - 1).toBe(5);
+  });
+}
 const invalidFixtureContract: InvalidFixtureContract = {
   diagnosticCount: 15,
   expectedMarkers: [

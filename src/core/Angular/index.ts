@@ -1,12 +1,12 @@
-import type { Store, StoreApi } from '@ilokesto/store';
+import type { Store, StoreApi, ReadableStore } from '@ilokesto/store';
 import type { ReducerState } from '../../lib/createReducer.js';
 
 import type { ReduceFn, ReducerAction } from '../../types/ReduceFn.js';
-import type { UseReducer, UseState } from './types.js';
-export type { AngularOptions, UseReducer, UseState } from './types.js';
+import type { UseReadonlyState, UseReducer, UseState } from './types.js';
+export type { AngularOptions, UseReadonlyState, UseReducer, UseState } from './types.js';
 
 import { createFrameworkAdapter } from '../shared/createFrameworkAdapter.js';
-import { createUseSignal } from './createUseSignal.js';
+import { createReadonlySignal, createUseSignal } from './createUseSignal.js';
 
 /**
  * Create an Angular signal from plain state or a reducer.
@@ -53,4 +53,9 @@ export function bind<T>(store: StoreApi<T>) {
 export function bindReducer<T, Action extends ReducerAction>(state: ReducerState<T, Action>): UseReducer<T, Action>;
 export function bindReducer<T, Action extends ReducerAction>(state: ReducerState<T, Action>) {
   return createUseSignal<T, Action>(state.store, true, state.dispatch);
+}
+
+/** Bind a structural readable store without exposing writers. */
+export function bindReadonly<T>(store: ReadableStore<T>): UseReadonlyState<T> {
+  return createReadonlySignal(store);
 }

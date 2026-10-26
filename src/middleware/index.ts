@@ -16,6 +16,7 @@ export type {
   PersistedValue, PersistStorage, PersistStorageFactory,
 } from './persist/storage/PersistStorage.js';
 export { PersistError } from './persist/Persist.js';
+export type { PersistCodec } from './persist/storage/PersistCodec.js';
 export type {
   PersistConflictPolicy,
   PersistControls,
@@ -25,6 +26,7 @@ export type {
   PersistRehydrateOptions,
   PersistStatus,
   PersistStore,
+  ProjectedPersistConfig,
   SafePersistConfig,
 } from './persist/Persist.js';
 export { validate } from './validate.js';

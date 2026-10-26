@@ -1,4 +1,4 @@
-import type { StoreApi, ReadableStore } from '@ilokesto/store';
+import type { EqualityFn, ReadableStore, StoreApi } from '@ilokesto/store';
 import { computed, getCurrentScope, onScopeDispose, shallowRef } from 'vue';
 
 import type { ReducerAction } from '../../types/ReduceFn.js';
@@ -6,9 +6,9 @@ import { createDispatch } from '../shared/createDispatch.js';
 import { identity } from '../shared/identity.js';
 import { readonlySnapshot, type ReadonlySnapshot } from '../shared/readonlySnapshot.js';
 import { shallow } from '../shared/shallow.js';
-import type { Selector } from './types.js';
+import type { Selector, UseReadonlyState } from './types.js';
 
-function createSelection<T, S>(store: ReadableStore<T>, selector: Selector<T, S>) {
+function createSelection<T, S>(store: ReadableStore<T>, selector: Selector<T, S>, equality: EqualityFn<S> = shallow) {
   if (!getCurrentScope()) {
     throw new Error(
       '[@ilokesto/state/vue] create() returned composables must run inside setup() or an active effectScope(). Use readOnly() for synchronous reads outside Vue scope.',
@@ -22,7 +22,7 @@ function createSelection<T, S>(store: ReadableStore<T>, selector: Selector<T, S>
     (nextSelection) => {
       snapshot.value = nextSelection as typeof snapshot.value;
     },
-    shallow,
+    equality,
   );
 
   onScopeDispose(unsubscribe);
@@ -34,9 +34,9 @@ export function createUseComposable<T, Action extends ReducerAction>(store: Stor
   const write = store.setState.bind(store);
 
   return Object.assign(
-    <S = T>(selector?: Selector<T, S>) => {
+    <S = T>(selector?: Selector<T, S>, equality?: EqualityFn<S>) => {
       const select = (selector ?? identity<ReadonlySnapshot<T>>) as Selector<T, S>;
-      const state = createSelection(store, select);
+      const state = createSelection(store, select, equality);
 
       if (isReduce) {
         return {
@@ -53,6 +53,21 @@ export function createUseComposable<T, Action extends ReducerAction>(store: Stor
     {
       writeOnly: () => (isReduce ? dispatch : write),
       readOnly: <S = T>(selector?: Selector<T, S>): S => {
+        const select = (selector ?? identity<ReadonlySnapshot<T>>) as Selector<T, S>;
+        return select(readonlySnapshot(store.getState()));
+      },
+    },
+  );
+}
+
+export function createReadonlyComposable<T>(store: ReadableStore<T>): UseReadonlyState<T> {
+  return Object.assign(
+    <S = ReadonlySnapshot<T>>(selector?: Selector<T, S>, equality?: EqualityFn<S>) => {
+      const select = (selector ?? identity<ReadonlySnapshot<T>>) as Selector<T, S>;
+      return { state: createSelection(store, select, equality) };
+    },
+    {
+      readOnly: <S = ReadonlySnapshot<T>>(selector?: Selector<T, S>): S => {
         const select = (selector ?? identity<ReadonlySnapshot<T>>) as Selector<T, S>;
         return select(readonlySnapshot(store.getState()));
       },

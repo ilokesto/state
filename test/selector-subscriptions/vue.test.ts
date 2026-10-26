@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { effectScope } from 'vue';
 
-import { create } from '../../src/core/Vue';
+import { create, bind, bindReadonly } from '../../src/core/Vue';
+import { readableSource, selectNestedCount, equalNestedCount } from './readableSource';
 import {
   counterReducer,
   initialState,
@@ -67,3 +68,31 @@ describe('Vue selector subscriptions', () => {
     expect(store.activeSelectorSubscriptions).toBe(0);
   });
 });
+
+for (const readonly of [false, true]) {
+  test('custom equality: '+ (readonly ? 'readable' : 'writable') + ' binding -> nested equal updates retain selection and cleanup subscriptions', () => {
+    const { source, backing } = readableSource();
+    const adapter = readonly ? bindReadonly(source) : bind(backing);
+    const scope = effectScope();
+    const selected = scope.run(() => adapter(selectNestedCount, equalNestedCount))!;
+    const before = selected.state.value;
+
+    backing.setState(state => ({ ...state, label: 'unrelated' }));
+
+    expect(backing.selectorNotifications).toBe(0);
+    expect(selected.state.value).toBe(before);
+    if (readonly) {
+      expect('writeOnly' in adapter).toBe(false);
+      expect('setState' in selected).toBe(false);
+      expect('dispatch' in selected).toBe(false);
+    }
+    backing.setState(state => ({ ...state, count: 2 }));
+    expect(backing.selectorNotifications).toBe(1);
+    expect(selected.state.value).toEqual({ nested: { count: 2 } });
+    scope.stop();
+    expect(backing.activeSelectorSubscriptions).toBe(0);
+    backing.setState(state => ({ ...state, count: 3 }));
+    expect(backing.selectorNotifications).toBe(1);
+    expect(adapter.readOnly(state => state.count)).toBe(3);
+  });
+}

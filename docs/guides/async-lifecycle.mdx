@@ -1,0 +1,184 @@
+---
+title: "Async resources and effects"
+description: "Own async actions, cancellation, selected effects, and explicit action subscriptions."
+---
+
+# Async resources and effects
+
+`createResource`, `createEffect`, and `listenActions` are framework-neutral root
+exports. They do not change reducer dispatch, install middleware, or provide a
+retry, debounce, scheduler, or query cache.
+
+## Resource actions
+
+```ts
+import { createResource } from '@ilokesto/state';
+
+const text = createResource(async (path: string, { signal }) => {
+  const response = await fetch(path, { signal });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return response.text();
+});
+
+const unsubscribe = text.store.subscribeSelector(
+  state => state.status,
+  status => { document.body.dataset.requestStatus = status; },
+);
+const result = await text.run('/api/message');
+if (result.status === 'success') {
+  document.title = result.data;
+}
+unsubscribe();
+text.dispose();
+```
+
+`createResource<Input, Output>(task)` returns
+`{ store, run, cancel, dispose }`. The task receives `(input, { signal })` and
+returns a value or promise. `run(input, { signal? })` returns
+`Promise<ResourceResult<Output>>`. With a no-input task, call `run()`.
+
+The store implements `ReadableStore<ResourceState<Output>>`; it exposes
+`getState`, `getInitialState`, `subscribe`, and `subscribeSelector`, but no
+writes. The initial snapshot stays `{ status: 'idle' }`.
+
+| State | Fields |
+| --- | --- |
+| `idle` | No active request |
+| `pending` | A task is running |
+| `success` | `data: Output` |
+| `error` | `error: unknown` |
+
+The result promise resolves one of `{ status: 'success', data }`,
+`{ status: 'error', error }`, or `{ status: 'cancelled', reason }`. Task throws,
+rejections, and cancellation are outcomes, not rejected run promises. Handle the
+result or observe the store; ignoring a cancelled run does not create an
+unhandled rejection.
+
+### Cancellation and ordering
+
+- Each run supersedes and aborts the previous active run. Only the current
+  execution can publish completion, even when the old task ignores its signal.
+- `cancel(reason?)` settles the current run immediately, aborts its signal,
+  removes its external abort listener, and returns the state to `idle`. It is
+  safe to call repeatedly, and a later run can start normally.
+- `dispose()` permanently prevents new tasks. It cancels pending work; if work
+  already completed, it preserves that terminal snapshot. Later runs resolve
+  `cancelled`. The default cancellation reason is an `AbortError` DOMException.
+- An already-aborted external signal returns `cancelled` without invoking a
+  task or superseding existing work. External abort listeners are removed on
+  every terminal path.
+- Abort callbacks and pending-state subscribers may call `run`, `cancel`, or
+  `dispose` synchronously. A newer run keeps ownership; obsolete tasks are not
+  invoked if cancellation happened before task invocation. A completion is
+  terminal before its subscribers run, so a subscriber can safely start another
+  run without cancelling the completed result.
+
+Tasks must cooperate with `signal` to stop their own I/O or side effects.
+Generation checks protect only the resource's state. A promise that ignores
+abort may still execute, but its late resolution/rejection cannot overwrite a
+newer result.
+
+If a store subscriber throws during a run's publication, the run resolves an
+`error` outcome containing the store notification error. The already-committed
+snapshot is not rolled back. Synchronous `cancel`/`dispose` notification errors
+propagate to their caller. Subscribers should not throw.
+
+## Selected effects
+
+```ts
+import { createEffect, createResource, createStore } from '@ilokesto/state';
+
+const selection = createStore({ path: '/api/message' });
+const errors: unknown[] = [];
+const request = createResource(async (path: string, { signal }) => {
+  const response = await fetch(path, { signal });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return response.text();
+});
+const stop = createEffect(
+  selection,
+  state => state.path,
+  (path, { signal }) => {
+    void request.run(path, { signal });
+  },
+  { onError: error => { errors.push(error); } },
+);
+
+selection.set({ path: '/api/next-message' });
+stop();
+request.dispose();
+```
+
+`createEffect(store, selector, callback, options)` returns an idempotent disposer.
+The store can be any conforming `ReadableStore`, including `resource.store`.
+`fireImmediately` defaults to `true`. Later runs follow `subscribeSelector`
+changes, with `Object.is` equality by default or `options.equalityFn`.
+Keep selectors and equality functions pure; their exceptions retain the source
+store's normal error behavior.
+
+The callback receives `(selection, { signal, dispose })`. It may return nothing,
+a cleanup function, or a promise of either. `dispose` is available even during
+the initial callback, before the outer disposer has been returned.
+
+Before the next callback, the previous signal is aborted and any available
+cleanup is invoked. Reentrant synchronous notifications are processed FIFO
+after the current callback, cleanup, or error handler returns, never recursively
+inside that user callback. Disposal detaches the source, clears queued work, and
+aborts/cleans the current execution exactly once.
+
+Async callbacks are not awaited before a replacement starts. A cleanup returned
+by an obsolete async callback is invoked immediately on arrival, once. Check
+`signal.aborted` before doing async side effects. Cleanup should perform required
+teardown synchronously: returned promises have their failures reported, but are
+not awaited before the next callback.
+
+`onError(error: unknown)` is required. It receives callback, cleanup, unsubscribe,
+and late async failures, including failures after disposal. A reported failure
+does not stop future notifications unless the handler disposes the effect.
+The handler must not throw; if it does, that exception is rethrown in a microtask
+as an uncaught error, not an unhandled promise rejection.
+
+## Explicit action listeners
+
+`listenActions(source, callback, { onError })` has the same callback and disposal
+contract, but receives events from an explicit `ActionSource<Action>`:
+`{ subscribe(listener): Unsubscribe }`. It never patches a reducer or discovers
+actions from state changes. Identical actions still trigger separate runs.
+
+```ts
+import { createReducer, listenActions } from '@ilokesto/state';
+import type { ActionSource } from '@ilokesto/state';
+
+type Action = { type: 'add'; amount: number };
+const counter = createReducer((count: number, action: Action) => count + action.amount, 0);
+const listeners = new Set<(action: Action) => void>();
+const actions: ActionSource<Action> = {
+  subscribe(listener) {
+    listeners.add(listener);
+    return () => { listeners.delete(listener); };
+  },
+};
+const seen: number[] = [];
+const errors: unknown[] = [];
+const stop = listenActions(actions, action => {
+  seen.push(action.amount);
+}, { onError: error => { errors.push(error); } });
+
+// The application owns this explicit post-dispatch observation boundary.
+function dispatch(action: Action): void {
+  counter.dispatch(action);
+  for (const listener of [...listeners]) listener(action);
+}
+dispatch({ type: 'add', amount: 1 });
+stop();
+```
+
+The source owns event ordering and must return a reliable unsubscribe function.
+Events emitted synchronously during subscription are buffered until subscription
+returns, so self-disposal cannot lose the unsubscribe handle. A source that
+throws during registration must roll back its own partial subscription.
+
+Owners must call effect/listener disposers and resource `dispose()` at their
+scope's end. Manual resource store subscribers own their separate unsubscribe
+functions. Existing `dispose(store)` remains middleware cleanup, not automatic
+ownership of these helpers or destruction of a readable store.
