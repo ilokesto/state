@@ -12,3 +12,13 @@ export { createScope } from './lib/createScope.js';
 export type { StateScope } from './lib/createScope.js';
 export { createStateFactory } from './lib/createStateFactory.js';
 export type { StateFactory, StateFactoryOptions } from './lib/createStateFactory.js';
+export { createResource } from './lib/createResource.js';
+export type {
+  Resource, ResourceContext, ResourceResult, ResourceRunOptions, ResourceState, ResourceTask,
+} from './lib/createResource.js';
+export { createEffect } from './lib/createEffect.js';
+export type { SelectorEffectOptions } from './lib/createEffect.js';
+export { listenActions } from './lib/listenActions.js';
+export type {
+  ActionSource, EffectCallback, EffectCleanup, EffectContext, EffectOptions,
+} from './lib/listenActions.js';

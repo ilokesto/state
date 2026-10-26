@@ -27,6 +27,7 @@
     "fixtures/pipe-types/invalid-persist-debounce-order",
     "fixtures/pipe-types/invalid-persist-decoder-state",
     "fixtures/pipe-types/invalid-persist-first-input",
+    "fixtures/pipe-types/invalid-persist-projection",
     "fixtures/pipe-types/invalid-persist-session-migrate",
     "fixtures/pipe-types/invalid-root-create",
     "fixtures/pipe-types/invalid-state",

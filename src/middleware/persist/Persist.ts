@@ -108,6 +108,8 @@ export type PersistStatus = {
   readonly saving: 'idle' | 'writing' | 'error';
   /** Whether a committed or migrated value has not yet been saved. */
   readonly pending: boolean;
+  /** Automatic saving is paused; explicit flush/retry still save their target. */
+  readonly paused: boolean;
   /** Disposal is terminal; later controls reject with DISPOSED. */
   readonly disposed: boolean;
   /** Most recent operation failure, cleared when that operation retries. */
@@ -125,6 +127,12 @@ export type PersistControls = {
   readonly rehydrate: (options?: PersistRehydrateOptions) => Promise<void>;
   /** Saves the call-time target without advancing state middleware timers. */
   readonly flush: () => Promise<void>;
+  /** Pauses automatic saves without cancelling an active write or explicit flush. */
+  readonly pause: () => void;
+  /** Resumes automatic saving of the latest pending value. */
+  readonly resume: () => void;
+  /** Retries the call-time save target, even while paused; hydration must succeed first. */
+  readonly retry: () => Promise<void>;
   /** Deletes only this key after earlier writes; memory state is retained. */
   readonly clearStorage: () => Promise<void>;
   /** Returns the latest immutable status snapshot. */
@@ -158,4 +166,24 @@ export type SafePersistConfig<
   readonly decode: PersistDecoder<State>;
   /** Ordered version transitions; tuple length is the stored data version. */
   readonly migrate?: ValidMigrationTuple<Steps>;
+  /** Debounces storage writes only, in milliseconds; omitted or zero saves immediately. */
+  readonly saveDebounceMs?: number;
+};
+
+/** Opt-in projection with explicit reconstruction of the complete state.
+ * @example
+ * const options: ProjectedPersistConfig<Editor, Draft> = {
+ *   key: 'draft', storage, project: editor => editor.draft, decode,
+ *   restore: (draft, current) => ({ ...current, draft }),
+ * };
+ */
+export type ProjectedPersistConfig<
+  State,
+  Persisted,
+  Steps extends readonly MigrationFn[] = readonly [],
+> = SafePersistConfig<Persisted, Steps> & {
+  /** Pure projection of the captured committed state, evaluated when saving. */
+  readonly project: (state: State) => Persisted;
+  /** Reconstructs full state before state validation; no implicit merge occurs. */
+  readonly restore: (persisted: Persisted, current: State) => State;
 };
