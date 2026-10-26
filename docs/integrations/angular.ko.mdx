@@ -84,6 +84,47 @@ function useCount(destroyRef: import('@angular/core').DestroyRef) {
 
 equality는 순수한 동등 관계여야 합니다. true를 반환하면 새 값은 전달되지 않고 이전 selection이 유지됩니다. readOnly()에는 비교가 적용되지 않습니다.
 
+## Async resource signal
+
+`bindResource(resource)`는 readonly signal factory에 타입이 있는 `run(input, options?)`을 추가한 `UseResource<Input, Output>`을 반환합니다. injection context에서 `useRequest().state`는 `Signal<ResourceState<Output>>`입니다. 명시적 `{ destroyRef }`, selector, equality, `bindReadonly(resource.store)`도 기존 계약을 유지합니다.
+
+다음 standalone component는 서버 없이 성공, 오류, retry를 실행합니다.
+
+```ts lineNumbers
+import { Component, computed } from '@angular/core';
+import { createResource } from '@ilokesto/state';
+import { bindResource } from '@ilokesto/state/angular';
+
+const request = createResource(async (shouldFail: boolean) => {
+  if (shouldFail) throw new Error('Try again');
+  return 'Loaded';
+});
+const useRequest = bindResource(request);
+
+@Component({
+  selector: 'resource-panel',
+  standalone: true,
+  template: `
+    <p>{{ message() }}</p>
+    <button (click)="load(false)">Load / retry</button>
+    <button (click)="load(true)">Fail</button>
+  `,
+})
+export class ResourcePanel {
+  readonly state = useRequest().state;
+  readonly message = computed(() => {
+    const current = this.state();
+    if (current.status === 'pending') return 'Loading...';
+    if (current.status === 'error') return String(current.error);
+    if (current.status === 'success') return current.data;
+    return 'Choose an action';
+  });
+  load(shouldFail: boolean) { void useRequest.run(shouldFail); }
+}
+```
+
+retry는 `run`을 다시 호출합니다. `DestroyRef`는 구독만 해제하고 shared 실행은 취소하지 않습니다. binding은 자동으로 `cancel`/`dispose`를 호출하지 않으며 resource 소유자가 결정합니다. resource에서 직접 시작한 실행도 관찰합니다. Angular signal은 React Suspense promise를 던지지 않고 pending/error를 명시적인 상태로 표현합니다.
+
 ## 주의할 점
 
 - `{ destroyRef }`가 없으면 adapter는 `inject(DestroyRef)`를 호출하므로 injection context가 필요합니다.

@@ -80,6 +80,24 @@ importers:
         specifier: 19.2.4
         version: 19.2.4(@types/react@19.2.18)
 
+  e2e/fixtures/ssr:
+    devDependencies:
+      '@angular/common':
+        specifier: 21.2.24
+        version: 21.2.24(@angular/core@21.2.24(@angular/compiler@21.2.24)(rxjs@7.8.2))(rxjs@7.8.2)
+      '@angular/compiler':
+        specifier: 21.2.24
+        version: 21.2.24
+      '@angular/core':
+        specifier: 21.2.24
+        version: 21.2.24(@angular/compiler@21.2.24)(rxjs@7.8.2)
+      '@angular/platform-browser':
+        specifier: 21.2.24
+        version: 21.2.24(@angular/common@21.2.24(@angular/core@21.2.24(@angular/compiler@21.2.24)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@21.2.24(@angular/compiler@21.2.24)(rxjs@7.8.2))
+      '@angular/platform-server':
+        specifier: 21.2.24
+        version: 21.2.24(@angular/common@21.2.24(@angular/core@21.2.24(@angular/compiler@21.2.24)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/compiler@21.2.24)(@angular/core@21.2.24(@angular/compiler@21.2.24)(rxjs@7.8.2))(@angular/platform-browser@21.2.24(@angular/common@21.2.24(@angular/core@21.2.24(@angular/compiler@21.2.24)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@21.2.24(@angular/compiler@21.2.24)(rxjs@7.8.2)))(rxjs@7.8.2)
+
   website:
     dependencies:
       '@ilokesto/state':
@@ -153,6 +171,30 @@ packages:
     resolution: {integrity: sha512-U4+70Pc5ZS9osnCBCE5Jha/ciHM+Yp+CNMNC/7HvYbNRk1Ldd+f7qO65W5qfhu/TCv+/ozljlXXe9Nj8419DMA==}
     engines: {node: '>=10'}
 
+  '@angular/common@21.2.24':
+    resolution: {integrity: sha512-+olMzBBJHIGrFTUxKRksqtQ+KzBTifLOF+Er0ppRfjbTyYwdq4jfgZ9YjDQa00F/8Jcy2xzM1Nrlq5sIbqxAhg==}
+    engines: {node: ^20.19.0 || ^22.12.0 || >=24.0.0}
+    peerDependencies:
+      '@angular/core': 21.2.24
+      rxjs: ^6.5.3 || ^7.4.0
+
+  '@angular/compiler@21.2.24':
+    resolution: {integrity: sha512-kvhstROpI9gZZ4QUcNkJaqA2LNis8XVTBz3X5SaKZAveUMB6r5V2akYqEBZcXNS4xUfST/UttrUsVdRvpcIItw==}
+    engines: {node: ^20.19.0 || ^22.12.0 || >=24.0.0}
+
+  '@angular/core@21.2.24':
+    resolution: {integrity: sha512-wCSCNrcBolr2iws6eX8yMnePXvXMHzi3kFla7EoHiKGJBhKHz4g2+p5f4z/Q5mHVCglTsXEOldDhgFTv5pDDoQ==}
+    engines: {node: ^20.19.0 || ^22.12.0 || >=24.0.0}
+    peerDependencies:
+      '@angular/compiler': 21.2.24
+      rxjs: ^6.5.3 || ^7.4.0
+      zone.js: ~0.15.0 || ~0.16.0
+    peerDependenciesMeta:
+      '@angular/compiler':
+        optional: true
+      zone.js:
+        optional: true
+
   '@angular/core@21.2.25':
     resolution: {integrity: sha512-cku7EX0igTPnuqEWZ1NiQY4Pn1g2xBljQSk1+bXRKnudJiZCK8e1u2v0byNzWuKwmdz7kKXjz71o224HrtccVA==}
     engines: {node: ^20.19.0 || ^22.12.0 || >=24.0.0}
@@ -165,6 +207,27 @@ packages:
         optional: true
       zone.js:
         optional: true
+
+  '@angular/platform-browser@21.2.24':
+    resolution: {integrity: sha512-ffxWfxhMeedWXNASBtEg8AShG8ccWA/48Vp/rQVEhlj/CeydXTNdGmiu6oERQ5my4nOk+xJJ4/BnkQ3fSozrfQ==}
+    engines: {node: ^20.19.0 || ^22.12.0 || >=24.0.0}
+    peerDependencies:
+      '@angular/animations': 21.2.24
+      '@angular/common': 21.2.24
+      '@angular/core': 21.2.24
+    peerDependenciesMeta:
+      '@angular/animations':
+        optional: true
+
+  '@angular/platform-server@21.2.24':
+    resolution: {integrity: sha512-37Ud7HMTkHQY0MM8RiamL/ISTxhpaPRbCIhQuZJeZuuKH8Gm5IvbJUdgVzvSYmmTgAE2oK1UAo+tbujP8zUhLg==}
+    engines: {node: ^20.19.0 || ^22.12.0 || >=24.0.0}
+    peerDependencies:
+      '@angular/common': 21.2.24
+      '@angular/compiler': 21.2.24
+      '@angular/core': 21.2.24
+      '@angular/platform-browser': 21.2.24
+      rxjs: ^6.5.3 || ^7.4.0
 
   '@babel/helper-string-parser@7.29.7':
     resolution: {integrity: sha512-Pb5ijPrZ89GDH8223L4UP8i6QApWxs04RbPQJTeWDV0/keR2E36MeKnyr6LYmUUvqRRI+Iv87SuF1W6ErINzYw==}
@@ -2650,6 +2713,10 @@ packages:
     engines: {node: '>= 8'}
     hasBin: true
 
+  xhr2@0.2.1:
+    resolution: {integrity: sha512-sID0rrVCqkVNUn8t6xuv9+6FViXjUVXq8H5rWOH2rz9fDNQEd4g0EA2XlcEdJXRz5BMEn4O1pJFdT+z4YHhoWw==}
+    engines: {node: '>= 6'}
+
   xstate@5.33.3:
     resolution: {integrity: sha512-AnDRjS/GyKHmbA1PyhVCYBqYsA7EGe3KGgeD0ht3NFsXzoz7leX/HQDFX9QlHFJ/ltLHPsgChJYwPzRvB/0b4g==}
 
@@ -2671,10 +2738,43 @@ snapshots:
 
   '@alloc/quick-lru@5.3.0': {}
 
+  '@angular/common@21.2.24(@angular/core@21.2.24(@angular/compiler@21.2.24)(rxjs@7.8.2))(rxjs@7.8.2)':
+    dependencies:
+      '@angular/core': 21.2.24(@angular/compiler@21.2.24)(rxjs@7.8.2)
+      rxjs: 7.8.2
+      tslib: 2.8.1
+
+  '@angular/compiler@21.2.24':
+    dependencies:
+      tslib: 2.8.1
+
+  '@angular/core@21.2.24(@angular/compiler@21.2.24)(rxjs@7.8.2)':
+    dependencies:
+      rxjs: 7.8.2
+      tslib: 2.8.1
+    optionalDependencies:
+      '@angular/compiler': 21.2.24
+
   '@angular/core@21.2.25(rxjs@7.8.2)':
     dependencies:
       rxjs: 7.8.2
       tslib: 2.8.1
+
+  '@angular/platform-browser@21.2.24(@angular/common@21.2.24(@angular/core@21.2.24(@angular/compiler@21.2.24)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@21.2.24(@angular/compiler@21.2.24)(rxjs@7.8.2))':
+    dependencies:
+      '@angular/common': 21.2.24(@angular/core@21.2.24(@angular/compiler@21.2.24)(rxjs@7.8.2))(rxjs@7.8.2)
+      '@angular/core': 21.2.24(@angular/compiler@21.2.24)(rxjs@7.8.2)
+      tslib: 2.8.1
+
+  '@angular/platform-server@21.2.24(@angular/common@21.2.24(@angular/core@21.2.24(@angular/compiler@21.2.24)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/compiler@21.2.24)(@angular/core@21.2.24(@angular/compiler@21.2.24)(rxjs@7.8.2))(@angular/platform-browser@21.2.24(@angular/common@21.2.24(@angular/core@21.2.24(@angular/compiler@21.2.24)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@21.2.24(@angular/compiler@21.2.24)(rxjs@7.8.2)))(rxjs@7.8.2)':
+    dependencies:
+      '@angular/common': 21.2.24(@angular/core@21.2.24(@angular/compiler@21.2.24)(rxjs@7.8.2))(rxjs@7.8.2)
+      '@angular/compiler': 21.2.24
+      '@angular/core': 21.2.24(@angular/compiler@21.2.24)(rxjs@7.8.2)
+      '@angular/platform-browser': 21.2.24(@angular/common@21.2.24(@angular/core@21.2.24(@angular/compiler@21.2.24)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@21.2.24(@angular/compiler@21.2.24)(rxjs@7.8.2))
+      rxjs: 7.8.2
+      tslib: 2.8.1
+      xhr2: 0.2.1
 
   '@babel/helper-string-parser@7.29.7': {}
 
@@ -5478,6 +5578,8 @@ snapshots:
   which@2.0.2:
     dependencies:
       isexe: 2.0.0
+
+  xhr2@0.2.1: {}
 
   xstate@5.33.3: {}
 

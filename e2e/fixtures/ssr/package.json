@@ -1,0 +1,13 @@
+{
+  "name": "@ilokesto/state-ssr-tests",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@angular/common": "21.2.24",
+    "@angular/compiler": "21.2.24",
+    "@angular/core": "21.2.24",
+    "@angular/platform-browser": "21.2.24",
+    "@angular/platform-server": "21.2.24"
+  }
+}

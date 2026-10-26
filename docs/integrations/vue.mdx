@@ -86,6 +86,37 @@ Call inside setup() or an active effectScope(), as before. Scope disposal unsubs
 
 Equality must be a pure equivalence relation. Returning true suppresses delivery and retains the previous selection. Equality does not apply to readOnly().
 
+## Async resource composable
+
+`bindResource(resource)` returns `UseResource<Input, Output>`: the existing readonly composable plus a typed `run(input, options?)`. Call it in `setup` to get a `ComputedRef<ResourceState<Output>>`. Selectors and custom equality also work. For observation only, `bindReadonly(resource.store)` is equivalent.
+
+This server-free example deliberately exposes success and failure actions:
+
+```vue lineNumbers
+<script setup lang="ts">
+import { createResource } from '@ilokesto/state';
+import { bindResource } from '@ilokesto/state/vue';
+
+const request = createResource(async (shouldFail: boolean) => {
+  if (shouldFail) throw new Error('Try again');
+  return 'Loaded';
+});
+const useRequest = bindResource(request);
+const { state } = useRequest();
+</script>
+
+<template>
+  <p v-if="state.status === 'pending'">Loading...</p>
+  <p v-else-if="state.status === 'error'">{{ String(state.error) }}</p>
+  <p v-else-if="state.status === 'success'">{{ state.data }}</p>
+  <p v-else>Choose an action</p>
+  <button @click="useRequest.run(false)">Load / retry</button>
+  <button @click="useRequest.run(true)">Fail</button>
+</template>
+```
+
+Retry calls `run` again. Vue scope disposal removes its subscription without cancelling work; a shared resource may continue serving other components. Creating the binding does not start or own the resource. Only its owner calls `cancel`/`dispose`. Runs started directly on the resource remain observable. There is no React Suspense behavior in this composable.
+
 ## Caveats
 
 - Reactive reads require `getCurrentScope()` to exist.
