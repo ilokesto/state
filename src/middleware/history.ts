@@ -156,6 +156,7 @@ function applyHistory<State>(
   const undoStack: HistoryEntry<State>[] = [];
   const redoStack: HistoryEntry<State>[] = [];
   let isReplaying = false;
+  let baselineGeneration = 0;
 
   const replay = (source: HistoryEntry<State>[], target: HistoryEntry<State>[]): void => {
     const entry = source.at(-1);
@@ -164,13 +165,14 @@ function applyHistory<State>(
     }
 
     const current = store.getState();
+    const generation = baselineGeneration;
     isReplaying = true;
     try {
       store.setState(entry.state);
     } finally {
       isReplaying = false;
     }
-    if (Object.is(current, store.getState())) {
+    if (generation !== baselineGeneration || Object.is(current, store.getState())) {
       return;
     }
 
@@ -184,6 +186,9 @@ function applyHistory<State>(
     canUndo: () => undoStack.length > 0,
     canRedo: () => redoStack.length > 0,
     clearHistory: () => {
+      // A restoration can interrupt replay; later user edits belong to its new baseline.
+      baselineGeneration += 1;
+      isReplaying = false;
       undoStack.length = 0;
       redoStack.length = 0;
     },
@@ -193,8 +198,9 @@ function applyHistory<State>(
 
   store.pushMiddleware((nextState, next) => {
     const before = store.getState();
+    const generation = baselineGeneration;
     next(nextState);
-    if (isReplaying || Object.is(before, store.getState())) {
+    if (generation !== baselineGeneration || isReplaying || Object.is(before, store.getState())) {
       return;
     }
 

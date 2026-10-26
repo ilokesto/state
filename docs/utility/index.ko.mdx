@@ -1,6 +1,6 @@
 ---
 title: "유틸리티 소개"
-description: "pipe로 middleware를 조합하고 adaptor로 Immer 스타일 object update를 작성합니다."
+description: "middleware 조합, 불변 entity collection, Immer 스타일 갱신 도구를 설명합니다."
 ---
 
 # 유틸리티 소개
@@ -10,6 +10,7 @@ description: "pipe로 middleware를 조합하고 adaptor로 Immer 스타일 obje
 - [`pipe`](/ko/state/utility/pipe)는 `@ilokesto/store` instance를 만들고 등록된 middleware를 순서대로 적용합니다.
 - [`definePipeableMiddleware`](/ko/state/utility/pipe#custom-middleware)는 `pipe.use(...)`에 쓸 custom middleware metadata를 등록합니다.
 - [`PipeConfigurationError`](/ko/state/utility/pipe#configuration-errors)는 잘못된 runtime pipe configuration을 보고합니다.
+- `createEntityAdapter`는 불변 collection 연산과 selector를 제공합니다.
 - [`adaptor`](/ko/state/utility/adaptor)는 Immer `produce`를 감싸 object update를 draft mutation syntax로 쓸 수 있게 합니다.
 - [외부 상태 브리지](/ko/state/utility/bridges)는 query observer, actor snapshot/event, 타입이 있는 URL 매개변수를 readonly store와 명시적 lifecycle handle로 연결합니다.
 
@@ -100,6 +101,51 @@ function AddTagButton({ tag }: { tag: string }) {
   );
 }
 ```
+
+## 불변 entity collection
+
+`createEntityAdapter`는 별도 store가 아닌 선택적 순수 유틸리티입니다.
+`EntityState<Entity, Id>`에는 정렬된 `ids` 배열과 readonly Map인 `entities`가
+있습니다. ID는 문자열 또는 유한한 숫자이며 `1`과 `"1"`도 서로 다른 ID입니다.
+두 collection과 내부 entity 객체를 직접 변경하지 마세요.
+
+```ts lineNumbers
+import { createStore } from '@ilokesto/state';
+import { createEntityAdapter } from '@ilokesto/state/utils';
+
+type Book = { readonly id: string; readonly title: string };
+const books = createEntityAdapter({
+  selectId: (book: Book) => book.id,
+  sortComparer: (left: Book, right: Book) => left.title.localeCompare(right.title),
+});
+const library = createStore(books.getInitialState());
+
+library.update(state => books.addOne(state, { id: 'guide', title: '상태 가이드' }));
+library.update(state => books.updateOne(state, 'guide', book => ({
+  ...book,
+  title: '갱신된 가이드',
+})));
+const titles = books.selectAll(library.getState()).map(book => book.title);
+```
+
+`addOne`/`addMany`는 이미 있는 ID의 entity를 유지합니다.
+`upsertOne`/`upsertMany`는 entity 전체를 교체하며 중복 ID의 마지막 값이 남습니다.
+`setAll`은 collection 전체를 교체하고 `getInitialState`도 초기 entity 배열을 받습니다.
+`updateOne(state, id, updater)`와 `updateMany(state, [{ id, update }])`는
+없는 ID를 무시하고 updater가 ID를 바꾸면 거부합니다. ID 변경은 삭제 후 추가하세요.
+Updater는 인자를 직접 변경하지 않고 새 entity를 반환해야 합니다.
+
+`removeOne`, `removeMany`, `removeAll`은 이전 collection을 변경하지 않습니다.
+`selectIds`, `selectById`, `selectAll`, `selectTotal`은 adapter가 만든 상태를 읽습니다.
+없는 ID는 `undefined`이며 변화가 없는 연산은 같은 상태 참조를 반환합니다.
+정렬 옵션은 연산 뒤 적용하고 같은 정렬 키의 순서를 유지합니다.
+정렬 옵션이 없으면 Map의 삽입 순서입니다. `selectAll`은 새 배열을 반환하므로
+프레임워크의 selector equality 또는 memoization과 함께 사용하세요.
+
+Map을 저장하려면 `indexedDBStorage` 같은 structured clone 저장소나
+Map entry를 JSON으로 변환하고 복원하는 명시적 codec이 필요합니다.
+일반 `JSON.stringify`는 Map을 보존하지 않습니다.
+Entity 도구는 persistence를 설치하거나 저장 형식을 바꾸지 않습니다.
 
 ## 관련 문서
 

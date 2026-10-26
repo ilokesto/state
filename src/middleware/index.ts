@@ -1,6 +1,7 @@
 export { debounce } from './debounce.js';
 export { throttle } from './throttle.js';
 export { devtools } from './devtools.js';
+export type { DevtoolsAction, DevtoolsOptions, DevtoolsSerializeOptions } from './devtools.js';
 export { dispose } from '../lib/storeCleanup.js';
 export { history, HistoryConfigurationError } from './history.js';
 export type { HistoryControls, HistoryOptions, HistoryStore } from './history.js';
@@ -15,6 +16,7 @@ export type {
   PersistedValue, PersistStorage, PersistStorageFactory,
 } from './persist/storage/PersistStorage.js';
 export { PersistError } from './persist/Persist.js';
+export type { PersistCodec } from './persist/storage/PersistCodec.js';
 export type {
   PersistConflictPolicy,
   PersistControls,
@@ -24,6 +26,7 @@ export type {
   PersistRehydrateOptions,
   PersistStatus,
   PersistStore,
+  ProjectedPersistConfig,
   SafePersistConfig,
 } from './persist/Persist.js';
 export { validate } from './validate.js';

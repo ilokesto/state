@@ -11,7 +11,7 @@ The public entrypoint paths are defined by `state/package.json` exports. Import 
 
 | Import | Purpose |
 |---|---|
-| `@ilokesto/state` | Framework-neutral `Store`, `createStore`, `createReducer`, `pipe`, `definePipeableMiddleware`, `PipeConfigurationError`, and `dispose`, plus their public state contracts. |
+| `@ilokesto/state` | Framework-neutral `Store`, `createStore`, `createReducer`, `createResource`, `createEffect`, `listenActions`, `pipe`, `definePipeableMiddleware`, `PipeConfigurationError`, and `dispose`, plus their public state contracts. |
 | `@ilokesto/state/react` | React `create()` adapter and `UseState`, `UseReducer` types. |
 | `@ilokesto/state/vue` | Vue `create()` adapter and `UseState`, `UseReducer` types. |
 | `@ilokesto/state/svelte` | Svelte `create()` adapter and `UseState`, `UseReducer` types. |
@@ -30,11 +30,16 @@ Its public types are `HistoryControls`, `HistoryOptions`, `HistoryStore`, `OnReh
 
 ## Utility exports
 
-`@ilokesto/state/utils` exports `pipe`, `definePipeableMiddleware`, and `PipeConfigurationError`.
+`@ilokesto/state/utils` exports `pipe`, `definePipeableMiddleware`, `PipeConfigurationError`, and `createEntityAdapter`. Entity collection types are `EntityState` and `EntityAdapterOptions`.
 
 Its public types are `Pipe`, `PipeAnyMiddleware`, `PipeBuilder`, `PipeCapability`, `PipeConfigurationErrorCode`, `PipeDuplicatePolicy`, `PipeMiddleware`, `PipeMiddlewareConflictDiagnostic`, and `PipeMiddlewareMetadata`.
 
 ## Root and framework entrypoints
+
+For async actions and lifecycle ownership, see [Async resources and effects](/en/state/guides/async-lifecycle).
+The root exports `Resource`, `ResourceState`, `ResourceResult`, `ResourceTask`,
+`ResourceContext`, `ResourceRunOptions`, `ActionSource`, `EffectCallback`,
+`EffectCleanup`, `EffectContext`, `EffectOptions`, and `SelectorEffectOptions`.
 
 Import framework-neutral construction APIs from the root. Framework adapter APIs such as `create`, `bind`, and `bindReducer` come from a framework subpath, never the root.
 

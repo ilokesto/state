@@ -1,6 +1,6 @@
 ---
 title: "Utility"
-description: "Compose middleware with pipe and write Immer-style object updates with adaptor."
+description: "Compose middleware, manage immutable entity collections, and write Immer-style updates."
 ---
 
 # Utility
@@ -10,6 +10,7 @@ description: "Compose middleware with pipe and write Immer-style object updates 
 - [`pipe`](/en/state/utility/pipe) creates an `@ilokesto/store` instance and applies registered middleware in order.
 - [`definePipeableMiddleware`](/en/state/utility/pipe#custom-middleware) registers custom middleware metadata for `pipe.use(...)`.
 - [`PipeConfigurationError`](/en/state/utility/pipe#configuration-errors) reports invalid runtime pipe configurations.
+- `createEntityAdapter` supplies immutable collection operations and selectors.
 - [`adaptor`](/en/state/utility/adaptor) wraps Immer `produce` so object updates can be written with draft mutation syntax.
 - [External state bridges](/en/state/utility/bridges) connect query observers, actor snapshots/events, and typed URL parameters through readonly stores and explicit lifecycle handles.
 
@@ -100,6 +101,51 @@ function AddTagButton({ tag }: { tag: string }) {
   );
 }
 ```
+
+## Immutable entity collections
+
+`createEntityAdapter` is an optional pure utility, not another store. Its
+`EntityState<Entity, Id>` contains an ordered `ids` array and a readonly `Map`
+named `entities`. String and finite-number IDs remain distinct, including `1`
+and `"1"`. Treat both collections and their entity objects as immutable.
+
+```ts lineNumbers
+import { createStore } from '@ilokesto/state';
+import { createEntityAdapter } from '@ilokesto/state/utils';
+
+type Book = { readonly id: string; readonly title: string };
+const books = createEntityAdapter({
+  selectId: (book: Book) => book.id,
+  sortComparer: (left: Book, right: Book) => left.title.localeCompare(right.title),
+});
+const library = createStore(books.getInitialState());
+
+library.update(state => books.addOne(state, { id: 'guide', title: 'State guide' }));
+library.update(state => books.updateOne(state, 'guide', book => ({
+  ...book,
+  title: 'Updated guide',
+})));
+const titles = books.selectAll(library.getState()).map(book => book.title);
+```
+
+`addOne`/`addMany` keep the first entity for an existing ID.
+`upsertOne`/`upsertMany` replace whole entities; the last repeated ID wins.
+`setAll` replaces the collection, and `getInitialState` optionally accepts entities.
+`updateOne(state, id, updater)` and `updateMany(state, [{ id, update }])` ignore
+missing IDs and reject an updater that changes its ID. Remove and add instead.
+Updates must return a new entity rather than mutate the argument.
+
+`removeOne`, `removeMany`, and `removeAll` never mutate the previous collection.
+`selectIds`, `selectById`, `selectAll`, and `selectTotal` read adapter-created
+states. Missing IDs return `undefined`. Unchanged operations return the same
+state reference. Sorting is optional, stable for equal sort keys, and runs after
+collection operations; without it, Map insertion order is retained.
+`selectAll` returns a fresh array, so use the framework's normal selector
+equality or memoization when selecting it.
+
+Map storage needs structured cloning, such as `indexedDBStorage`, or an explicit
+codec to convert entries to and from JSON. Plain `JSON.stringify` does not
+preserve a Map. Entity helpers do not install persistence or change its format.
 
 ## Related pages
 
