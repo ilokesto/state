@@ -11,7 +11,7 @@ Public entrypoint 경로는 `state/package.json`의 exports가 기준입니다. 
 
 | Import | Purpose |
 |---|---|
-| `@ilokesto/state` | 프레임워크 독립적인 `Store`, `createStore`, `createReducer`, `createResource`, `createEffect`, `listenActions`, `pipe`, `definePipeableMiddleware`, `PipeConfigurationError`, `dispose`와 공개 상태 계약을 내보냅니다. |
+| `@ilokesto/state` | 프레임워크 독립적인 `Store`, `createStore`, `createReducer`, `createResource`, `createEffect`, `listenActions`, `createOutbox`, `OutboxError`, `pipe`, `definePipeableMiddleware`, `PipeConfigurationError`, `dispose`와 공개 상태 계약을 내보냅니다. |
 | `@ilokesto/state/react` | React `create()` adapter와 `UseState`, `UseReducer` type입니다. |
 | `@ilokesto/state/vue` | Vue `create()` adapter와 `UseState`, `UseReducer` type입니다. |
 | `@ilokesto/state/svelte` | Svelte `create()` adapter와 `UseState`, `UseReducer` type입니다. |
@@ -35,6 +35,10 @@ Public type은 `HistoryControls`, `HistoryOptions`, `HistoryStore`, `OnRehydrate
 Public type은 `Pipe`, `PipeAnyMiddleware`, `PipeBuilder`, `PipeCapability`, `PipeConfigurationErrorCode`, `PipeDuplicatePolicy`, `PipeMiddleware`, `PipeMiddlewareConflictDiagnostic`, `PipeMiddlewareMetadata`입니다.
 
 ## Root와 프레임워크 entrypoint
+
+영속 작업과 서버 idempotency는 [영속 outbox](/ko/state/guides/durable-outbox)를 참고하세요.
+Root는 `Outbox`, `OutboxContext`, `OutboxEntry`, `OutboxOptions`, `OutboxRecord`,
+`OutboxResolution`, `OutboxResponse`, `OutboxState`도 export합니다.
 
 비동기 action과 수명주기 소유권은 [비동기 리소스와 effect](/ko/state/guides/async-lifecycle)를 참고하세요.
 Root는 `Resource`, `ResourceState`, `ResourceResult`, `ResourceTask`,

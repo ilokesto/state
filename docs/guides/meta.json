@@ -5,6 +5,7 @@
     "plain-state",
     "reducer-state",
     "lifecycle-reads-writes",
-    "async-lifecycle"
+    "async-lifecycle",
+    "durable-outbox"
   ]
 }

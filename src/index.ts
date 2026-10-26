@@ -18,3 +18,8 @@ export { listenActions } from './lib/listenActions.js';
 export type {
   ActionSource, EffectCallback, EffectCleanup, EffectContext, EffectOptions,
 } from './lib/listenActions.js';
+export { createOutbox, OutboxError } from './lib/createOutbox.js';
+export type {
+  Outbox, OutboxContext, OutboxEntry, OutboxOptions, OutboxRecord, OutboxResolution,
+  OutboxResponse, OutboxState,
+} from './lib/createOutbox.js';
