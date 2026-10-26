@@ -14,7 +14,7 @@ type HistoryEntry<Selection> = {
   readonly group: object | undefined;
 };
 type Replay<State, Selection> = {
-  readonly action: () => State;
+  readonly action: (current: State) => State;
   readonly entry: HistoryEntry<Selection>;
   readonly source: HistoryEntry<Selection>[];
   readonly target: HistoryEntry<Selection>[];
@@ -234,11 +234,10 @@ export function createHistoryRuntime<State, Selection, Patch>(
       publish();
       return;
     }
-    const next = options.restore(current, restored);
     const request: Replay<State, Selection> = {
-      action: () => {
+      action: (actual) => {
         request.firstSequence ??= store.getCommitSequence() + 1;
-        return next;
+        return options.restore(actual, restored);
       },
       entry, source, target, direction, firstSequence: undefined, scheduled: false, consumed: false,
     };
@@ -285,12 +284,13 @@ export function createHistoryRuntime<State, Selection, Patch>(
     clear();
     groupDepth = 0;
     group = undefined;
-    try {
-      publish();
-    } finally {
+    const stopTerminal = metadata.subscribeCommit((commit) => {
+      if (!commit.state.disposed) return;
       for (const stop of subscriptions) stop();
       subscriptions.clear();
-    }
+      stopTerminal();
+    });
+    publish();
   });
 
   return {

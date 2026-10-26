@@ -1,8 +1,52 @@
 import { expect, test } from 'bun:test';
 import { Store } from '@ilokesto/store';
-import { history, persist } from '../src/middleware';
+import { dispose, history, persist } from '../src/middleware';
 import { pipe } from '../src/utils/pipe';
 import { AsyncMemoryStorage, decodeCounter } from './helpers/persistStorage';
+
+test('undo: middleware edits an untracked field before forwarding -> preserves the latest untracked value', () => {
+  const store = pipe.use(history({
+    select: (state: Readonly<{ count: number; label: string }>) => state.count,
+    restore: (current, count) => ({ ...current, count }),
+  })).create({ count: 0, label: 'initial' });
+  store.set({ count: 1, label: 'before' });
+  let intervene = true;
+  store.pushMiddleware((action, next) => {
+    if (intervene) {
+      intervene = false;
+      store.set({ count: 1, label: 'user edit' });
+    }
+    next(action);
+  });
+
+  store.undo();
+
+  expect(store.getState()).toEqual({ count: 0, label: 'user edit' });
+  expect(store.getHistoryStatus()).toMatchObject({ undoDepth: 0, redoDepth: 1 });
+  dispose(store);
+});
+
+test('history metadata: listener disposes during notification -> all active observers receive terminal status', () => {
+  const store = history()(new Store<number>(0));
+  const seen: { listener: string; disposed: boolean }[] = [];
+  store.subscribeHistory(status => {
+    seen.push({ listener: 'first', disposed: status.disposed });
+    if (!status.disposed && status.undoDepth === 1) {
+      dispose(store);
+    }
+  });
+  store.subscribeHistory(status => {
+    seen.push({ listener: 'second', disposed: status.disposed });
+  });
+
+  store.set(1);
+
+  expect(seen.filter(entry => entry.disposed)).toEqual([
+    { listener: 'first', disposed: true },
+    { listener: 'second', disposed: true },
+  ]);
+  expect(store.getHistoryStatus()).toMatchObject({ disposed: true, undoDepth: 0 });
+});
 
 test('history: subscriber commits recursively -> records captured transitions in chronological order', () => {
   const store = history()(new Store<number>(0));

@@ -7,6 +7,7 @@ import { devtools, dispose, history, jsonStorage, persist, validate } from '../s
 import { pipe } from '../src/utils/pipe';
 import { definePipeableMiddleware } from '../src/utils/pipe/metadata';
 import { restoreBrowserGlobal, withBrowserFakes } from './helpers/browserFakes';
+import { AsyncMemoryStorage, decodeCounter } from './helpers/persistStorage';
 
 function withExtension<Result>(run: (extension: {
   readonly options: unknown[];
@@ -57,6 +58,86 @@ function withExtension<Result>(run: (extension: {
 const jump = (type: 'JUMP_TO_STATE' | 'JUMP_TO_ACTION', state: unknown) => ({
   type: 'DISPATCH', payload: { type }, state: JSON.stringify(state),
 });
+
+for (const commandType of ['JUMP_TO_STATE', 'JUMP_TO_ACTION'] as const) {
+  for (const devtoolsFirst of [false, true]) {
+    for (const editAfterJump of [false, true]) {
+      test(`devtools ${commandType}: subscriber jump, devtoolsFirst=${devtoolsFirst}, laterEdit=${editAfterJump} -> history starts at the accepted baseline`, async () => {
+        await withExtension(async ({ commands }) => {
+          const adapter = new AsyncMemoryStorage();
+          const schema = {
+            '~standard': {
+              version: 1 as const,
+              vendor: 'reentrant-jump',
+              validate: (value: unknown) =>
+                typeof value === 'object' && value !== null && 'count' in value &&
+                typeof value.count === 'number' && value.count >= 0
+                  ? { value: { count: Math.floor(value.count) } }
+                  : { issues: [{ message: 'Invalid count' }] },
+            },
+          };
+          const builder = devtoolsFirst
+            ? pipe.use(devtools('baseline')).use(history())
+            : pipe.use(history()).use(devtools('baseline'));
+          const store = builder.use(validate(schema)).use(persist({
+            key: 'counter', storage: () => adapter, decode: decodeCounter,
+          })).create({ count: 0 });
+          await store.persist.rehydrate();
+          let jumped = false;
+          const stop = store.subscribe(() => {
+            if (!jumped) {
+              jumped = true;
+              commands[0](jump(commandType, { count: 2.9 }));
+              if (editAfterJump) store.set({ count: 3 });
+            }
+          });
+
+          store.set({ count: 1 });
+          await store.persist.flush();
+
+          expect(store.getState()).toEqual({ count: editAfterJump ? 3 : 2 });
+          expect(adapter.value).toEqual({ state: { count: editAfterJump ? 3 : 2 }, version: 0 });
+          expect(store.canUndo()).toBe(editAfterJump);
+          store.undo();
+          expect(store.getState()).toEqual({ count: 2 });
+          store.undo();
+          expect(store.getState()).toEqual({ count: 2 });
+          await store.persist.flush();
+          stop();
+          dispose(store);
+        });
+      });
+    }
+  }
+}
+
+for (const editAfterJump of [false, true]) {
+  test(`devtools: jump during undo, laterEdit=${editAfterJump} -> discards stale replay while preserving new edits`, () => {
+    withExtension(({ commands }) => {
+      const store = pipe.use(devtools('replay')).use(history()).create({ count: 0 });
+      store.set({ count: 1 });
+      store.set({ count: 2 });
+      let jumped = false;
+      const stop = store.subscribe(() => {
+        if (!jumped) {
+          jumped = true;
+          commands[0](jump('JUMP_TO_STATE', { count: 5 }));
+          if (editAfterJump) store.set({ count: 6 });
+        }
+      });
+
+      store.undo();
+
+      expect(store.getState()).toEqual({ count: editAfterJump ? 6 : 5 });
+      expect(store.canUndo()).toBe(editAfterJump);
+      expect(store.canRedo()).toBe(false);
+      store.undo();
+      expect(store.getState()).toEqual({ count: 5 });
+      stop();
+      dispose(store);
+    });
+  });
+}
 
 test('devtools: metadata-only replay with nested writes -> labels only the originating commit', () => {
   withExtension(({ sends }) => {
