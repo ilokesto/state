@@ -73,8 +73,8 @@ test('Given validate, history, persist, logger, and DevTools, when accepted and 
       expect(connections).toHaveLength(1);
       expect(connections[0]?.sends).toEqual([
         { action: 'history-observations:anonymous action', state: { count: 1 } },
-        { action: 'history-observations:anonymous action', state: { count: 0 } },
-        { action: 'history-observations:anonymous action', state: { count: 1 } },
+        { action: 'history-observations:history/undo', state: { count: 0 } },
+        { action: 'history-observations:history/redo', state: { count: 1 } },
       ]);
       expect(storage.writes).toBe(3);
     } finally {

@@ -12,6 +12,11 @@ export { createScope } from './lib/createScope.js';
 export type { StateScope } from './lib/createScope.js';
 export { createStateFactory } from './lib/createStateFactory.js';
 export type { StateFactory, StateFactoryOptions } from './lib/createStateFactory.js';
+export { createQueryBridge, createActorBridge, createUrlBridge } from './utils/index.js';
+export type {
+  SnapshotBridge, QueryObserverSource, ActorSource, ActorBridge,
+  UrlCodec, UrlEnvironment, UrlHistoryMode, UrlBridgeOptions, UrlBridge,
+} from './utils/index.js';
 export { createResource } from './lib/createResource.js';
 export type {
   Resource, ResourceContext, ResourceResult, ResourceRunOptions, ResourceState, ResourceTask,
