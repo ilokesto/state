@@ -1,4 +1,6 @@
 export { pipe } from './pipe/index.js';
+export { createEntityAdapter } from './createEntityAdapter.js';
+export type { EntityState, EntityAdapterOptions } from './createEntityAdapter.js';
 export { PipeConfigurationError } from './pipe/errors.js';
 export type { PipeConfigurationErrorCode } from './pipe/errors.js';
 export { definePipeableMiddleware } from './pipe/metadata.js';
