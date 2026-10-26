@@ -56,6 +56,31 @@ const dispatch = useCounter.writeOnly();
 dispatch({ type: 'reset' });
 ```
 
+## Custom equality and readonly binding
+
+Pass `equality(previous, next)` as the selector's second argument. Omitting it keeps the existing shallow comparison. The writers and result shapes from `create`, `bind`, and `bindReducer` stay unchanged.
+
+`bindReadonly(source)` accepts a structural `ReadableStore<T>` and provides `{ state: Accessor<S> }` without a writer. `UseReadonlyState<T>` is exported from the same subpath. Use `readOnly()` for synchronous snapshots outside the lifecycle.
+
+```ts lineNumbers
+import type { ReadableStore } from '@ilokesto/store';
+import { bindReadonly } from '@ilokesto/state/solid';
+
+declare const source: ReadableStore<{ count: number; label: string }>;
+const useCounter = bindReadonly(source);
+const select = (state: Readonly<{ count: number }>) => ({ nested: { count: state.count } });
+const equality = (previous: ReturnType<typeof select>, next: ReturnType<typeof select>) =>
+  previous.nested.count === next.nested.count;
+
+function useCount() {
+  return useCounter(select, equality).state;
+}
+```
+
+Call inside a component or createRoot() owner, as before. Owner cleanup unsubscribes, and equal selections retain the previous reference.
+
+Equality must be a pure equivalence relation. Returning true suppresses delivery and retains the previous selection. Equality does not apply to readOnly().
+
 ## Caveats
 
 - Subscribed accessors require `getOwner()` to exist.

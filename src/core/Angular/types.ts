@@ -1,4 +1,4 @@
-import type { StoreApi } from '@ilokesto/store';
+import type { EqualityFn, ReadableStore, StoreApi } from '@ilokesto/store';
 import type { DestroyRef, Signal } from '@angular/core';
 
 import type { ReducerAction } from '../../types/ReduceFn.js';
@@ -28,6 +28,7 @@ export type UseState<T> = {
   (): AngularStateResult<ReadonlySnapshot<T>, T>;
   (options: AngularOptions): AngularStateResult<ReadonlySnapshot<T>, T>;
   <S>(selector: Selector<T, S>, options?: AngularOptions): AngularStateResult<S, T>;
+  <S>(selector: Selector<T, S>, equality?: EqualityFn<S>, options?: AngularOptions): AngularStateResult<S, T>;
   writeOnly: () => StateWriter<T>;
   readOnly: {
     (): ReadonlySnapshot<T>;
@@ -40,10 +41,19 @@ export type UseReducer<T, Action extends ReducerAction> = {
   (): AngularReducerResult<ReadonlySnapshot<T>, T, Action>;
   (options: AngularOptions): AngularReducerResult<ReadonlySnapshot<T>, T, Action>;
   <S>(selector: Selector<T, S>, options?: AngularOptions): AngularReducerResult<S, T, Action>;
+  <S>(selector: Selector<T, S>, equality?: EqualityFn<S>, options?: AngularOptions): AngularReducerResult<S, T, Action>;
   writeOnly: () => ActionWriter<Action>;
   readOnly: {
     (): ReadonlySnapshot<T>;
     <S>(selector: Selector<T, S>): S;
   };
   subscribe: StoreApi<T>['subscribe'];
+};
+
+export type UseReadonlyState<T> = {
+  (options?: AngularOptions): Readonly<{ state: Signal<ReadonlySnapshot<T>>; subscribe: ReadableStore<T>['subscribe'] }>;
+  <S>(selector: Selector<T, S>, options?: AngularOptions): Readonly<{ state: Signal<S>; subscribe: ReadableStore<T>['subscribe'] }>;
+  <S>(selector: Selector<T, S>, equality?: EqualityFn<S>, options?: AngularOptions): Readonly<{ state: Signal<S>; subscribe: ReadableStore<T>['subscribe'] }>;
+  readOnly: UseState<T>['readOnly'];
+  subscribe: ReadableStore<T>['subscribe'];
 };

@@ -1,11 +1,15 @@
 export { debounce } from './debounce.js';
 export { throttle } from './throttle.js';
 export { devtools } from './devtools.js';
+export type { DevtoolsAction, DevtoolsOptions, DevtoolsSerializeOptions } from './devtools.js';
 export { dispose } from '../lib/storeCleanup.js';
 export { history, HistoryConfigurationError } from './history.js';
-export type { HistoryControls, HistoryOptions, HistoryStore } from './history.js';
+export type {
+  HistoryControls, HistoryDiff, HistoryOptions, HistoryStatus, HistoryStore, HistoryStrategy,
+} from './history.js';
 export { logger } from './logger.js';
 export { persist } from './persist/index.js';
+export { memoryStorage } from '../utils/memoryStorage.js';
 export { jsonStorage } from './persist/storage/jsonStorage.js';
 export { cookieStorage } from './persist/storage/cookieStorage.js';
 export type { CookieStorageOptions } from './persist/storage/cookieStorage.js';

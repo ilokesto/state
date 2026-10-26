@@ -13,6 +13,7 @@
     "test:typecheck": "pnpm build && tsc --noEmit -p test/tsconfig.json",
     "test:tooling": "node --test --test-concurrency=2 tests/tooling/*.test.mjs",
     "typecheck": "tsc --noEmit",
+    "benchmark": "pnpm build && node scripts/benchmark.mjs",
     "docs:prepare": "pnpm build",
     "docs:dev": "pnpm docs:prepare && pnpm --dir website dev",
     "docs:build": "pnpm docs:prepare && pnpm --dir website build",
@@ -146,6 +147,7 @@
     "@angular/core": "^21.2.8",
     "@changesets/cli": "2.31.1",
     "@playwright/test": "^1.61.1",
+    "@tanstack/query-core": "5.104.5",
     "@types/bun": "^1.3.14",
     "@types/node": "^22.19.1",
     "@types/react": "^19.1.6",
@@ -155,6 +157,7 @@
     "svelte": "^5.55.3",
     "typescript": "^6.0.2",
     "vue": "^3.5.32",
+    "xstate": "5.33.3",
     "yaml": "2.8.2"
   }
 }

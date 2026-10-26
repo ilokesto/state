@@ -4,6 +4,8 @@
   "pages": [
     "index",
     "pipe",
-    "adaptor"
+    "testing",
+    "adaptor",
+    "bridges"
   ]
 }
