@@ -17,6 +17,7 @@ export class PersistWriter {
   private generation = 0;
   private pending: Write | undefined;
   private active = false;
+  private activeWrite: Write | undefined;
   private enabled = false;
   private disposed = false;
   private paused = false;
@@ -63,7 +64,10 @@ export class PersistWriter {
   private schedule(): void {
     this.cancelTimer();
     if (this.disposed) return;
-    if (this.enabled && !this.paused && this.pending && this.saveDebounceMs > 0) {
+    if (
+      this.enabled && !this.paused && this.pending &&
+      this.pending !== this.activeWrite && this.saveDebounceMs > 0
+    ) {
       this.timer = setTimeout(() => {
         this.timer = undefined;
         this.start();
@@ -111,6 +115,7 @@ export class PersistWriter {
     this.disposed = true;
     this.cancelTimer();
     this.pending = undefined;
+    this.activeWrite = undefined;
     const error = this.disposedError();
     this.rejectWaiters(error);
     for (const removal of this.removals.splice(0)) removal.reject(error);
@@ -132,6 +137,7 @@ export class PersistWriter {
     const write = this.enabled && canWrite ? this.pending : undefined;
     if (!removal && !write) return;
     this.active = true;
+    this.activeWrite = removal ? undefined : write;
     this.publish({ saving: 'writing', error: null });
     void Promise.resolve().then(async () => {
       if (this.disposed) return;
@@ -168,6 +174,7 @@ export class PersistWriter {
           }
         }
         this.active = false;
+        this.activeWrite = undefined;
         this.publish({ saving: 'idle', pending: this.pending !== undefined });
         this.start();
       } catch (cause) {
@@ -183,6 +190,7 @@ export class PersistWriter {
           removal.reject(error);
         }
         this.active = false;
+        this.activeWrite = undefined;
         // A cleared generation must never poison its replacement's status.
         if (removal || write?.generation === this.generation) {
           this.rejectWaiters(error);
