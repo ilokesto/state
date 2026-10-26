@@ -217,7 +217,7 @@ comparison, read [selector semantics](./docs/advanced/selector-semantics.mdx).
 <details>
 <summary>Development</summary>
 
-Use Node 22 and pnpm 10.17.1. Run these commands from this repository root.
+Use Node 24.22.1 and pnpm 10.17.1. Run these commands from this repository root.
 `pnpm test` also requires Bun for the distribution tests.
 
 ```sh

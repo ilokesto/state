@@ -217,7 +217,7 @@ Reducer 식별자와 Store 직접 쓰기는 [Reducer 상태](./docs/guides/reduc
 <details>
 <summary>개발</summary>
 
-Node 22와 pnpm 10.17.1을 사용하고 저장소 루트에서 실행하세요.
+Node 24.22.1과 pnpm 10.17.1을 사용하고 저장소 루트에서 실행하세요.
 `pnpm test`의 배포 결과물 테스트에는 Bun도 필요합니다.
 
 ```sh
