@@ -79,3 +79,35 @@ for (const readonly of [false, true]) {
     }
   });
 }
+
+for (const framework of ['react', 'vue', 'angular', 'solid', 'svelte']) {
+  test(framework + ': persistence binding -> real transitions equality and borrowed cleanup', { timeout: 15000 }, async () => {
+    const page = await browser.newPage();
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    try {
+      await page.goto(origin);
+      const result = await page.evaluate(async framework => {
+        const fixture = await import('/selectors.js');
+        return fixture.persistenceLifecycle(framework);
+      }, framework);
+
+      const status = (hydration, saving, pending = false, paused = false, error = null) =>
+        ({ hydration, saving, pending, paused, error });
+      assert.deepEqual(result, {
+        eager: 0, subscriptions: 2, remaining: 0, stopped: true, freshRead: true,
+        equalSelection: true, failure: 'STORAGE', disposed: false,
+        snapshots: [
+          status('idle', 'idle'), status('hydrating', 'idle'), status('hydrated', 'idle'),
+          status('hydrated', 'idle', true, true), status('hydrated', 'writing', true, true),
+          status('hydrated', 'error', true, true, 'STORAGE'),
+          status('hydrated', 'idle', false, true), status('hydrated', 'idle'),
+        ],
+        text: framework === 'react' ? 'hydrated:writing' : null, exposed: [],
+      });
+      assert.deepEqual(errors, []);
+    } finally {
+      await page.close();
+    }
+  });
+}
