@@ -9,6 +9,8 @@ import * as vue from '../../dist/core/Vue/index.js';
 import * as angular from '../../dist/core/Angular/index.js';
 import * as svelte from '../../dist/core/Svelte/index.js';
 import * as solid from '../../dist/core/Solid/index.js';
+import { dispose, persist } from '../../dist/middleware/index.js';
+import { pipe } from '../../dist/utils/pipe/index.js';
 
 function source() {
   const backing = new Store({ count: 1, label: 'initial' });
@@ -130,4 +132,151 @@ export function reactLifecycle(readonly) {
   flushSync(() => root.unmount());
   host.remove();
   return { skipped, stable, replacementEquality, label, count, text, stableWriter, active, remaining: input.active(), exposed };
+}
+
+function deferred() {
+  let resolve;
+  const promise = new Promise(done => { resolve = done; });
+  return { promise, resolve };
+}
+
+export async function persistenceLifecycle(framework) {
+  const readGate = deferred();
+  const writeStarted = deferred();
+  const writeGate = deferred();
+  let attempts = 0;
+  const storage = {
+    getItem: () => readGate.promise,
+    async setItem() {
+      if (++attempts === 1) {
+        writeStarted.resolve();
+        await writeGate.promise;
+        throw new Error('offline');
+      }
+    },
+    async removeItem() {},
+  };
+  const store = pipe.use(persist({
+    key: 'binding', storage: () => storage,
+    decode: value => typeof value === 'number' ? value : null,
+  })).create(0);
+  let active = 0;
+  const source = {
+    getStatus: store.persist.getStatus,
+    subscribe(listener) {
+      active++;
+      const stop = store.persist.subscribe(listener);
+      let stopped = false;
+      return () => {
+        if (stopped) return;
+        stopped = true;
+        active--;
+        stop();
+      };
+    },
+  };
+  const adapter = { react, vue, angular, solid, svelte }[framework].bindPersistStatus(source);
+  const eager = active;
+  const select = status => ({ nested: { saving: status.saving } });
+  const equal = (previous, next) => previous.nested.saving === next.nested.saving;
+  let read;
+  let readSelected;
+  let cleanup;
+  let selected;
+  let current;
+  let host;
+  if (framework === 'react') {
+    function View() {
+      current = adapter();
+      selected = adapter(select, equal);
+      return createElement('output', null, current.hydration + ':' + current.saving);
+    }
+    host = document.createElement('div');
+    document.body.append(host);
+    const root = createReactRoot(host);
+    flushSync(() => root.render(createElement(StrictMode, null, createElement(View))));
+    read = () => current;
+    readSelected = () => selected;
+    cleanup = () => { flushSync(() => root.unmount()); host.remove(); };
+  } else if (framework === 'vue') {
+    const scope = effectScope();
+    const results = scope.run(() => [adapter(), adapter(select, equal)]);
+    read = () => results[0].state.value;
+    readSelected = () => results[1].state.value;
+    cleanup = () => scope.stop();
+  } else if (framework === 'solid') {
+    const results = createSolidRoot(stop => {
+      cleanup = stop;
+      return [adapter(), adapter(select, equal)];
+    });
+    read = results[0].state;
+    readSelected = results[1].state;
+  } else if (framework === 'angular') {
+    const callbacks = [];
+    const destroyRef = { onDestroy(callback) { callbacks.push(callback); return () => {}; } };
+    read = adapter({ destroyRef }).state;
+    readSelected = adapter(select, equal, { destroyRef }).state;
+    cleanup = () => callbacks.forEach(callback => callback());
+  } else {
+    const stops = [
+      adapter.subscribe(next => { current = next; }),
+      adapter.select(select, equal).subscribe(next => { selected = next; }),
+    ];
+    read = () => current;
+    readSelected = () => selected;
+    cleanup = () => stops.forEach(stop => stop());
+  }
+  const sync = () => { if (framework === 'react') flushSync(() => {}); };
+  const act = callback => framework === 'react' ? flushSync(callback) : callback();
+  const snapshots = [];
+  const capture = () => {
+    sync();
+    const status = read();
+    snapshots.push({
+      hydration: status.hydration, saving: status.saving, pending: status.pending,
+      paused: status.paused, error: status.error?.code ?? null,
+    });
+  };
+  try {
+    capture();
+    let hydration;
+    act(() => { hydration = store.persist.rehydrate(); });
+    capture();
+    readGate.resolve(null);
+    await hydration;
+    capture();
+    const before = readSelected();
+    act(() => store.persist.pause());
+    const equalSelection = before === readSelected();
+    act(() => store.set(1));
+    capture();
+    let failed;
+    act(() => { failed = store.persist.retry().catch(error => error.code); });
+    await writeStarted.promise;
+    capture();
+    const text = host?.textContent;
+    writeGate.resolve();
+    const failure = await failed;
+    capture();
+    await store.persist.retry();
+    capture();
+    act(() => store.persist.resume());
+    capture();
+    const subscriptions = active;
+    const stoppedSnapshot = read();
+    cleanup();
+    store.persist.pause();
+    store.set(2);
+    const stopped = read() === stoppedSnapshot;
+    const freshRead = adapter.readOnly().pending;
+    await store.persist.flush();
+    return {
+      eager, subscriptions, remaining: active, stopped, freshRead, equalSelection, failure,
+      disposed: store.persist.getStatus().disposed, snapshots,
+      text: text ?? null, exposed: writers(adapter),
+    };
+  } finally {
+    cleanup();
+    dispose(store);
+  }
 }
