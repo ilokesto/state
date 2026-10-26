@@ -10,6 +10,7 @@ description: "pipe로 middleware를 조합하고 adaptor로 Immer 스타일 obje
 - [`pipe`](/ko/state/utility/pipe)는 `@ilokesto/store` instance를 만들고 등록된 middleware를 순서대로 적용합니다.
 - [`definePipeableMiddleware`](/ko/state/utility/pipe#custom-middleware)는 `pipe.use(...)`에 쓸 custom middleware metadata를 등록합니다.
 - [`PipeConfigurationError`](/ko/state/utility/pipe#configuration-errors)는 잘못된 runtime pipe configuration을 보고합니다.
+- [`memoryStorage`와 `createStoreTestHarness`](/ko/state/utility/testing)는 격리된 영속성, 알림 기반 대기와 명시적인 테스트 정리를 제공합니다.
 - [`adaptor`](/ko/state/utility/adaptor)는 Immer `produce`를 감싸 object update를 draft mutation syntax로 쓸 수 있게 합니다.
 
 React, Vue, Svelte, Solid, Angular에 연결하기 전에 store 자체를 준비할 때 Utility page를 보세요.

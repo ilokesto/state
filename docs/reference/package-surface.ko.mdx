@@ -5,38 +5,42 @@ description: "Entrypoint, peer dependency, root export입니다."
 
 # 패키지 표면
 
-Public entrypoint 경로는 `state/package.json`의 exports가 기준입니다. 프레임워크 독립 생성 API는 root에서, 프레임워크 adapter는 각 subpath에서 가져오세요.
+10개 public entrypoint 경로는 이 패키지 `package.json`의 exports가 기준입니다. 프레임워크 독립 생성 API는 root에서, 프레임워크 adapter는 각 subpath에서 가져오세요.
 
 ## Entrypoint 표
 
 | Import | Purpose |
 |---|---|
 | `@ilokesto/state` | 프레임워크 독립적인 `Store`, `createStore`, `createReducer`, `pipe`, `definePipeableMiddleware`, `PipeConfigurationError`, `dispose`와 공개 상태 계약을 내보냅니다. |
-| `@ilokesto/state/react` | React `create()` adapter와 `UseState`, `UseReducer` type입니다. |
-| `@ilokesto/state/vue` | Vue `create()` adapter와 `UseState`, `UseReducer` type입니다. |
-| `@ilokesto/state/svelte` | Svelte `create()` adapter와 `UseState`, `UseReducer` type입니다. |
-| `@ilokesto/state/solid` | Solid `create()` adapter와 `UseState`, `UseReducer` type입니다. |
-| `@ilokesto/state/angular` | Angular `create()` adapter와 `AngularOptions`, `UseState`, `UseReducer` type입니다. |
+| `@ilokesto/state/react` | React `create`, `bind`, `bindReducer`와 `UseState`, `UseReducer` type입니다. |
+| `@ilokesto/state/vue` | Vue `create`, `bind`, `bindReducer`와 `UseState`, `UseReducer` type입니다. |
+| `@ilokesto/state/svelte` | Svelte `create`, `bind`, `bindReducer`와 `UseState`, `UseReducer` type입니다. |
+| `@ilokesto/state/solid` | Solid `create`, `bind`, `bindReducer`와 `UseState`, `UseReducer` type입니다. |
+| `@ilokesto/state/angular` | Angular `create`, `bind`, `bindReducer`와 `AngularOptions`, `UseState`, `UseReducer` type입니다. |
 | `@ilokesto/state/middleware` | 등록된 middleware, store disposal, middleware type입니다. |
-| `@ilokesto/state/utils` | pipe builder, custom middleware 등록, configuration error, pipe type입니다. |
+| `@ilokesto/state/utils` | Pipe 구성, 메모리 영속성, 결정적인 테스트 helper입니다. |
 | `@ilokesto/state/adaptor` | `adaptor`; optional `immer` peer가 필요합니다. |
 | `@ilokesto/state/package.json` | 이 패키지 manifest가 필요한 tooling을 위한 package metadata export입니다. |
 
 ## Middleware export
 
-`@ilokesto/state/middleware`는 `debounce`, `throttle`, `devtools`, `dispose`, `history`, `HistoryConfigurationError`, `logger`, `persist`, `validate`를 export합니다.
+`@ilokesto/state/middleware`는 `debounce`, `throttle`, `devtools`, `dispose`, `history`, `HistoryConfigurationError`, `logger`, `persist`, `PersistError`, `jsonStorage`, `cookieStorage`, `indexedDBStorage`, `memoryStorage`, `validate`를 export합니다.
 
-Public type은 `HistoryControls`, `HistoryOptions`, `HistoryStore`, `OnRehydrateStorage`, `OnRehydrateStorageCallback`, `PersistControls`, `PersistDecoder`, `PersistDecoderStateDiagnostic`, `PersistMigration`, `PersistStore`, `SafePersistConfig`, `SafePersistCookieConfig`, `SafePersistLocalConfig`, `SafePersistSessionConfig`입니다.
+Public type은 `HistoryControls`, `HistoryOptions`, `HistoryStore`, `CookieStorageOptions`, `IndexedDBStorageOptions`, `PersistedValue`, `PersistStorage`, `PersistStorageFactory`, `PersistConflictPolicy`, `PersistControls`, `PersistDecoder`, `PersistDecoderStateDiagnostic`, `PersistMigration`, `PersistRehydrateOptions`, `PersistStatus`, `PersistStore`, `SafePersistConfig`입니다.
+
+Storage 선택은 lazy adapter factory인 `SafePersistConfig.storage`로 합니다. 이전 local/session/cookie 설정 및 rehydration callback type은 export가 아닙니다. Storage adapter와 명시적인 persistence control을 사용하세요.
 
 ## Utility export
 
-`@ilokesto/state/utils`는 `pipe`, `definePipeableMiddleware`, `PipeConfigurationError`를 export합니다.
+`@ilokesto/state/utils`는 `pipe`, `definePipeableMiddleware`, `PipeConfigurationError`, `memoryStorage`, `createStoreTestHarness`를 export합니다. [테스트와 측정](/ko/state/utility/testing)을 참고하세요.
 
-Public type은 `Pipe`, `PipeAnyMiddleware`, `PipeBuilder`, `PipeCapability`, `PipeConfigurationErrorCode`, `PipeDuplicatePolicy`, `PipeMiddleware`, `PipeMiddlewareConflictDiagnostic`, `PipeMiddlewareMetadata`입니다.
+Public type은 `Pipe`, `PipeAnyMiddleware`, `PipeBuilder`, `PipeCapability`, `PipeConfigurationErrorCode`, `PipeDuplicatePolicy`, `PipeMiddleware`, `PipeMiddlewareConflictDiagnostic`, `PipeMiddlewareMetadata`, `StoreTestHarness`, `StoreWaitOptions`입니다.
 
 ## Root와 프레임워크 entrypoint
 
 프레임워크 독립 생성 API는 root에서 가져오세요. `create`, `bind`, `bindReducer` 같은 프레임워크 adapter API는 root가 아니라 프레임워크 subpath에서 가져옵니다.
+
+Root runtime export는 `Store`, `createStore`, `createReducer`, `pipe`, `definePipeableMiddleware`, `PipeConfigurationError`, `dispose`입니다. Root type export는 `ReadableStore`, `StoreApi`, `Listener`, `Unsubscribe`, `SetStateAction`, `Selector`, `SelectorListener`, `EqualityFn`, `Middleware`, `ReducerState`, `ReduceFn`, `ReducerAction`입니다. Pipe와 테스트 type은 `/utils`, persistence type은 `/middleware`에서 가져옵니다.
 
 ```ts lineNumbers
 // 프레임워크 subpath에서 사용 가능

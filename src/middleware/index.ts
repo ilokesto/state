@@ -6,6 +6,7 @@ export { history, HistoryConfigurationError } from './history.js';
 export type { HistoryControls, HistoryOptions, HistoryStore } from './history.js';
 export { logger } from './logger.js';
 export { persist } from './persist/index.js';
+export { memoryStorage } from '../utils/memoryStorage.js';
 export { jsonStorage } from './persist/storage/jsonStorage.js';
 export { cookieStorage } from './persist/storage/cookieStorage.js';
 export type { CookieStorageOptions } from './persist/storage/cookieStorage.js';
