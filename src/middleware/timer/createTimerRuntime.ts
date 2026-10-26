@@ -47,6 +47,7 @@ export function createTimerRuntime<State>(
   let savedNext: Next | undefined;
   let unregister: (() => void) | undefined;
   let cancellation = 0;
+  let flushing = false;
 
   const closeWindow = (): void => {
     if (timeout !== undefined) clearTimeout(timeout);
@@ -79,13 +80,21 @@ export function createTimerRuntime<State>(
     }
   };
   const flush = (): void => {
+    if (flushing) return;
     const batch = updates;
     const next = savedNext;
     updates = [];
     savedNext = undefined;
     closeWindow();
     // Detach before evaluating: reentrant updates own a new, independent window.
-    if (next !== undefined && batch.length > 0) commit(batch, next);
+    if (next !== undefined && batch.length > 0) {
+      flushing = true;
+      try {
+        commit(batch, next);
+      } finally {
+        flushing = false;
+      }
+    }
   };
   const schedule = (): void => {
     timeout = setTimeout(() => {
@@ -104,7 +113,7 @@ export function createTimerRuntime<State>(
     const open = timeout === undefined;
     if (!open && settings.mode === 'quiet') closeWindow();
     if (timeout === undefined) schedule();
-    if (open && settings.leading) {
+    if (open && settings.leading && !flushing) {
       // Preserve the leading path's lazy updater semantics: downstream
       // middleware may reject it without evaluating the updater.
       next(action);

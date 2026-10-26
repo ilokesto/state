@@ -9,6 +9,35 @@ afterEach(() => {
   jest.useRealTimers();
 });
 
+for (const kind of ['fixed debounce', 'quiet debounce', 'trailing throttle'] as const) {
+  for (const flushInside of [false, true]) {
+    test(`${kind}: trailing updater dispatches and flushInside=${flushInside} -> preserves nested work after the detached batch`, () => {
+      const store = kind === 'trailing throttle'
+        ? throttle(10, { trailing: true })(new Store(0))
+        : debounce(10, { leading: true, mode: kind === 'quiet debounce' ? 'quiet' : 'fixed' })(new Store(0));
+      const controls = 'debounce' in store ? store.debounce : store.throttle;
+      const seen: number[] = [];
+      store.subscribe(() => seen.push(store.getState()));
+      store.set(1);
+      store.update(value => {
+        store.update(next => next + 10);
+        if (flushInside) controls.flush();
+        return value + 1;
+      });
+
+      controls.flush();
+
+      expect(store.getState()).toBe(2);
+      expect(controls.pending()).toBeTrue();
+      controls.flush();
+      expect(store.getState()).toBe(12);
+      expect(seen).toEqual([1, 2, 12]);
+      expect(controls.pending()).toBeFalse();
+      dispose(store);
+    });
+  }
+}
+
 test('debounce: fixed and quiet windows receive another call -> only quiet restarts the deadline', () => {
   const fixed = debounce(10)(new Store(0));
   const quiet = debounce(10, { mode: 'quiet' })(new Store(0));

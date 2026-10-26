@@ -83,6 +83,8 @@ Function updates are evaluated in order against the latest committed state at fl
 
 The batch is detached before evaluation. Reentrant writes from an updater or subscriber create a new window and survive the old flush, including when that flush throws. An updater error discards the detached batch without committing it; synchronous `flush()` propagates the error and timer expiry reports it through the host timer callback. Subscriber errors do not roll back an already committed value. A leading error leaves its cooldown open until expiry, flush, or cancel.
 
+During a trailing flush, reentrant writes queue for the next trailing window even when leading is enabled. A nested `flush()` leaves that work queued until the current flush returns; a later flush or deadline commits it against the resulting state.
+
 ## Timing caveat
 
 Until a trailing commit, `getState()` still returns the previous committed state. Do not use trailing debounce for state where every write must be immediately observable.

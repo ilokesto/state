@@ -83,6 +83,8 @@ Function update는 flush 시점의 최신 commit state에서 순서대로 평가
 
 평가 전에 batch를 분리합니다. Updater나 subscriber의 재진입 쓰기는 새 window를 만들고 기존 flush가 throw해도 유지됩니다. Updater 오류는 분리된 batch를 commit 없이 버립니다. 동기 `flush()`는 오류를 전파하고 timer 만료 시에는 host timer callback으로 보고합니다. Subscriber 오류는 이미 commit된 값을 rollback하지 않습니다. Leading 오류 후 cooldown은 만료, flush 또는 cancel까지 유지됩니다.
 
+Trailing flush 중 재진입한 쓰기는 leading이 켜져 있어도 다음 trailing window에 대기합니다. 중첩 `flush()`는 현재 flush가 반환될 때까지 새 작업을 대기 상태로 남깁니다. 이후 flush 또는 만료 시점에 갱신된 state를 기준으로 commit합니다.
+
 ## Timing 주의점
 
 Trailing commit 전까지 `getState()`는 이전 commit state를 반환합니다. 모든 쓰기를 즉시 관찰해야 하는 state에는 trailing debounce를 쓰지 마세요.
