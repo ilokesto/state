@@ -85,6 +85,11 @@ export const pipeTypeFixtureCases = {
     expectedMarkers: ['__persistMigrationChainError'],
     kind: 'invalid',
   },
+  'invalid-persist-projection': {
+    diagnosticCount: 4,
+    expectedMarkers: ['No overload matches this call', '__persistDecoderStateError'],
+    kind: 'invalid',
+  },
   'invalid-persist-session-migrate': {
     diagnosticCount: 1,
     expectedMarkers: ['PersistStorage'],
@@ -125,6 +130,7 @@ export const pipeTypeFixtureCases = {
   'valid-conflicts': { kind: 'valid' },
   'valid-metadata': { kind: 'valid' },
   'valid-persist-safe': { kind: 'valid' },
+  'valid-persist-projection': { kind: 'valid' },
   'valid-types': { kind: 'valid' },
   'valid-validate': { kind: 'valid' },
 } as const satisfies Record<string, PipeTypeFixtureCase>;

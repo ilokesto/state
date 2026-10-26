@@ -3,7 +3,7 @@ import { getStore } from '../../lib/getStore.js';
 import { definePipeableMiddleware } from '../../utils/pipe/metadata.js';
 import type { PipeableMiddleware } from '../../utils/pipe/metadata.js';
 import type { PipeCapability, PipeMiddleware, PipeMiddlewareMetadata } from '../../utils/pipe/types.js';
-import type { MigrationFn, PersistControls, PersistStore, SafePersistConfig } from './Persist.js';
+import type { MigrationFn, PersistControls, PersistStore, ProjectedPersistConfig, SafePersistConfig } from './Persist.js';
 import { createPersistRuntime } from './createPersistRuntime.js';
 
 type PersistCapability = PipeCapability<
@@ -17,9 +17,12 @@ const persistCapability: PersistCapability = {
     persist: {
       rehydrate: async () => undefined,
       flush: async () => undefined,
+      pause: () => undefined,
+      resume: () => undefined,
+      retry: async () => undefined,
       clearStorage: async () => undefined,
       getStatus: () => ({
-        hydration: 'idle', saving: 'idle', pending: false, disposed: false, error: null,
+        hydration: 'idle', saving: 'idle', pending: false, paused: false, disposed: false, error: null,
       } as const),
       subscribe: () => () => undefined,
     },
@@ -48,20 +51,36 @@ type SafeCurriedPersist<State> = PipeableMiddleware<
  * await store.persist.rehydrate();
  * await store.persist.flush();
  */
+export function persist<State, Persisted, const Steps extends readonly MigrationFn[]>(
+  options: ProjectedPersistConfig<State, Persisted, Steps>,
+): SafeCurriedPersist<State>;
+/**
+ * Persists the complete decoded state without projection or implicit merging.
+ * @param options - Entry key, lazy storage factory, decoder, and save controls.
+ * @returns Middleware adding explicit hydration and persistence controls.
+ */
 export function persist<DecodedState, const Steps extends readonly MigrationFn[]>(
-  options: SafePersistConfig<DecodedState, Steps>,
+  options: SafePersistConfig<DecodedState, Steps> & { readonly project?: never; readonly restore?: never },
 ): SafeCurriedPersist<DecodedState>;
-export function persist<DecodedState, const Steps extends readonly MigrationFn[]>(
-  options: SafePersistConfig<DecodedState, Steps>,
+export function persist<State, Persisted, const Steps extends readonly MigrationFn[]>(
+  options: SafePersistConfig<State, Steps> | ProjectedPersistConfig<State, Persisted, Steps>,
 ): object {
+  const wait = options.saveDebounceMs ?? 0;
+  if (!Number.isFinite(wait) || wait < 0 || wait > 2_147_483_647) {
+    throw new RangeError('saveDebounceMs must be between 0 and 2147483647');
+  }
   return definePipeableMiddleware(
-    (initialState: DecodedState | Store<DecodedState>) => {
+    (initialState: State | Store<State>) => {
       const store = getStore(initialState);
-      const controls = createPersistRuntime(store, options);
+      const controls = 'project' in options
+        ? createPersistRuntime(store, options)
+        : createPersistRuntime(store, {
+          ...options, project: (state: State) => state, restore: (state: State) => state,
+        });
       Object.defineProperty(store, 'persist', {
         configurable: false, enumerable: true, value: controls, writable: false,
       });
-      return store as PersistStore<DecodedState>;
+      return store as PersistStore<State>;
     },
     {
       adds: [persistCapability], after: ['@ilokesto/state/debounce'], before: [],
