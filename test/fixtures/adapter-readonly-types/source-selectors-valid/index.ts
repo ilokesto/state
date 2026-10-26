@@ -1,0 +1,70 @@
+import type { ReadableStore, StoreApi } from '@ilokesto/store';
+import * as angular from '../../../../src/core/Angular';
+import * as react from '../../../../src/core/React';
+import * as solid from '../../../../src/core/Solid';
+import * as svelte from '../../../../src/core/Svelte';
+import * as vue from '../../../../src/core/Vue';
+
+type State = { count: number };
+declare const readable: ReadableStore<State>;
+declare const writable: StoreApi<State>;
+const select = (state: Readonly<State>) => ({ count: state.count });
+const equality = (previous: ReturnType<typeof select>, next: ReturnType<typeof select>) => previous.count === next.count;
+
+const angularReadonly = angular.bindReadonly(readable);
+angularReadonly.readOnly().count.toFixed();
+angularReadonly(select, equality).state().count.toFixed();
+angularReadonly().state().count.toFixed();
+declare const angularOptions: angular.AngularOptions;
+angularReadonly(select, undefined, angularOptions);
+const angularWritable = angular.bind(writable);
+angularWritable(select, undefined, angularOptions);
+angularWritable(select, equality);
+angularWritable.writeOnly()({ count: 2 });
+const angularReducer = angular.create((state: State, action: { type: 'increment' }) => ({ count: state.count + (action.type === 'increment' ? 1 : 0) }), { count: 0 });
+angularReducer(select, equality);
+angularReducer.writeOnly()({ type: 'increment' });
+
+const reactReadonly = react.bindReadonly(readable);
+reactReadonly.readOnly().count.toFixed();
+reactReadonly(select, equality).count.toFixed();
+reactReadonly().count.toFixed();
+const reactWritable = react.bind(writable);
+reactWritable(select, equality);
+reactWritable.writeOnly()({ count: 2 });
+const reactReducer = react.create((state: State, action: { type: 'increment' }) => ({ count: state.count + (action.type === 'increment' ? 1 : 0) }), { count: 0 });
+reactReducer(select, equality);
+reactReducer.writeOnly()({ type: 'increment' });
+
+const solidReadonly = solid.bindReadonly(readable);
+solidReadonly.readOnly().count.toFixed();
+solidReadonly(select, equality).state().count.toFixed();
+solidReadonly().state().count.toFixed();
+const solidWritable = solid.bind(writable);
+solidWritable(select, equality);
+solidWritable.writeOnly()({ count: 2 });
+const solidReducer = solid.create((state: State, action: { type: 'increment' }) => ({ count: state.count + (action.type === 'increment' ? 1 : 0) }), { count: 0 });
+solidReducer(select, equality);
+solidReducer.writeOnly()({ type: 'increment' });
+
+const svelteReadonly = svelte.bindReadonly(readable);
+svelteReadonly.readOnly().count.toFixed();
+svelteReadonly.select(select, equality).subscribe(value => value.count.toFixed());
+svelteReadonly.subscribe(value => value.count.toFixed());
+const svelteWritable = svelte.bind(writable);
+svelteWritable.select(select, equality);
+svelteWritable.writeOnly()({ count: 2 });
+const svelteReducer = svelte.create((state: State, action: { type: 'increment' }) => ({ count: state.count + (action.type === 'increment' ? 1 : 0) }), { count: 0 });
+svelteReducer.select(select, equality);
+svelteReducer.writeOnly()({ type: 'increment' });
+
+const vueReadonly = vue.bindReadonly(readable);
+vueReadonly.readOnly().count.toFixed();
+vueReadonly(select, equality).state.value.count.toFixed();
+vueReadonly().state.value.count.toFixed();
+const vueWritable = vue.bind(writable);
+vueWritable(select, equality);
+vueWritable.writeOnly()({ count: 2 });
+const vueReducer = vue.create((state: State, action: { type: 'increment' }) => ({ count: state.count + (action.type === 'increment' ? 1 : 0) }), { count: 0 });
+vueReducer(select, equality);
+vueReducer.writeOnly()({ type: 'increment' });
