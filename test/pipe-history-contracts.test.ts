@@ -1,13 +1,17 @@
 import { expect, jest, test } from 'bun:test';
 
-import { debounce, history } from '../src/middleware';
+import { Store } from '@ilokesto/store';
+import { debounce, history, HistoryConfigurationError } from '../src/middleware';
 import type { HistoryControls } from '../src/middleware';
 import { PipeConfigurationError } from '../src/utils/pipe/errors';
 import { definePipeableMiddleware, getPipeableMiddlewareMetadata } from '../src/utils/pipe/metadata';
 import { pipe } from '../src/utils/pipe';
 import type { PipeAnyMiddleware } from '../src/utils/pipe/types';
 
-const controlKeys = ['undo', 'redo', 'canUndo', 'canRedo', 'clearHistory'] as const satisfies readonly (keyof HistoryControls)[];
+const controlKeys = [
+  'undo', 'redo', 'canUndo', 'canRedo', 'clearHistory', 'group',
+  'pauseHistory', 'resumeHistory', 'getHistoryStatus', 'subscribeHistory',
+] as const satisfies readonly (keyof HistoryControls)[];
 
 function useAtRuntime(builder: object, middleware: object): object {
   const use = Reflect.get(builder, 'use');
@@ -71,6 +75,25 @@ test('Given invalid limits, when history is requested, then it rejects before co
   for (const limit of [-1, 0.5, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
     expect(() => history({ limit })).toThrow(RangeError);
   }
+});
+
+test('history: an existing control property -> rejects setup without overwriting the property', () => {
+  for (const key of controlKeys) {
+    const store = new Store({ value: 0 });
+    const existing = () => undefined;
+    Object.defineProperty(store, key, { value: existing });
+
+    expect(() => history()(store)).toThrow(HistoryConfigurationError);
+
+    expect(Reflect.get(store, key)).toBe(existing);
+    store.set({ value: 1 });
+    expect(store.getState()).toEqual({ value: 1 });
+  }
+});
+
+test('history: only one selection hook supplied at runtime -> rejects the incomplete restoration contract', () => {
+  expect(() => Reflect.apply(history, undefined, [{ select: (state: number) => state }])).toThrow(TypeError);
+  expect(() => Reflect.apply(history, undefined, [{ restore: (_state: number, next: number) => next }])).toThrow(TypeError);
 });
 
 test('Given history pipe metadata, when it is registered and composed, then capability shape and duplicate policy are exact', () => {

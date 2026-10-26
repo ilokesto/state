@@ -8,6 +8,7 @@
   },
   "include": ["../src", "."],
   "exclude": [
+    "fixtures/history-types/invalid",
     "fixtures/adapter-readonly-types/source-selectors-invalid",
     "fixtures/adapter-readonly-types/dist-selectors-invalid",
     "fixtures/adapter-readonly-types/source-invalid",
