@@ -1,4 +1,4 @@
-import type { StoreApi, ReadableStore } from '@ilokesto/store';
+import type { EqualityFn, ReadableStore, StoreApi } from '@ilokesto/store';
 import { createSignal, getOwner, onCleanup } from 'solid-js';
 
 import type { ReducerAction } from '../../types/ReduceFn.js';
@@ -6,9 +6,9 @@ import { createDispatch } from '../shared/createDispatch.js';
 import { identity } from '../shared/identity.js';
 import { readonlySnapshot, type ReadonlySnapshot } from '../shared/readonlySnapshot.js';
 import { shallow } from '../shared/shallow.js';
-import type { Selector } from './types.js';
+import type { Selector, UseReadonlyState } from './types.js';
 
-function createSelection<T, S>(store: ReadableStore<T>, selector: Selector<T, S>) {
+function createSelection<T, S>(store: ReadableStore<T>, selector: Selector<T, S>, equality: EqualityFn<S> = shallow) {
   if (!getOwner()) {
     throw new Error(
       '[@ilokesto/state/solid] create() returned accessors must run inside a reactive owner such as a component or createRoot(). Use readOnly() for synchronous reads outside Solid scope.',
@@ -24,7 +24,7 @@ function createSelection<T, S>(store: ReadableStore<T>, selector: Selector<T, S>
     (nextSelection) => {
       setSelection(() => nextSelection);
     },
-    shallow,
+    equality,
   );
   onCleanup(unsubscribe);
 
@@ -35,9 +35,9 @@ export function createUseAccessor<T, Action extends ReducerAction>(store: StoreA
   const write = store.setState.bind(store);
 
   return Object.assign(
-    <S = T>(selector?: Selector<T, S>) => {
+    <S = T>(selector?: Selector<T, S>, equality?: EqualityFn<S>) => {
       const select = (selector ?? identity<ReadonlySnapshot<T>>) as Selector<T, S>;
-      const state = createSelection(store, select);
+      const state = createSelection(store, select, equality);
 
       if (isReduce) {
         return {
@@ -54,6 +54,21 @@ export function createUseAccessor<T, Action extends ReducerAction>(store: StoreA
     {
       writeOnly: () => (isReduce ? dispatch : write),
       readOnly: <S = T>(selector?: Selector<T, S>): S => {
+        const select = (selector ?? identity<ReadonlySnapshot<T>>) as Selector<T, S>;
+        return select(readonlySnapshot(store.getState()));
+      },
+    },
+  );
+}
+
+export function createReadonlyAccessor<T>(store: ReadableStore<T>): UseReadonlyState<T> {
+  return Object.assign(
+    <S = ReadonlySnapshot<T>>(selector?: Selector<T, S>, equality?: EqualityFn<S>) => {
+      const select = (selector ?? identity<ReadonlySnapshot<T>>) as Selector<T, S>;
+      return { state: createSelection(store, select, equality) };
+    },
+    {
+      readOnly: <S = ReadonlySnapshot<T>>(selector?: Selector<T, S>): S => {
         const select = (selector ?? identity<ReadonlySnapshot<T>>) as Selector<T, S>;
         return select(readonlySnapshot(store.getState()));
       },
