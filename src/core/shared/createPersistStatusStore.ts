@@ -12,7 +12,8 @@ export function createPersistStatusStore(
   ): () => void {
     const store = new Store(persist.getStatus());
     const disconnect = connect(store);
-    const unsubscribe = persist.subscribe(status => store.set(status));
+    // Nested publications can finish before an older callback reaches this view.
+    const unsubscribe = persist.subscribe(() => store.set(persist.getStatus()));
     // Reconcile a change between the first read and attaching the source.
     store.set(persist.getStatus());
     return () => {

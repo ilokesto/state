@@ -4,6 +4,36 @@ import { dispose, persist } from '../src/middleware';
 import { pipe } from '../src/utils/pipe';
 import { AsyncMemoryStorage, decodeCounter } from './helpers/persistStorage';
 
+test('status bridge: hydration listener commits reentrantly -> full and selected views retain current pending state', async () => {
+  const storage = new AsyncMemoryStorage();
+  const store = pipe.use(persist({ key: 'counter', storage: () => storage, decode: decodeCounter }))
+    .create({ count: 0 });
+  store.persist.pause();
+  let edited = false;
+  const stopWriter = store.persist.subscribe(snapshot => {
+    if (snapshot.hydration === 'hydrated' && !edited) {
+      edited = true;
+      store.set({ count: 1 });
+    }
+  });
+  const status = createPersistStatusStore(store.persist);
+  let full = status.getState();
+  let pending = full.pending;
+  const stopFull = status.subscribeSelector(value => value, value => { full = value; });
+  const stopPending = status.subscribeSelector(value => value.pending, value => { pending = value; });
+
+  await store.persist.rehydrate();
+
+  expect(store.getState()).toEqual({ count: 1 });
+  expect(store.persist.getStatus().pending).toBe(true);
+  expect(full).toBe(store.persist.getStatus());
+  expect(pending).toBe(true);
+  stopFull();
+  stopPending();
+  stopWriter();
+  dispose(store);
+});
+
 test('status bridge: independent subscriptions -> reconnects at current status without owning persistence', async () => {
   const storage = new AsyncMemoryStorage();
   const store = pipe.use(persist({ key: 'counter', storage: () => storage, decode: decodeCounter }))
