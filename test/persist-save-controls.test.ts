@@ -174,6 +174,103 @@ test('saveDebounceMs: invalid duration -> rejects configuration before adapter a
   expect(adapter.reads).toBe(0);
 });
 
+test('saveDebounceMs: status listener flush fails -> waits for explicit recovery without automatic retry', async () => {
+  jest.useFakeTimers();
+  const adapter = new AsyncMemoryStorage();
+  let attempts = 0;
+  adapter.setItem = async (_key, value) => {
+    attempts += 1;
+    if (attempts === 1) {
+      throw new Error('offline');
+    }
+    adapter.value = value;
+  };
+  const store = pipe.use(persist({
+    key: 'counter', storage: () => adapter, decode: decodeCounter, saveDebounceMs: 100,
+  })).create({ count: 0 });
+  const flushed = deferred<unknown>();
+  let requested = false;
+  const stop = store.persist.subscribe(status => {
+    if (status.pending && !requested) {
+      requested = true;
+      void store.persist.flush().then(flushed.resolve, flushed.resolve);
+    }
+  });
+  try {
+    await store.persist.rehydrate();
+    store.set({ count: 1 });
+    expect(await flushed.promise).toMatchObject({ code: 'STORAGE' });
+
+    jest.advanceTimersByTime(100);
+
+    expect(store.persist.getStatus()).toMatchObject({
+      saving: 'error', pending: true, error: { code: 'STORAGE' },
+    });
+    expect(attempts).toBe(1);
+    await store.persist.retry();
+    expect(attempts).toBe(2);
+    expect(adapter.value).toEqual({ state: { count: 1 }, version: 0 });
+  } finally {
+    stop();
+    dispose(store);
+    jest.clearAllTimers();
+    jest.useRealTimers();
+  }
+});
+
+test('saveDebounceMs: newer commit during forced write -> retains its own debounce after the old failure', async () => {
+  jest.useFakeTimers();
+  const adapter = new AsyncMemoryStorage();
+  const started = deferred<void>();
+  const release = deferred<void>();
+  const flushed = deferred<unknown>();
+  const saved = deferred<void>();
+  let attempts = 0;
+  adapter.setItem = async (_key, value) => {
+    attempts += 1;
+    if (attempts === 1) {
+      started.resolve();
+      await release.promise;
+      throw new Error('offline');
+    }
+    adapter.value = value;
+  };
+  const store = pipe.use(persist({
+    key: 'counter', storage: () => adapter, decode: decodeCounter, saveDebounceMs: 100,
+  })).create({ count: 0 });
+  let requested = false;
+  const stop = store.persist.subscribe(status => {
+    if (status.pending && !requested) {
+      requested = true;
+      void store.persist.flush().then(flushed.resolve, flushed.resolve);
+    }
+    if (requested && !status.pending) {
+      saved.resolve();
+    }
+  });
+  try {
+    await store.persist.rehydrate();
+    store.set({ count: 1 });
+    await started.promise;
+    store.set({ count: 2 });
+    release.resolve();
+    expect(await flushed.promise).toMatchObject({ code: 'STORAGE' });
+
+    jest.advanceTimersByTime(99);
+    expect(attempts).toBe(1);
+    jest.advanceTimersByTime(1);
+    await saved.promise;
+
+    expect(attempts).toBe(2);
+    expect(adapter.value).toEqual({ state: { count: 2 }, version: 0 });
+  } finally {
+    stop();
+    dispose(store);
+    jest.clearAllTimers();
+    jest.useRealTimers();
+  }
+});
+
 test('dispose: paused retry active with clear queued -> rejects both obligations and ignores late completion', async () => {
   const adapter = new AsyncMemoryStorage();
   const started = deferred<void>();

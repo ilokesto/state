@@ -1,4 +1,4 @@
-import type { StoreApi, ReadableStore } from '@ilokesto/store';
+import type { EqualityFn, ReadableStore, StoreApi } from '@ilokesto/store';
 import { DestroyRef, inject, signal } from '@angular/core';
 
 import type { ReducerAction } from '../../types/ReduceFn.js';
@@ -6,7 +6,7 @@ import { createDispatch } from '../shared/createDispatch.js';
 import { identity } from '../shared/identity.js';
 import { readonlySnapshot, type ReadonlySnapshot } from '../shared/readonlySnapshot.js';
 import { shallow } from '../shared/shallow.js';
-import type { AngularOptions, Selector } from './types.js';
+import type { AngularOptions, Selector, UseReadonlyState } from './types.js';
 
 function resolveDestroyRef(options?: AngularOptions): DestroyRef {
   if (options?.destroyRef) {
@@ -22,7 +22,7 @@ function resolveDestroyRef(options?: AngularOptions): DestroyRef {
   }
 }
 
-function createSelection<T, S>(store: ReadableStore<T>, selector: Selector<T, S>, options?: AngularOptions) {
+function createSelection<T, S>(store: ReadableStore<T>, selector: Selector<T, S>, options?: AngularOptions, equality: EqualityFn<S> = shallow) {
   const destroyRef = resolveDestroyRef(options);
   const selection = signal(selector(readonlySnapshot(store.getState())));
   const unsubscribe = store.subscribeSelector(
@@ -30,7 +30,7 @@ function createSelection<T, S>(store: ReadableStore<T>, selector: Selector<T, S>
     (nextSelection) => {
       selection.set(nextSelection);
     },
-    shallow,
+    equality,
   );
 
   destroyRef.onDestroy(unsubscribe);
@@ -43,10 +43,15 @@ export function createUseSignal<T, Action extends ReducerAction>(store: StoreApi
   const subscribe = store.subscribe.bind(store);
 
   return Object.assign(
-    <S = T>(selectorOrOptions?: Selector<T, S> | AngularOptions, maybeOptions?: AngularOptions) => {
+    <S = T>(selectorOrOptions?: Selector<T, S> | AngularOptions, equalityOrOptions?: EqualityFn<S> | AngularOptions, options?: AngularOptions) => {
       const state =
         typeof selectorOrOptions === 'function'
-          ? createSelection(store, selectorOrOptions, maybeOptions)
+          ? createSelection(
+              store,
+              selectorOrOptions,
+              typeof equalityOrOptions === 'function' ? options : (equalityOrOptions ?? options),
+              typeof equalityOrOptions === 'function' ? equalityOrOptions : shallow,
+            )
           : createSelection(store, identity<ReadonlySnapshot<T>>, selectorOrOptions);
 
       if (isReduce) {
@@ -66,6 +71,30 @@ export function createUseSignal<T, Action extends ReducerAction>(store: StoreApi
     {
       writeOnly: () => (isReduce ? dispatch : write),
       readOnly: <S = T>(selector?: Selector<T, S>): S => {
+        const select = (selector ?? identity<ReadonlySnapshot<T>>) as Selector<T, S>;
+        return select(readonlySnapshot(store.getState()));
+      },
+      subscribe,
+    },
+  );
+}
+
+export function createReadonlySignal<T>(store: ReadableStore<T>): UseReadonlyState<T> {
+  const subscribe = store.subscribe.bind(store);
+  return Object.assign(
+    <S = ReadonlySnapshot<T>>(selectorOrOptions?: Selector<T, S> | AngularOptions, equalityOrOptions?: EqualityFn<S> | AngularOptions, options?: AngularOptions) => {
+      const state = typeof selectorOrOptions === 'function'
+        ? createSelection(
+            store,
+            selectorOrOptions,
+            typeof equalityOrOptions === 'function' ? options : (equalityOrOptions ?? options),
+            typeof equalityOrOptions === 'function' ? equalityOrOptions : shallow,
+          )
+        : createSelection(store, identity<ReadonlySnapshot<T>>, selectorOrOptions);
+      return { state, subscribe };
+    },
+    {
+      readOnly: <S = ReadonlySnapshot<T>>(selector?: Selector<T, S>): S => {
         const select = (selector ?? identity<ReadonlySnapshot<T>>) as Selector<T, S>;
         return select(readonlySnapshot(store.getState()));
       },

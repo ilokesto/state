@@ -304,6 +304,68 @@ unsubscribe();
 
 Errors expose `operation`, a stable `code`, and the original `cause`. Rejected reads, migration, decoding, and validation preserve the current state. A notification failure after a commit does not roll back that commit or justify applying restoration again.
 
+## Framework status bindings
+
+All five framework subpaths export `bindPersistStatus(persist)`. Pass
+`editor.persist`, not the state store. Its parameter is
+`Pick<PersistControls, 'getStatus' | 'subscribe'>`; its result is that adapter's
+`UseReadonlyState<PersistStatus>`. No writer or lifecycle controls are exposed.
+The existing selector and optional equality arguments are preserved, including
+Angular's `{ destroyRef }` options. Omitting equality uses the adapter's shallow
+comparison; pass a custom equality function for nested selections.
+
+For a saving indicator, extend the `editor` example with this React component:
+
+```ts lineNumbers
+import { createElement } from 'react';
+import { bindPersistStatus } from '@ilokesto/state/react';
+
+const useEditorStatus = bindPersistStatus(editor.persist);
+
+export function SaveStatus() {
+  const status = useEditorStatus();
+  const label = status.error ? 'Save failed'
+    : status.hydration !== 'hydrated' ? 'Loading'
+    : status.saving === 'writing' ? 'Saving'
+    : status.pending ? 'Unsaved changes' : 'Saved';
+  return createElement('output', { 'aria-live': 'polite' }, label);
+}
+```
+
+The other adapters expose the same status through their existing readonly shapes:
+
+```ts
+// Vue setup() or effectScope():
+const useStatus = bindPersistStatus(editor.persist); // @ilokesto/state/vue
+const { state: saving } = useStatus(status => status.saving); // saving.value
+
+// Angular injection context, or pass an owned DestroyRef:
+const useStatus = bindPersistStatus(editor.persist); // @ilokesto/state/angular
+const { state: saving } = useStatus(status => status.saving, { destroyRef }); // saving()
+
+// Solid component or createRoot():
+const useStatus = bindPersistStatus(editor.persist); // @ilokesto/state/solid
+const { state: saving } = useStatus(status => status.saving); // saving()
+
+// Svelte: use $saving in a component, or unsubscribe a manual subscription.
+const status = bindPersistStatus(editor.persist); // @ilokesto/state/svelte
+const saving = status.select(snapshot => snapshot.saving);
+```
+
+These are independent snippets; import `bindPersistStatus` from the indicated
+subpath. Full status includes `hydration`, `saving`, `pending`, `paused`,
+`disposed`, and `error`. `binding.readOnly()` always reads current status outside
+framework scope. React's server snapshot is the status captured when the binding
+was created; create matching bindings before client restoration for SSR.
+
+Creating a binding or calling `readOnly()` does not subscribe. Each active
+framework subscription owns its own status connection and registry-store selector
+filter. Unmount, scope disposal, `DestroyRef`, or Svelte unsubscribe releases that
+connection. Multiple views can bind the same controls independently. There is no
+factory-level connection to dispose, and disposing a view never disposes the
+borrowed persistence or state store. The store owner still starts hydration,
+handles rejected operations, flushes, and disposes the store.
+
 ## SSR and ownership
 
 Use identical initial state on server and client. Start `rehydrate()` in a client effect, handle its rejected promise, and gate editing until `getStatus().hydration === 'hydrated'` if the feature does not offer conflict resolution. Subscribe before starting restoration so the UI sees every transition. No `skipHydration` option is needed.

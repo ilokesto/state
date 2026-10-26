@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { createRoot } from 'solid-js';
 
-import { create } from '../../src/core/Solid';
+import { create, bind, bindReadonly } from '../../src/core/Solid';
+import { readableSource, selectNestedCount, equalNestedCount } from './readableSource';
 import {
   counterReducer,
   initialState,
@@ -101,3 +102,34 @@ describe('Solid selector subscriptions', () => {
     expect(store.activeSelectorSubscriptions).toBe(0);
   });
 });
+
+for (const readonly of [false, true]) {
+  test('custom equality: '+ (readonly ? 'readable' : 'writable') + ' binding -> nested equal updates retain selection and cleanup subscriptions', () => {
+    const { source, backing } = readableSource();
+    const adapter = readonly ? bindReadonly(source) : bind(backing);
+    let dispose = () => {};
+    const selected = createRoot((rootDispose) => {
+      dispose = rootDispose;
+      return adapter(selectNestedCount, equalNestedCount);
+    });
+    const before = selected.state();
+
+    backing.setState(state => ({ ...state, label: 'unrelated' }));
+
+    expect(backing.selectorNotifications).toBe(0);
+    expect(selected.state()).toBe(before);
+    if (readonly) {
+      expect('writeOnly' in adapter).toBe(false);
+      expect('setState' in selected).toBe(false);
+      expect('dispatch' in selected).toBe(false);
+    }
+    backing.setState(state => ({ ...state, count: 2 }));
+    expect(backing.selectorNotifications).toBe(1);
+    expect(selected.state()).toEqual({ nested: { count: 2 } });
+    dispose();
+    expect(backing.activeSelectorSubscriptions).toBe(0);
+    backing.setState(state => ({ ...state, count: 3 }));
+    expect(backing.selectorNotifications).toBe(1);
+    expect(adapter.readOnly(state => state.count)).toBe(3);
+  });
+}

@@ -304,6 +304,68 @@ unsubscribe();
 
 오류는 `operation`, 안정적인 `code`, 원래의 `cause`를 제공합니다. 읽기, migration, decode, 검증 실패는 현재 상태를 유지합니다. commit 후 알림 실패는 commit을 롤백하거나 복원을 다시 적용할 이유가 되지 않습니다.
 
+## 프레임워크 상태 바인딩
+
+다섯 프레임워크 서브패스 모두 `bindPersistStatus(persist)`를 공개합니다.
+상태 스토어 대신 `editor.persist`를 전달하세요. 매개변수는
+`Pick<PersistControls, 'getStatus' | 'subscribe'>`이고 반환값은 해당 어댑터의
+`UseReadonlyState<PersistStatus>`입니다. writer나 수명주기 제어는 노출하지 않습니다.
+기존 selector와 선택적 equality 인수, Angular의 `{ destroyRef }` 옵션을
+그대로 지원합니다. equality를 생략하면 어댑터의 얕은 비교를 사용하며 중첩
+선택값에는 사용자 정의 equality를 전달할 수 있습니다.
+
+앞의 `editor` 예제에 다음 React 컴포넌트를 추가하면 저장 상태를 표시합니다.
+
+```ts lineNumbers
+import { createElement } from 'react';
+import { bindPersistStatus } from '@ilokesto/state/react';
+
+const useEditorStatus = bindPersistStatus(editor.persist);
+
+export function SaveStatus() {
+  const status = useEditorStatus();
+  const label = status.error ? '저장 실패'
+    : status.hydration !== 'hydrated' ? '불러오는 중'
+    : status.saving === 'writing' ? '저장 중'
+    : status.pending ? '저장하지 않은 변경' : '저장됨';
+  return createElement('output', { 'aria-live': 'polite' }, label);
+}
+```
+
+다른 어댑터도 기존 readonly 반환 형태로 같은 상태를 제공합니다.
+
+```ts
+// Vue setup() 또는 effectScope():
+const useStatus = bindPersistStatus(editor.persist); // @ilokesto/state/vue
+const { state: saving } = useStatus(status => status.saving); // saving.value
+
+// Angular 주입 컨텍스트 또는 소유한 DestroyRef 전달:
+const useStatus = bindPersistStatus(editor.persist); // @ilokesto/state/angular
+const { state: saving } = useStatus(status => status.saving, { destroyRef }); // saving()
+
+// Solid 컴포넌트 또는 createRoot():
+const useStatus = bindPersistStatus(editor.persist); // @ilokesto/state/solid
+const { state: saving } = useStatus(status => status.saving); // saving()
+
+// Svelte: 컴포넌트에서는 $saving, 수동 구독은 unsubscribe로 해제합니다.
+const status = bindPersistStatus(editor.persist); // @ilokesto/state/svelte
+const saving = status.select(snapshot => snapshot.saving);
+```
+
+각 코드는 독립된 조각이며 표시한 서브패스에서 `bindPersistStatus`를 가져옵니다.
+전체 상태에는 `hydration`, `saving`, `pending`, `paused`, `disposed`, `error`가
+포함됩니다. `binding.readOnly()`는 프레임워크 scope 밖에서도 항상 현재 상태를
+읽습니다. React 서버 스냅샷은 바인딩 생성 시점의 상태이므로 SSR에서는 클라이언트
+복원 전에 동일한 상태로 바인딩을 생성하세요.
+
+바인딩 생성이나 `readOnly()` 호출만으로는 구독하지 않습니다. 각 활성 프레임워크
+구독이 자신의 상태 연결과 registry-store selector 필터를 소유합니다.
+언마운트, scope 정리, `DestroyRef`, Svelte unsubscribe가 해당 연결을 해제합니다.
+같은 제어 객체에 여러 화면을 독립적으로 연결할 수 있습니다. 팩토리 수명의
+연결을 별도로 정리할 필요가 없으며 화면 정리는 빌려 쓴 영속화나 상태 스토어를
+종료하지 않습니다. 복원 시작, 거부된 작업 처리, flush, 스토어 정리는 계속
+스토어 소유자의 책임입니다.
+
 ## SSR과 소유권
 
 서버와 클라이언트에서 동일한 초기 상태를 사용하세요. 클라이언트 effect에서 `rehydrate()`를 시작하고 거부된 Promise를 처리합니다. 충돌 해결을 제공하지 않는 화면은 `getStatus().hydration === 'hydrated'`가 될 때까지 편집을 막으세요. 모든 전이를 관찰하도록 복원 시작 전에 구독합니다. `skipHydration` 옵션은 필요 없습니다.

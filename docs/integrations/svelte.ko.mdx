@@ -58,6 +58,31 @@ const setCounter = counter.writeOnly();
 setCounter((state) => ({ ...state, count: state.count + 1 }));
 ```
 
+## Custom equality와 readonly binding
+
+selector의 두 번째 인자로 `equality(previous, next)`를 전달할 수 있습니다. 생략하면 기존 shallow 비교를 사용합니다. `create`, `bind`, `bindReducer`의 writer와 반환 형태는 유지됩니다.
+
+`bindReadonly(source)`는 구조적 `ReadableStore<T>`를 받아 writer 없이 `Readable<ReadonlySnapshot<T>>`를 제공합니다. `UseReadonlyState<T>`도 같은 subpath에서 export합니다. `readOnly()`는 생명주기 밖에서 동기 snapshot을 읽습니다.
+
+```ts lineNumbers
+import type { ReadableStore } from '@ilokesto/store';
+import { bindReadonly } from '@ilokesto/state/svelte';
+
+declare const source: ReadableStore<{ count: number; label: string }>;
+const useCounter = bindReadonly(source);
+const select = (state: Readonly<{ count: number }>) => ({ nested: { count: state.count } });
+const equality = (previous: ReturnType<typeof select>, next: ReturnType<typeof select>) =>
+  previous.nested.count === next.nested.count;
+
+const count = useCounter.select(select, equality);
+const unsubscribe = count.subscribe(value => console.log(value.nested.count));
+unsubscribe();
+```
+
+select(selector, equality?)는 subscriber마다 현재 값을 즉시 전달하고 독립적으로 구독합니다. unsubscribe로 구독을 해제하세요. readonly binding에는 set/update/setState/dispatch/writeOnly가 없습니다.
+
+equality는 순수한 동등 관계여야 합니다. true를 반환하면 새 값은 전달되지 않고 이전 selection이 유지됩니다. readOnly()에는 비교가 적용되지 않습니다.
+
 ## 주의할 점
 
 - `subscribe`는 Svelte 기대에 맞게 현재 state로 subscriber를 즉시 호출합니다.
