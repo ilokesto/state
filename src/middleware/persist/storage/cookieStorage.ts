@@ -1,5 +1,6 @@
 import type { PersistStorageFactory } from './PersistStorage.js';
 import { serializeJsonValue } from './serializeJsonValue.js';
+import type { PersistCodec } from './PersistCodec.js';
 
 /**
  * Attributes shared by cookie writes and deletion.
@@ -7,6 +8,8 @@ import { serializeJsonValue } from './serializeJsonValue.js';
  * const options: CookieStorageOptions = { path: '/', sameSite: 'Lax', secure: true };
  */
 export type CookieStorageOptions = {
+  /** Explicit envelope serialization; omitted retains the existing JSON format. */
+  readonly codec?: PersistCodec;
   /** Cookie path. Defaults to `/`, matching the previous persist format. */
   readonly path?: string;
   /** Optional domain; omit for a host-only cookie. */
@@ -56,14 +59,14 @@ export function cookieStorage(options: CookieStorageOptions = {}): PersistStorag
       if (value === null) {
         return null;
       }
-      const parsed: unknown = JSON.parse(value);
+      const parsed: unknown = options.codec ? options.codec.deserialize(value) : JSON.parse(value);
       if (parsed === null) {
         throw new TypeError('Stored cookie must contain a persistence envelope');
       }
       return parsed;
     },
     async setItem(key, value) {
-      const serialized = serializeJsonValue(value);
+      const serialized = options.codec ? options.codec.serialize(value) : serializeJsonValue(value);
       document.cookie = `${key}=${encodeURIComponent(serialized)}${attributes}${lifetime}`;
       // Browsers silently reject oversized or disallowed cookies.
       if (readCookie(key) !== serialized) {

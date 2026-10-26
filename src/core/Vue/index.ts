@@ -8,6 +8,8 @@ export { bindResource } from './bindResource.js';
 export type { UseResource } from './bindResource.js';
 
 import { createFrameworkAdapter } from '../shared/createFrameworkAdapter.js';
+import { createPersistStatusStore } from '../shared/createPersistStatusStore.js';
+import type { PersistControls, PersistStatus } from '../../middleware/persist/Persist.js';
 import { createReadonlyComposable, createUseComposable } from './createUseComposable.js';
 
 /**
@@ -60,4 +62,11 @@ export function bindReducer<T, Action extends ReducerAction>(state: ReducerState
 /** Bind a structural readable store without exposing writers. */
 export function bindReadonly<T>(store: ReadableStore<T>): UseReadonlyState<T> {
   return createReadonlyComposable(store);
+}
+
+/** Bind borrowed persistence status; scope cleanup never disposes persistence. */
+export function bindPersistStatus(
+  persist: Pick<PersistControls, 'getStatus' | 'subscribe'>,
+): UseReadonlyState<PersistStatus> {
+  return bindReadonly(createPersistStatusStore(persist));
 }
