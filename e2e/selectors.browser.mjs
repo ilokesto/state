@@ -81,6 +81,29 @@ for (const readonly of [false, true]) {
 }
 
 for (const framework of ['react', 'vue', 'angular', 'solid', 'svelte']) {
+  test(framework + ': registry-derived family -> settles batches and releases only view ownership', { timeout: 15000 }, async () => {
+    const page = await browser.newPage();
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    try {
+      await page.goto(origin);
+      const result = await page.evaluate(async framework => {
+        const fixture = await import('/selectors.js');
+        return fixture.registryComposition(framework);
+      }, framework);
+
+      assert.deepEqual(result, {
+        initial: { count: 1, doubled: 2 }, skipped: true,
+        changed: { count: 3, doubled: 6 }, seen: [{ count: 3, doubled: 6 }],
+        connected: 1, remaining: 0, stopped: 3, reused: true,
+        parent: { count: 9, other: 1 }, exposed: [],
+      });
+      assert.deepEqual(errors, []);
+    } finally {
+      await page.close();
+    }
+  });
+
   test(framework + ': persistence binding -> real transitions equality and borrowed cleanup', { timeout: 15000 }, async () => {
     const page = await browser.newPage();
     const errors = [];

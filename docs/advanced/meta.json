@@ -4,6 +4,7 @@
   "pages": [
     "migration",
     "selector-semantics",
+    "store-composition",
     "scopes-ssr",
     "persist-migrations"
   ]
