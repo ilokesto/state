@@ -11,7 +11,7 @@ Public entrypoint 경로는 `state/package.json`의 exports가 기준입니다. 
 
 | Import | Purpose |
 |---|---|
-| `@ilokesto/state` | 프레임워크 독립적인 `Store`, `createStore`, `createReducer`, `pipe`, `definePipeableMiddleware`, `PipeConfigurationError`, `dispose`와 공개 상태 계약을 내보냅니다. |
+| `@ilokesto/state` | 프레임워크 독립적인 `Store`, `createStore`, `createReducer`, `createResource`, `createEffect`, `listenActions`, `pipe`, `definePipeableMiddleware`, `PipeConfigurationError`, `dispose`와 공개 상태 계약을 내보냅니다. |
 | `@ilokesto/state/react` | React `create()` adapter와 `UseState`, `UseReducer` type입니다. |
 | `@ilokesto/state/vue` | Vue `create()` adapter와 `UseState`, `UseReducer` type입니다. |
 | `@ilokesto/state/svelte` | Svelte `create()` adapter와 `UseState`, `UseReducer` type입니다. |
@@ -35,6 +35,11 @@ Public type은 `HistoryControls`, `HistoryOptions`, `HistoryStore`, `OnRehydrate
 Public type은 `Pipe`, `PipeAnyMiddleware`, `PipeBuilder`, `PipeCapability`, `PipeConfigurationErrorCode`, `PipeDuplicatePolicy`, `PipeMiddleware`, `PipeMiddlewareConflictDiagnostic`, `PipeMiddlewareMetadata`입니다.
 
 ## Root와 프레임워크 entrypoint
+
+비동기 action과 수명주기 소유권은 [비동기 리소스와 effect](/ko/state/guides/async-lifecycle)를 참고하세요.
+Root는 `Resource`, `ResourceState`, `ResourceResult`, `ResourceTask`,
+`ResourceContext`, `ResourceRunOptions`, `ActionSource`, `EffectCallback`,
+`EffectCleanup`, `EffectContext`, `EffectOptions`, `SelectorEffectOptions`도 export합니다.
 
 프레임워크 독립 생성 API는 root에서 가져오세요. `create`, `bind`, `bindReducer` 같은 프레임워크 adapter API는 root가 아니라 프레임워크 subpath에서 가져옵니다.
 
