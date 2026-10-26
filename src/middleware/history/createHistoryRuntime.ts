@@ -1,7 +1,7 @@
 import { Store } from '@ilokesto/store';
 import type { StoreCommit } from '@ilokesto/store';
 import { runWithStoreActionMetadata } from '../../lib/actionMetadata.js';
-import { registerRestoreBaseline, restoreSource } from '../../lib/restoreSource.js';
+import { devtoolsRestoreSource, registerRestoreBaseline, restoreSource } from '../../lib/restoreSource.js';
 import { registerStoreCleanup } from '../../lib/storeCleanup.js';
 import type { HistoryControls, HistoryStatus, HistoryStrategy } from '../history.js';
 
@@ -143,7 +143,7 @@ export function createHistoryRuntime<State, Selection, Patch>(
     const context = pendingContexts.get(commit.sequence) ?? activeContext;
     pendingContexts.delete(commit.sequence);
     if (disposed || commit.sequence <= baseline) return;
-    if (commit.source === restoreSource) {
+    if (commit.source === restoreSource || commit.source === devtoolsRestoreSource) {
       undoStack.length = 0;
       redoStack.length = 0;
       baseline = commit.sequence;

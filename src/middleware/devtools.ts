@@ -1,7 +1,7 @@
 import { Store } from '@ilokesto/store';
 import { getDispatchedStoreAction, getStoreActionMetadata } from '../lib/actionMetadata.js';
 import { getStore } from '../lib/getStore.js';
-import { resetRestoreBaseline, restoreSource } from '../lib/restoreSource.js';
+import { devtoolsRestoreSource, resetRestoreBaseline, restoreSource } from '../lib/restoreSource.js';
 import { validateState } from '../lib/stateValidation.js';
 import { registerStoreCleanup } from '../lib/storeCleanup.js';
 import { definePipeableMiddleware } from '../utils/pipe/metadata.js';
@@ -80,7 +80,6 @@ const applyDevtools = <T>(initialState: T | Store<T>, name: string, options: Dev
 
   let isDisposed = false;
   let isDispatchAction = false;
-  const jumpSource = Symbol('devtools jump');
   const activeDispatches = new Set<object>();
   const observations = new Map<number, DevtoolsObservation>();
   let activeObservation: DevtoolsObservation | undefined;
@@ -138,7 +137,7 @@ const applyDevtools = <T>(initialState: T | Store<T>, name: string, options: Dev
     const observation = observations.get(commit.sequence) ?? activeObservation;
     observedSequence = commit.sequence;
     observations.delete(commit.sequence);
-    if (isDisposed || commit.source === jumpSource || observation?.suppressed) return;
+    if (isDisposed || commit.source === devtoolsRestoreSource || observation?.suppressed) return;
     if (commit.source === restoreSource) {
       send(`${name}:persist/rehydrate`, commit.state);
       return;
@@ -188,7 +187,7 @@ const applyDevtools = <T>(initialState: T | Store<T>, name: string, options: Dev
         const validated = validateState(store, state as T);
         if ('issues' in validated) break;
         resetRestoreBaseline(store);
-        store.replaceState(validated.value, jumpSource);
+        store.replaceState(validated.value, devtoolsRestoreSource);
         break;
       }
       default:

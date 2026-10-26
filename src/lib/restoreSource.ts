@@ -1,5 +1,7 @@
 /** Internal identity shared by restoration observers, never a global mode. */
 export const restoreSource = Symbol('state restoration');
+/** Debugger restoration resets history but still needs normal persistence writes. */
+export const devtoolsRestoreSource = Symbol('devtools restoration');
 
 const baselines = new WeakMap<object, () => void>();
 
