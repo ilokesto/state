@@ -11,12 +11,12 @@ The ten public entrypoint paths are defined by this package's `package.json` exp
 
 | Import | Purpose |
 |---|---|
-| `@ilokesto/state` | Framework-neutral `Store`, `createStore`, `createReducer`, `pipe`, `definePipeableMiddleware`, `PipeConfigurationError`, and `dispose`, plus their public state contracts. |
-| `@ilokesto/state/react` | React `create`, `bind`, `bindReducer` and `UseState`, `UseReducer` types. |
-| `@ilokesto/state/vue` | Vue `create`, `bind`, `bindReducer` and `UseState`, `UseReducer` types. |
-| `@ilokesto/state/svelte` | Svelte `create`, `bind`, `bindReducer` and `UseState`, `UseReducer` types. |
-| `@ilokesto/state/solid` | Solid `create`, `bind`, `bindReducer` and `UseState`, `UseReducer` types. |
-| `@ilokesto/state/angular` | Angular `create`, `bind`, `bindReducer` and `AngularOptions`, `UseState`, `UseReducer` types. |
+| `@ilokesto/state` | Framework-neutral `Store`, `createStore`, `createReducer`, `createResource`, `createEffect`, `listenActions`, `createQueryBridge`, `createActorBridge`, `createUrlBridge`, `pipe`, `definePipeableMiddleware`, `PipeConfigurationError`, and `dispose`, plus their public state contracts. |
+| `@ilokesto/state/react` | React `create`, `bind`, `bindReducer`, `bindReadonly`, `bindPersistStatus` and `UseState`, `UseReducer`, `UseReadonlyState` types. |
+| `@ilokesto/state/vue` | Vue `create`, `bind`, `bindReducer`, `bindReadonly`, `bindPersistStatus` and `UseState`, `UseReducer`, `UseReadonlyState` types. |
+| `@ilokesto/state/svelte` | Svelte `create`, `bind`, `bindReducer`, `bindReadonly`, `bindPersistStatus` and `UseState`, `UseReducer`, `UseReadonlyState` types. |
+| `@ilokesto/state/solid` | Solid `create`, `bind`, `bindReducer`, `bindReadonly`, `bindPersistStatus` and `UseState`, `UseReducer`, `UseReadonlyState` types. |
+| `@ilokesto/state/angular` | Angular `create`, `bind`, `bindReducer`, `bindReadonly`, `bindPersistStatus` and `AngularOptions`, `UseState`, `UseReducer`, `UseReadonlyState` types. |
 | `@ilokesto/state/middleware` | Registered middleware, store disposal, and middleware types. |
 | `@ilokesto/state/utils` | Pipe composition, memory persistence and deterministic testing helpers. |
 | `@ilokesto/state/adaptor` | `adaptor`; requires the optional `immer` peer. |
@@ -26,21 +26,29 @@ The ten public entrypoint paths are defined by this package's `package.json` exp
 
 `@ilokesto/state/middleware` exports `debounce`, `throttle`, `devtools`, `dispose`, `history`, `HistoryConfigurationError`, `logger`, `persist`, `PersistError`, `jsonStorage`, `cookieStorage`, `indexedDBStorage`, `memoryStorage`, and `validate`.
 
-Its public types are `HistoryControls`, `HistoryOptions`, `HistoryStore`, `CookieStorageOptions`, `IndexedDBStorageOptions`, `PersistedValue`, `PersistStorage`, `PersistStorageFactory`, `PersistConflictPolicy`, `PersistControls`, `PersistDecoder`, `PersistDecoderStateDiagnostic`, `PersistMigration`, `PersistRehydrateOptions`, `PersistStatus`, `PersistStore`, and `SafePersistConfig`.
+Its public types are `DevtoolsAction`, `DevtoolsOptions`, `DevtoolsSerializeOptions`, `HistoryControls`, `HistoryDiff`, `HistoryOptions`, `HistoryStatus`, `HistoryStore`, `HistoryStrategy`, `CookieStorageOptions`, `IndexedDBStorageOptions`, `PersistCodec`, `ProjectedPersistConfig`, `PersistedValue`, `PersistStorage`, `PersistStorageFactory`, `PersistConflictPolicy`, `PersistControls`, `PersistDecoder`, `PersistDecoderStateDiagnostic`, `PersistMigration`, `PersistRehydrateOptions`, `PersistStatus`, `PersistStore`, and `SafePersistConfig`.
 
 Storage selection uses `SafePersistConfig.storage`, a lazy adapter factory. The old local/session/cookie configuration and rehydration callback types are not exports; use the storage adapters and explicit persistence controls instead.
 
 ## Utility exports
 
 `@ilokesto/state/utils` exports `pipe`, `definePipeableMiddleware`, `PipeConfigurationError`, `memoryStorage`, and `createStoreTestHarness`. See [Testing and measurement](/en/state/utility/testing).
+`@ilokesto/state/utils` exports `pipe`, `definePipeableMiddleware`, `PipeConfigurationError`, and `createEntityAdapter`. Entity collection types are `EntityState` and `EntityAdapterOptions`.
 
 Its public types are `Pipe`, `PipeAnyMiddleware`, `PipeBuilder`, `PipeCapability`, `PipeConfigurationErrorCode`, `PipeDuplicatePolicy`, `PipeMiddleware`, `PipeMiddlewareConflictDiagnostic`, `PipeMiddlewareMetadata`, `StoreTestHarness`, and `StoreWaitOptions`.
 
+The root and `/utils` also export `createQueryBridge`, `createActorBridge`, `createUrlBridge` and types `SnapshotBridge`, `QueryObserverSource`, `ActorSource`, `ActorBridge`, `UrlCodec`, `UrlEnvironment`, `UrlHistoryMode`, `UrlBridgeOptions`, `UrlBridge`. See [External state bridges](/en/state/utility/bridges).
+
 ## Root and framework entrypoints
+
+For async actions and lifecycle ownership, see [Async resources and effects](/en/state/guides/async-lifecycle).
+The root exports `Resource`, `ResourceState`, `ResourceResult`, `ResourceTask`,
+`ResourceContext`, `ResourceRunOptions`, `ActionSource`, `EffectCallback`,
+`EffectCleanup`, `EffectContext`, `EffectOptions`, and `SelectorEffectOptions`.
 
 Import framework-neutral construction APIs from the root. Framework adapter APIs such as `create`, `bind`, and `bindReducer` come from a framework subpath, never the root.
 
-Root runtime exports are `Store`, `createStore`, `createReducer`, `pipe`, `definePipeableMiddleware`, `PipeConfigurationError`, and `dispose`. Root type exports are `ReadableStore`, `StoreApi`, `Listener`, `Unsubscribe`, `SetStateAction`, `Selector`, `SelectorListener`, `EqualityFn`, `Middleware`, `ReducerState`, `ReduceFn`, and `ReducerAction`. Pipe and testing types come from `/utils`, and persistence types come from `/middleware`.
+Root runtime exports are `Store`, `createStore`, `createReducer`, `createResource`, `createEffect`, `listenActions`, `createQueryBridge`, `createActorBridge`, `createUrlBridge`, `pipe`, `definePipeableMiddleware`, `PipeConfigurationError`, and `dispose`. Root type exports are `ReadableStore`, `StoreApi`, `Listener`, `Unsubscribe`, `SetStateAction`, `Selector`, `SelectorListener`, `EqualityFn`, `Middleware`, `ReducerState`, `ReduceFn`, and `ReducerAction`. Pipe and testing types come from `/utils`, and persistence types come from `/middleware`.
 
 ```ts lineNumbers
 // Available from the framework subpath

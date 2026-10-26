@@ -1,4 +1,4 @@
-import type { StoreApi } from '@ilokesto/store';
+import type { EqualityFn, StoreApi } from '@ilokesto/store';
 import type { ComputedRef } from 'vue';
 
 import type { ReducerAction } from '../../types/ReduceFn.js';
@@ -21,7 +21,7 @@ export type VueReducerResult<S, Action> = Readonly<{
 
 export type UseState<T> = {
   (): VueStateResult<ReadonlySnapshot<T>, T>;
-  <S>(selector: Selector<T, S>): VueStateResult<S, T>;
+  <S>(selector: Selector<T, S>, equality?: EqualityFn<S>): VueStateResult<S, T>;
   writeOnly: () => StateWriter<T>;
   readOnly: {
     (): ReadonlySnapshot<T>;
@@ -31,10 +31,16 @@ export type UseState<T> = {
 
 export type UseReducer<T, Action extends ReducerAction> = {
   (): VueReducerResult<ReadonlySnapshot<T>, Action>;
-  <S>(selector: Selector<T, S>): VueReducerResult<S, Action>;
+  <S>(selector: Selector<T, S>, equality?: EqualityFn<S>): VueReducerResult<S, Action>;
   writeOnly: () => ActionWriter<Action>;
   readOnly: {
     (): ReadonlySnapshot<T>;
     <S>(selector: Selector<T, S>): S;
   };
+};
+
+export type UseReadonlyState<T> = {
+  (): Readonly<{ state: ComputedRef<ReadonlySnapshot<T>> }>;
+  <S>(selector: Selector<T, S>, equality?: EqualityFn<S>): Readonly<{ state: ComputedRef<S> }>;
+  readOnly: UseState<T>['readOnly'];
 };

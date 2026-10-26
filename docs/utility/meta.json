@@ -5,6 +5,7 @@
     "index",
     "pipe",
     "testing",
-    "adaptor"
+    "adaptor",
+    "bridges"
   ]
 }
