@@ -4,6 +4,7 @@
   "pages": [
     "plain-state",
     "reducer-state",
-    "lifecycle-reads-writes"
+    "lifecycle-reads-writes",
+    "async-lifecycle"
   ]
 }
