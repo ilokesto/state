@@ -157,6 +157,108 @@ const dateCodec: PersistCodec = {
 
 The application's decoder must still reject invalid dates. For nested data, the codec must explicitly handle the shapes it supports. Without a codec, JSON behavior and stored bytes are unchanged, including `Date.toJSON()` becoming a string. Changing a codec is an application-owned storage-format decision, not an automatic migration. IndexedDB already uses structured clone and does not accept or need this string codec.
 
+## External storage synchronization
+
+Synchronization is opt-in. Existing adapters and stores do not subscribe or reread automatically. For same-origin tabs sharing localStorage, provide an event source and enable `sync`:
+
+```ts lineNumbers
+import { jsonStorage, persist } from '@ilokesto/state/middleware';
+import { pipe } from '@ilokesto/state/utils';
+
+const counter = pipe.use(persist({
+  key: 'shared-counter',
+  storage: jsonStorage(() => window.localStorage, undefined, { events: () => window }),
+  decode: (value: unknown): number | null => typeof value === 'number' ? value : null,
+  sync: {},
+})).create(0);
+
+counter.persist.subscribe(status => {
+  if (status.error?.operation === 'sync') console.error(status.error.code, status.error.cause);
+});
+await counter.persist.rehydrate();
+counter.setState(1);
+await counter.persist.flush();
+```
+
+`jsonStorage(getStorage, codec?, options?: JsonStorageOptions)` keeps its existing arguments and bytes. `options.events` is a lazy getter for a window-like `addEventListener`/`removeEventListener` source. The adapter filters by storage area and key, including `Storage.clear()` events. Native storage events exclude the writing document, so this supports separate browsing contexts such as tabs, not multiple stores in one document. Separate browser profiles/private contexts do not share localStorage. sessionStorage only shares events within its own browser storage scope.
+
+A custom `PersistStorage` may implement `subscribe(key: string, listener: () => void): () => void`. It must emit **external-only invalidations**, including deletes, and return an unsubscribe function. Without `sync`, this capability is never required. Opting into automatic sync without it rejects hydration with `STORAGE`. Native AsyncStorage/MMKV helpers do not invent a cross-process event transport.
+
+`persist.sync(options?: PersistRehydrateOptions): Promise<void>` manually rereads current storage after successful hydration, including for adapters without events. It is distinct from `rehydrate()`, which remains a no-op after success. Automatic events use the optional policy in `sync: { conflict?: 'keep-current' | 'use-stored' }`; manual calls use their own argument.
+
+| Local edits when the sync read starts or completes | Result |
+| --- | --- |
+| None | Restore the validated stored value without saving it back |
+| No conflict policy | Reject with `CONFLICT`, retain local state and its pending save |
+| `keep-current` | Retain local state and save it through the normal queue |
+| `use-stored` | Explicitly replace local state and discard pending saves; their unfinished flushes reject with `CONFLICT` |
+
+Automatic errors are observable through status with `error.operation === 'sync'`; hydration remains `hydrated`. Pending local edits retain normal saving behavior after a rejected sync. Pause saving while presenting a choice if the application must not overwrite either side before that decision. Resolve by calling `await counter.persist.sync({ conflict: 'keep-current' })` or `await counter.persist.sync({ conflict: 'use-stored' })`; there is no implicit merge.
+
+Every invalidation rereads the latest durable value instead of applying an old event payload. A sync read waits for this store's active write/delete and holds later saves until its decision. Existing in-flight native writes cannot be rolled back: the read observes storage **after** they finish. This is not a distributed transaction or a total ordering across tabs. Concurrent edits can require application-level reconciliation.
+
+External values follow the same envelope/version checks, migrations, decoder, projection `restore`, full-state validation, and history-baseline reset as hydration. External restoration never echoes a write or rewrites migrated data. A later user edit saves the current version normally. A delete or expired read retains memory and does not recreate storage by itself; conflict policies still govern unsaved local edits. A newer sync supersedes an older read (the superseded call resolves without applying). `clearStorage()` cancels pending reads with `CLEARED` and ignores events during its delete barrier; disposal cancels with `DISPOSED` and unsubscribes. Late reads cannot restore old data.
+
+## Injected native storage
+
+`asyncStorage(getStorage, codec?)` and `mmkvStorage(getStorage, codec?)` return lazy storage factories. They use the same default JSON envelope and optional whole-envelope `PersistCodec` as `jsonStorage`, without importing React Native or installing a native dependency:
+
+```ts lineNumbers
+import { asyncStorage, mmkvStorage } from '@ilokesto/state/middleware';
+import type { AsyncStorageLike, MMKVStorageLike } from '@ilokesto/state/middleware';
+
+export function nativeStorageFactories(asyncBackend: AsyncStorageLike, mmkvBackend: MMKVStorageLike) {
+  return {
+    asynchronous: asyncStorage(() => asyncBackend),
+    synchronous: mmkvStorage(() => mmkvBackend),
+  };
+}
+```
+
+`AsyncStorageLike` requires `getItem(key): Promise<string | null>`, `setItem(key, text): Promise<void>`, and `removeItem(key): Promise<void>`. `MMKVStorageLike` requires `getString(key): string | undefined`, `set(key, text): void`, and `remove(key): boolean | void`. Inject operations matching these signatures; an application using a backend with `delete` instead of `remove` can supply an explicit structural adapter. The library does not guess native versions.
+
+The native object is borrowed, not disposed or globally cleared. Only the configured key is read/written/removed. Native exceptions and rejected promises propagate to persistence errors, and `flush()` waits for the native write promise. A codec still produces untrusted data requiring decoding. These helpers provide neither encryption nor automatic account scoping.
+
+## Explicit TTL and account switching
+
+`ttlStorage(storage: PersistStorageFactory, options: TTLStorageOptions)` wraps any adapter with an explicit tagged format. `TTLStorageOptions` contains a positive finite `ttlMs` and optional `now: () => number` clock (default `Date.now`). It does not change any existing adapter or key automatically:
+
+```ts lineNumbers
+import { jsonStorage, ttlStorage } from '@ilokesto/state/middleware';
+
+const shortLivedStorage = ttlStorage(
+  jsonStorage(() => window.localStorage),
+  { ttlMs: 30 * 60 * 1000 },
+);
+```
+
+The opt-in stored shape is `{ state: { __persistTTL: 1, expiresAt, value: projectedState }, version }`. TTL unwraps it before migrations/decoding. Existing unwrapped entries and malformed metadata reject rather than being silently migrated or assigned an expiry. Choose an explicit application migration or clear the old entry before enabling this wrapper on an existing key. Codecs beneath TTL must support this wrapper shape, not only the inner state.
+
+Expiry is checked after a read resolves, with `now() >= expiresAt` returning `null`. Expired reads do not delete storage because a concurrent writer may already have replaced it. There is no background timer, automatic memory reset, or renewal on reads. A write's deadline starts when the wrapper receives it, not when delayed native I/O completes. Use `clearStorage()` for physical cleanup. Optional external invalidations are forwarded; TTL does not generate clock events.
+
+Account keys and store ownership remain application decisions. Stop old producers/UI editing first, pause saving, await `clearStorage()` when logout should erase that account, then dispose the old store and create a new one. Do not dispose before the awaited clear: native in-flight writes may otherwise finish after cleanup. If clear fails, handle the failure before reusing the same key. To keep account data instead, await `flush()` before disposal and omit clear.
+
+```ts lineNumbers
+import { dispose, jsonStorage, persist } from '@ilokesto/state/middleware';
+import type { PersistStore } from '@ilokesto/state/middleware';
+import { pipe } from '@ilokesto/state/utils';
+
+export async function switchAccount(previous: PersistStore<number>, nextAccountKey: string) {
+  previous.persist.pause();
+  await previous.persist.clearStorage();
+  dispose(previous);
+  const next = pipe.use(persist({
+    key: nextAccountKey,
+    storage: jsonStorage(() => window.localStorage),
+    decode: (value: unknown): number | null => typeof value === 'number' ? value : null,
+  })).create(0);
+  await next.persist.rehydrate();
+  return next;
+}
+```
+
+Call this only after stopping updates to `previous`. The library never renames keys, migrates account storage, or reuses the previous account's in-memory state. A storage delete in another tab is not an authentication logout signal; coordinate authentication and store disposal separately.
+
 ## Lifecycle controls
 
 | Control | Contract |
@@ -164,6 +266,7 @@ The application's decoder must still reject invalid dates. For nested data, the 
 | `await rehydrate()` | Explicitly restore; concurrent calls share an attempt, success is a later no-op, failure is retryable |
 | `await rehydrate({ conflict: 'keep-current' })` | Keep and save the current state after a restoration conflict |
 | `await rehydrate({ conflict: 'use-stored' })` | Explicitly replace current state with validated stored state |
+| `await sync(options?)` | Reread after hydration; apply the explicit pending-edit conflict policy |
 | `await flush()` | Wait for the save target at call time; retry failed pending writes |
 | `pause(): void` | Pause automatic saving; state commits and hydration continue |
 | `resume(): void` | Resume saving the latest pending value, using the configured save debounce |

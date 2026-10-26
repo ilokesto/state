@@ -23,6 +23,9 @@ export class PersistWriter {
   private timer: ReturnType<typeof setTimeout> | undefined;
   private readonly waiters = new Set<Waiter>();
   private readonly removals: Removal[] = [];
+  private holds = 0;
+  private heldWrite = false;
+  private readonly idleWaiters = new Set<Removal>();
 
   constructor(
     private readonly storage: () => PersistStorage,
@@ -74,12 +77,55 @@ export class PersistWriter {
 
   discard(): void {
     this.cancelTimer();
+    this.heldWrite = false;
     this.pending = undefined;
     this.savedId = this.nextId;
   }
 
   hasPending(): boolean {
     return this.pending !== undefined;
+  }
+
+  /** Stops new saves while a sync read decides whether pending edits can be replaced. */
+  hold(): { readonly ready: Promise<void>; readonly release: () => void } {
+    this.holds += 1;
+    let waiter: Removal | undefined;
+    const ready = this.active || this.removals.length > 0
+      ? new Promise<void>((resolve, reject) => {
+        waiter = { resolve, reject };
+        this.idleWaiters.add(waiter);
+      })
+      : Promise.resolve();
+    let released = false;
+    return {
+      ready,
+      release: () => {
+        if (released) return;
+        released = true;
+        if (waiter) {
+          this.idleWaiters.delete(waiter);
+          waiter.resolve();
+        }
+        this.holds -= 1;
+        // Release only work deferred by the barrier, not a previously failed save.
+        if (this.holds === 0 && this.heldWrite) {
+          this.heldWrite = false;
+          this.start();
+        }
+      },
+    };
+  }
+
+  /** Explicit use-stored must reject flush promises for the discarded local edits. */
+  discardForSync(): void {
+    this.discard();
+    this.rejectWaiters(new PersistError('sync', 'CONFLICT', 'Pending edits were replaced by stored state'));
+  }
+
+  private settleIdle(): void {
+    if (this.active || this.removals.length > 0) return;
+    for (const waiter of this.idleWaiters) waiter.resolve();
+    this.idleWaiters.clear();
   }
 
   flush(): Promise<void> {
@@ -114,6 +160,8 @@ export class PersistWriter {
     const error = this.disposedError();
     this.rejectWaiters(error);
     for (const removal of this.removals.splice(0)) removal.reject(error);
+    for (const waiter of this.idleWaiters) waiter.reject(error);
+    this.idleWaiters.clear();
   }
 
   private disposedError(): PersistError {
@@ -129,7 +177,8 @@ export class PersistWriter {
     if (this.active || this.disposed) return;
     const removal = this.removals[0];
     const canWrite = this.waiters.size > 0 || (!this.paused && this.timer === undefined);
-    const write = this.enabled && canWrite ? this.pending : undefined;
+    if (this.enabled && canWrite && this.pending && this.holds > 0) this.heldWrite = true;
+    const write = this.enabled && canWrite && this.holds === 0 ? this.pending : undefined;
     if (!removal && !write) return;
     this.active = true;
     this.publish({ saving: 'writing', error: null });
@@ -168,6 +217,7 @@ export class PersistWriter {
           }
         }
         this.active = false;
+        this.settleIdle();
         this.publish({ saving: 'idle', pending: this.pending !== undefined });
         this.start();
       } catch (cause) {
@@ -183,6 +233,7 @@ export class PersistWriter {
           removal.reject(error);
         }
         this.active = false;
+        this.settleIdle();
         // A cleared generation must never poison its replacement's status.
         if (removal || write?.generation === this.generation) {
           this.rejectWaiters(error);
