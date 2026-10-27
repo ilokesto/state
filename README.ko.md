@@ -22,26 +22,24 @@ pnpm add @ilokesto/state
 
 ## 빠른 시작
 
-컴포넌트 밖에서 스토어를 만들고 `bind()`로 연결합니다.
+컴포넌트 밖에서 `create()`로 공유 상태 hook을 만듭니다.
 
 ```tsx
-import { createStore } from '@ilokesto/state';
-import { bind } from '@ilokesto/state/react';
+import { create } from '@ilokesto/state/react';
 
 type CounterState = {
   count: number;
 };
 
-const counter = createStore<CounterState>({ count: 0 });
-const useCounter = bind(counter);
+const useCounter = create<CounterState>({ count: 0 });
 const selectCount = (state: Readonly<CounterState>) => state.count;
 
 export function Counter() {
-  const [count] = useCounter(selectCount);
+  const [count, setCounter] = useCounter(selectCount);
 
   return (
     <button
-      onClick={() => counter.update(previous => ({ count: previous.count + 1 }))}
+      onClick={() => setCounter(previous => ({ ...previous, count: previous.count + 1 }))}
     >
       {count}
     </button>
@@ -53,8 +51,14 @@ Selector는 순수하고 참조가 안정적이어야 합니다. 객체는 깊�
 사용하므로 중첩 값을 변경할 때도 새 불변 상태를 반환하세요. React의 서버 스냅샷은
 초기 상태에서 값을 선택합니다. 다른 어댑터도 각 프레임워크의 생명주기 요구사항을 따릅니다.
 
-Action 중심 상태에는 `createReducer()`와 `bindReducer()`를 사용하세요.
-기존 `create()` 헬퍼도 유지합니다. 명시적인 연결과 FIFO 알림의 변경 사항은
+Hook은 `[state, setter]`를 반환하고 selector를 사용하면 `[선택한 값, setter]`를 반환합니다.
+Selector를 사용해도 setter는 전체 상태를 갱신합니다. Reducer 상태는
+`create(reducer, initialState)`로 만들고 `[state, dispatch]`를 받습니다.
+
+React와 독립적으로 스토어를 만들어야 할 때는 `createStore()`와 `bind()`
+(또는 `createReducer()`와 `bindReducer()`)를 선택할 수 있습니다.
+React 빠른 시작에 필수인 단계는 아닙니다.
+[Vanilla 상태와 연결](./docs/reference/vanilla.ko.mdx),
 [2.0 마이그레이션 안내](./docs/advanced/migration.ko.mdx)를 참고하세요.
 
 `pipe.use(...).create(initialState)` 빌더 문법을 사용하세요. `history()`는 timer의 실제

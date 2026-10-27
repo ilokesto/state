@@ -22,26 +22,24 @@ Install your chosen framework alongside the package. The example below uses Reac
 
 ## Quick start
 
-Create the store outside the component and connect it with `bind()`:
+Create a shared React hook outside the component with `create()`:
 
 ```tsx
-import { createStore } from '@ilokesto/state';
-import { bind } from '@ilokesto/state/react';
+import { create } from '@ilokesto/state/react';
 
 type CounterState = {
   count: number;
 };
 
-const counter = createStore<CounterState>({ count: 0 });
-const useCounter = bind(counter);
+const useCounter = create<CounterState>({ count: 0 });
 const selectCount = (state: Readonly<CounterState>) => state.count;
 
 export function Counter() {
-  const [count] = useCounter(selectCount);
+  const [count, setCounter] = useCounter(selectCount);
 
   return (
     <button
-      onClick={() => counter.update(previous => ({ count: previous.count + 1 }))}
+      onClick={() => setCounter(previous => ({ ...previous, count: previous.count + 1 }))}
     >
       {count}
     </button>
@@ -53,9 +51,15 @@ Keep selectors pure and stable. Objects are shallow-compared, not deeply compare
 return fresh immutable state when updating nested values. React server snapshots
 select from initial state. Other adapters retain their own lifecycle requirements.
 
-For action-driven state use `createReducer()` and `bindReducer()`. Existing
-`create()` helpers remain available; the [2.0 migration guide](./docs/advanced/migration.mdx)
-explains explicit binding and FIFO notifications.
+The hook returns `[state, setter]`, or `[selectedValue, setter]` with a selector.
+The setter updates the full state even when a selector is used. For reducer state,
+use `create(reducer, initialState)` to receive `[state, dispatch]`.
+
+If a store needs to be created independently of React, `createStore()` with
+`bind()` (or `createReducer()` with `bindReducer()`) is an additional option.
+Neither is required for the React quick start. See
+[Vanilla state and binding](./docs/reference/vanilla.mdx) and the
+[2.0 migration guide](./docs/advanced/migration.mdx).
 
 Use the builder form `pipe.use(...).create(initialState)`. `history()` records
 timer commits; undo/redo cancel pending timers and replay through validation.
