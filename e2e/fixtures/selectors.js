@@ -1,7 +1,7 @@
 import { Store } from '@ilokesto/store';
 import { createElement, StrictMode } from 'react';
-import { createRoot as createReactRoot } from '../../website/node_modules/react-dom/client.js';
-import { flushSync } from '../../website/node_modules/react-dom/index.js';
+import { createRoot as createReactRoot } from 'react-dom/client';
+import { flushSync } from 'react-dom';
 import { effectScope } from 'vue';
 import { createRoot as createSolidRoot } from 'solid-js';
 import * as react from '../../dist/core/React/index.js';

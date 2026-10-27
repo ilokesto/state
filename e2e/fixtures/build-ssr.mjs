@@ -13,7 +13,7 @@ for (const target of ['node', 'browser']) {
     target,
     conditions: target === 'node' ? ['node'] : ['browser'],
     alias: {
-      react: fileURLToPath(new URL('../../website/node_modules/react', import.meta.url)),
+      react: fileURLToPath(new URL('../../node_modules/react', import.meta.url)),
     },
     define: {
       'process.env.NODE_ENV': JSON.stringify('development'),

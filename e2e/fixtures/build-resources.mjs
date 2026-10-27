@@ -5,7 +5,7 @@ import { compile } from 'svelte/compiler';
 const result = await Bun.build({
   entrypoints: [fileURLToPath(new URL('./resources.js', import.meta.url))],
   target: 'browser',
-  alias: { react: fileURLToPath(new URL('../../website/node_modules/react', import.meta.url)) },
+  alias: { react: fileURLToPath(new URL('../../node_modules/react', import.meta.url)) },
   define: { 'process.env.NODE_ENV': JSON.stringify('development') },
   plugins: [{
     name: 'svelte-resource-fixture',

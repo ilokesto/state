@@ -1,5 +1,5 @@
 import { act, Component, createElement, StrictMode, Suspense } from 'react';
-import { createRoot } from '../../website/node_modules/react-dom/client.js';
+import { createRoot } from 'react-dom/client';
 import { createApp, h, nextTick } from 'vue';
 import { createRenderEffect } from 'solid-js';
 import { render } from 'solid-js/web';

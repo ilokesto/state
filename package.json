@@ -14,15 +14,6 @@
     "test:tooling": "node --test --test-concurrency=2 tests/tooling/*.test.mjs",
     "typecheck": "tsc --noEmit",
     "benchmark": "pnpm build && node scripts/benchmark.mjs",
-    "docs:prepare": "pnpm build",
-    "docs:dev": "pnpm docs:prepare && pnpm --dir website dev",
-    "docs:build": "pnpm docs:prepare && pnpm --dir website build",
-    "docs:typecheck": "pnpm docs:prepare && pnpm --dir website typecheck",
-    "docs:test": "pnpm --dir website test",
-    "docs:start": "pnpm --dir website start",
-    "docs:publication:verify": "node scripts/docs-publication.mjs verify && node scripts/docs-runtime.mjs verify",
-    "docs:publication:capture": "node scripts/docs-publication.mjs capture",
-    "docs:publication:promote": "node scripts/docs-publication.mjs promote",
     "release:verify": "node scripts/release-verify.mjs",
     "changeset": "changeset",
     "changeset:status": "changeset status",
@@ -33,7 +24,7 @@
     "type": "git",
     "url": "git+https://github.com/ilokesto/state.git"
   },
-  "homepage": "https://ilokesto.ayden94.com/en/state",
+  "homepage": "https://github.com/ilokesto/state#readme",
   "type": "module",
   "sideEffects": false,
   "main": "dist/index.js",
@@ -137,11 +128,6 @@
       "optional": true
     }
   },
-  "pnpm": {
-    "overrides": {
-      "mdast-util-to-markdown": "2.1.2"
-    }
-  },
   "devDependencies": {
     "@angular/core": "^21.2.8",
     "@changesets/cli": "2.31.1",
@@ -151,12 +137,13 @@
     "@types/node": "^22.19.1",
     "@types/react": "^19.1.6",
     "immer": "^9.0.12",
-    "react": "^19.2.7",
+    "react": "19.2.8",
     "solid-js": "^1.9.12",
     "svelte": "^5.55.3",
     "typescript": "^6.0.2",
     "vue": "^3.5.32",
     "xstate": "5.33.3",
-    "yaml": "2.8.2"
+    "yaml": "2.8.2",
+    "react-dom": "19.2.8"
   }
 }

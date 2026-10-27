@@ -1,7 +1,4 @@
 .DS_Store
-docs/
-docs-publication/
-website/
 scripts/
 test/
 e2e/
