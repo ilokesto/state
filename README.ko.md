@@ -51,12 +51,6 @@ Hook은 `[state, setter]`를 반환하고 selector를 사용하면 `[선택한 �
 Selector를 사용해도 setter는 전체 상태를 갱신합니다. Reducer 상태는
 `create(reducer, initialState)`로 만들고 `[state, dispatch]`를 받습니다.
 
-React와 독립적으로 스토어를 만들어야 할 때는 `createStore()`와 `bind()`
-(또는 `createReducer()`와 `bindReducer()`)를 선택할 수 있습니다.
-React 빠른 시작에 필수인 단계는 아닙니다.
-[Vanilla 상태와 연결](./docs/reference/vanilla.ko.mdx),
-[2.0 마이그레이션 안내](./docs/advanced/migration.ko.mdx)를 참고하세요.
-
 `pipe.use(...).create(initialState)` 빌더 문법을 사용하세요. `history()`는 timer의 실제
 commit을 기록하며 undo/redo는 pending timer를 취소하고 validation을 거쳐 replay합니다.
 Timer control은 `store.debounce`, `store.throttle`의 `flush`, `cancel`, `pending`입니다.

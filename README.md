@@ -51,12 +51,6 @@ The hook returns `[state, setter]`, or `[selectedValue, setter]` with a selector
 The setter updates the full state even when a selector is used. For reducer state,
 use `create(reducer, initialState)` to receive `[state, dispatch]`.
 
-If a store needs to be created independently of React, `createStore()` with
-`bind()` (or `createReducer()` with `bindReducer()`) is an additional option.
-Neither is required for the React quick start. See
-[Vanilla state and binding](./docs/reference/vanilla.mdx) and the
-[2.0 migration guide](./docs/advanced/migration.mdx).
-
 Use the builder form `pipe.use(...).create(initialState)`. `history()` records
 timer commits; undo/redo cancel pending timers and replay through validation.
 Timer controls are `store.debounce` and `store.throttle` (`flush`, `cancel`, `pending`).
