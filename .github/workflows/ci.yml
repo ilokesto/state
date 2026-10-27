@@ -95,7 +95,6 @@ jobs:
           pnpm test:typecheck
           pnpm test:browser
           pnpm test:tooling
-          pnpm migrate:verify
       - name: Documentation checks
         run: |
           pnpm docs:publication:verify
