@@ -1,5 +1,50 @@
 # @ilokesto/state
 
+## 2.1.0
+
+### Minor Changes
+
+- cef8937: Add typed `bindResource` helpers to all five framework adapters, preserving native readonly state and lifecycle cleanup without cancelling borrowed resources. React additionally provides an opt-in `useSuspense` path with stable per-run promises, explicit retry and error-boundary behavior, and idle recovery after cancellation or disposal.
+- f805477: Add framework-neutral `createResource`, `createEffect`, and `listenActions` APIs.
+  Resources expose read-only discriminated state and latest-wins async execution
+  with explicit cancellation outcomes, AbortSignal support, and disposal. Effects
+  and explicit action sources support cleanup, async error delivery, and safe
+  reentrant lifecycle handling without changing synchronous reducer dispatch.
+- 65b23db: Add DevTools options for explicit enablement, detached state/action sanitizers, serialization, and custom replay decoding while preserving `devtools(name)` and its production default.
+
+  Support validated `JUMP_TO_STATE` and `JUMP_TO_ACTION` snapshots without feedback sends, reset the local history baseline, and preserve persistence of accepted jumps. Observe reducer payloads and nested committed snapshots, reject malformed commands, and stop all observation and command handling after disposal.
+
+- 9fb094a: Add an opt-in, framework-neutral durable outbox with explicit account storage keys,
+  validated operations, persist-before-send and durable ACK removal, restart recovery,
+  observable delivery state, bounded retry/backoff, cancellation, and explicit conflict
+  resolution. Delivery is at least once and requires server-side idempotency; no backend
+  dependency, automatic key migration, or exactly-once guarantee is introduced.
+- 82572ae: Add an opt-in immutable entity adapter with typed IDs, sorted CRUD operations,
+  stable no-op snapshots, and selectors on the existing utils entrypoint.
+- 412992d: Add opt-in query observer, actor snapshot/event, and typed URL parameter bridges
+  to the root and utils exports. Bridges reuse registry store primitives, preserve
+  borrowed runtime ownership and snapshot identity, and provide explicit disposal.
+  URL state supports injected SSR/browser environments, codecs, defaults,
+  push/replace history, and native back/forward synchronization.
+- 2e4579a: Add `bindPersistStatus` to React, Vue, Angular, Solid, and Svelte adapters with readonly selectors, custom equality, and subscription-scoped cleanup that never disposes borrowed persistence.
+- bf4c00d: Add structured-clone memory persistence and a framework-neutral store test harness with notification-driven waits and explicit cleanup. Correct the bilingual package export reference and document reproducible repository behavior and bundle measurements.
+- 75119a8: Add synchronous nested history groups, commit filters, explicit selected-state restoration, pause/resume controls, and reactive history metadata. Support application-defined typed forward/inverse diff strategies alongside default snapshots. Preserve rejected replays, record reentrant user commits independently, and reset history at persistence restoration boundaries.
+- 8f5438a: Require registry `@ilokesto/store` 2.1.0 and reexport derived stores, batching,
+  writable focus, keyed families, memoized selectors, tracked derivation, and
+  subscription lifecycles with their public types. Connect these stores through
+  the existing readonly framework bindings without duplicating store primitives.
+- 3ff8b78: Add explicit owned and borrowed state scopes and validated, script-safe initial-state transfer factories. Preserve React initial snapshots and separate SSR initialization from persistence rehydration. Document request isolation and framework lifecycle boundaries with real server-to-browser hydration tests.
+- 095b285: Add per-selector custom equality and writer-free bindReadonly bindings for React, Vue, Angular, Svelte, and Solid while preserving shallow defaults and writable APIs.
+- 5764ddd: Add opt-in external storage synchronization with explicit local-edit conflict policies, injected AsyncStorage and MMKV adapters, and an explicit TTL storage wrapper. Preserve default persistence envelopes and document account-switch cleanup.
+- 61ce3d3: Add namespaced debounce/throttle flush, cancel, and pending controls, opt-in quiet-window debounce, and configurable leading/trailing edges while preserving legacy defaults. History now records actual timer commits and cancels pending timer work before synchronous, validated undo/redo. Timer disposal prevents in-flight updater batches from committing afterward; persistence flush remains separate from timer flush.
+- edf2e6c: Add opt-in typed persistence projections with explicit restoration, envelope codecs for JSON and cookie storage, and pause/resume/retry controls with save-only debounce. Preserve existing full-state formats, hydration conflicts, call-time flush targets, and ordered clear barriers.
+
+### Patch Changes
+
+- a46ad11: Require Node.js 24.22.1 or newer and use the security-patched 24.22.1 release for development and CI.
+- e9ba8d7: Restore the React README quick start to create() and its tuple setter in both languages.
+  Keep the quick start focused on React usage without changing APIs.
+
 ## 2.0.1
 
 ### Patch Changes
