@@ -201,13 +201,21 @@ Node 24.22.1과 pnpm 10.17.1을 사용하고 저장소 루트에서 실행하세
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm build
+pnpm exec playwright install chromium
 pnpm typecheck
 pnpm test
-pnpm test:typecheck
-pnpm test:browser
-pnpm test:tooling
 ```
+
+`pnpm typecheck`는 라이브러리 소스를 검사합니다. `pnpm test`는 한 번 빌드한 다음
+Bun 단위 테스트, 타입, 도구, 브라우저 테스트를 각각 한 번 실행합니다. 개별 검사 시에는
+소스 변경 후 `pnpm build`를 실행하고 `pnpm test:unit`, `pnpm test:types`,
+`pnpm test:tooling`, `pnpm test:browser` 중 필요한 명령으로 `dist/`를 재사용하세요.
+
+테스트는 `tests/unit/`, `tests/browser/`, `tests/tooling/`에 있습니다. 컴파일 입력,
+브라우저/SSR 앱, 헬퍼는 `tests/fixtures/`에 있으며, 의도적으로 잘못된 타입 입력은
+해당 런타임 회귀 테스트에서만 컴파일합니다.
+실행형 테스트 헬퍼는 `tests/tooling/`에 두고, 공용 릴리스 도구와 벤치마크는
+`scripts/`에 유지합니다.
 
 빌드 결과는 `dist/`에 생성됩니다.
 
