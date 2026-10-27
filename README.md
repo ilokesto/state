@@ -22,26 +22,19 @@ Install your chosen framework alongside the package. The example below uses Reac
 
 ## Quick start
 
-Create the store outside the component and connect it with `bind()`:
+Create a shared React hook outside the component with `create()`:
 
 ```tsx
-import { createStore } from '@ilokesto/state';
-import { bind } from '@ilokesto/state/react';
+import { create } from '@ilokesto/state/react';
 
-type CounterState = {
-  count: number;
-};
-
-const counter = createStore<CounterState>({ count: 0 });
-const useCounter = bind(counter);
-const selectCount = (state: Readonly<CounterState>) => state.count;
+const useCounter = create({ count: 0 });
 
 export function Counter() {
-  const [count] = useCounter(selectCount);
+  const [count, setCounter] = useCounter(state => state.count);
 
   return (
     <button
-      onClick={() => counter.update(previous => ({ count: previous.count + 1 }))}
+      onClick={() => setCounter(previous => ({ ...previous, count: previous.count + 1 }))}
     >
       {count}
     </button>
@@ -49,13 +42,14 @@ export function Counter() {
 }
 ```
 
-Keep selectors pure and stable. Objects are shallow-compared, not deeply compared;
+Keep selectors pure. Hoist selectors when you need a stable function reference.
+Objects are shallow-compared, not deeply compared;
 return fresh immutable state when updating nested values. React server snapshots
 select from initial state. Other adapters retain their own lifecycle requirements.
 
-For action-driven state use `createReducer()` and `bindReducer()`. Existing
-`create()` helpers remain available; the [2.0 migration guide](./docs/advanced/migration.mdx)
-explains explicit binding and FIFO notifications.
+The hook returns `[state, setter]`, or `[selectedValue, setter]` with a selector.
+The setter updates the full state even when a selector is used. For reducer state,
+use `create(reducer, initialState)` to receive `[state, dispatch]`.
 
 Use the builder form `pipe.use(...).create(initialState)`. `history()` records
 timer commits; undo/redo cancel pending timers and replay through validation.

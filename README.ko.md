@@ -22,26 +22,19 @@ pnpm add @ilokesto/state
 
 ## 빠른 시작
 
-컴포넌트 밖에서 스토어를 만들고 `bind()`로 연결합니다.
+컴포넌트 밖에서 `create()`로 공유 상태 hook을 만듭니다.
 
 ```tsx
-import { createStore } from '@ilokesto/state';
-import { bind } from '@ilokesto/state/react';
+import { create } from '@ilokesto/state/react';
 
-type CounterState = {
-  count: number;
-};
-
-const counter = createStore<CounterState>({ count: 0 });
-const useCounter = bind(counter);
-const selectCount = (state: Readonly<CounterState>) => state.count;
+const useCounter = create({ count: 0 });
 
 export function Counter() {
-  const [count] = useCounter(selectCount);
+  const [count, setCounter] = useCounter(state => state.count);
 
   return (
     <button
-      onClick={() => counter.update(previous => ({ count: previous.count + 1 }))}
+      onClick={() => setCounter(previous => ({ ...previous, count: previous.count + 1 }))}
     >
       {count}
     </button>
@@ -49,13 +42,14 @@ export function Counter() {
 }
 ```
 
-Selector는 순수하고 참조가 안정적이어야 합니다. 객체는 깊은 비교가 아닌 shallow 비교를
+Selector는 순수해야 하며 안정적인 함수 참조가 필요하면 컴포넌트 밖에 선언하세요.
+객체는 깊은 비교가 아닌 shallow 비교를
 사용하므로 중첩 값을 변경할 때도 새 불변 상태를 반환하세요. React의 서버 스냅샷은
 초기 상태에서 값을 선택합니다. 다른 어댑터도 각 프레임워크의 생명주기 요구사항을 따릅니다.
 
-Action 중심 상태에는 `createReducer()`와 `bindReducer()`를 사용하세요.
-기존 `create()` 헬퍼도 유지합니다. 명시적인 연결과 FIFO 알림의 변경 사항은
-[2.0 마이그레이션 안내](./docs/advanced/migration.ko.mdx)를 참고하세요.
+Hook은 `[state, setter]`를 반환하고 selector를 사용하면 `[선택한 값, setter]`를 반환합니다.
+Selector를 사용해도 setter는 전체 상태를 갱신합니다. Reducer 상태는
+`create(reducer, initialState)`로 만들고 `[state, dispatch]`를 받습니다.
 
 `pipe.use(...).create(initialState)` 빌더 문법을 사용하세요. `history()`는 timer의 실제
 commit을 기록하며 undo/redo는 pending timer를 취소하고 validation을 거쳐 replay합니다.
