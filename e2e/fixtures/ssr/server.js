@@ -1,6 +1,6 @@
 import '@angular/compiler';
 import { createElement } from 'react';
-import { renderToString as renderReact } from '../../../website/node_modules/react-dom/server.node.js';
+import { renderToString as renderReact } from 'react-dom/server.node';
 import { createSSRApp } from 'vue';
 import { renderToString as renderVue } from 'vue/server-renderer';
 import { render as renderSvelte } from 'svelte/server';

@@ -5,7 +5,7 @@
 [![npm](https://img.shields.io/npm/v/@ilokesto/state?style=flat&color=555)](https://www.npmjs.com/package/@ilokesto/state)
 ![MIT](https://img.shields.io/badge/license-MIT-555?style=flat)
 
-[문서](./docs/index.ko.mdx) | [API](./docs/reference/package-surface.ko.mdx) | [English](./README.md)
+[English](./README.md)
 
 - 일반 상태나 Reducer 상태를 한 번 만들고 프레임워크에 연결합니다.
 - 공통 shallow 동등성 계약으로 필요한 값만 구독합니다.
@@ -56,16 +56,7 @@ commit을 기록하며 undo/redo는 pending timer를 취소하고 validation을 
 Timer control은 `store.debounce`, `store.throttle`의 `flush`, `cancel`, `pending`입니다.
 `debounce()`는 `persist()`보다 앞에 둡니다.
 영속화에는 `key`, 저장소 팩토리, `decode`와 명시적인 비동기 `rehydrate()`, `flush()`가 필요합니다.
-호환성을 깨는 patch 마이그레이션은 아래 문서에 설명되어 있습니다.
 미들웨어 리소스는 `dispose(store)`로 정리하며 저장이 필요하면 먼저 `flush()`를 기다리세요.
-
-## 더 알아보기
-
-- [Vanilla 상태, Reducer, 연결과 소유권](./docs/reference/vanilla.ko.mdx)
-- [Selector 의미론과 프레임워크 스냅샷](./docs/advanced/selector-semantics.ko.mdx)
-- [Pipe 조합, capability와 순서](./docs/utility/pipe.ko.mdx)
-- [영속화 마이그레이션, 충돌과 저장 보장](./docs/advanced/persist-migrations.ko.mdx)
-- [프레임워크 생성 헬퍼와 어댑터 가이드](./docs/reference/create.ko.mdx)
 
 <details>
 <summary>미들웨어 예제</summary>
@@ -200,17 +191,6 @@ counterStore.increment();
 counterStore.getState().count;
 ```
 
-### 프레임워크 연결
-
-각 어댑터 문서에서 생명주기와 반환 형태를 확인할 수 있습니다.
-[React](./docs/integrations/react.ko.mdx), [Vue](./docs/integrations/vue.ko.mdx),
-[Angular](./docs/integrations/angular.ko.mdx), [Svelte](./docs/integrations/svelte.ko.mdx),
-[Solid](./docs/integrations/solid.ko.mdx)를 참고하세요.
-
-Reducer 식별자와 Store 직접 쓰기는 [Reducer 상태](./docs/guides/reducer-state.ko.mdx),
-안정적인 selector와 1단계 비교는
-[selector 의미론](./docs/advanced/selector-semantics.ko.mdx)을 참고하세요.
-
 </details>
 
 <details>
@@ -227,20 +207,13 @@ pnpm test
 pnpm test:typecheck
 pnpm test:browser
 pnpm test:tooling
-pnpm docs:publication:verify
-pnpm docs:typecheck
-pnpm docs:build
-pnpm docs:test
 ```
 
-빌드 결과는 `dist/`에 생성됩니다. 전용 문서 사이트를 빌드한 뒤
-`pnpm docs:start`로 로컬에서 실행합니다. 공식 영문·한국어 문서는 `docs/`에,
-렌더러는 `website/`에 있습니다.
+빌드 결과는 `dist/`에 생성됩니다.
 
-변경 불가능한 문서 기록과 마이그레이션 이력을 보존하세요.
 PR은 Verify CI를 실행합니다. main 병합은 Changesets 릴리스 PR을 생성·갱신하며,
 릴리스 PR을 병합하면 GitHub Actions가 성공한 Verify의 정확한 아티팩트만 게시합니다.
 적용 전에 `Allow GitHub Actions to create and approve pull requests`를 켜고
-`Production` 환경에 `NPM_TOKEN`을 설정하세요. 로컬 게시나 문서 배포는 하지 않습니다.
+`Production` 환경에 `NPM_TOKEN`을 설정하세요. 로컬 게시는 하지 않습니다.
 
 </details>

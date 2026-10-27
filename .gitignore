@@ -2,14 +2,8 @@ node_modules/
 dist/
 .sisyphus/
 *.tgz
-!docs-publication/releases/**/npm/package.tgz
 OWNERSHIP.json
-.source/
-.next/
 *.tsbuildinfo
-docs-publication/.generated/
-docs-publication/runtime/.generated/
-docs-publication/.publication.lock
 artifacts/
 .qa-run/
 .qa-browsers/

@@ -5,7 +5,7 @@ Shared TypeScript state and middleware with thin React, Vue, Angular, Svelte, an
 [![npm](https://img.shields.io/npm/v/@ilokesto/state?style=flat&color=555)](https://www.npmjs.com/package/@ilokesto/state)
 ![MIT](https://img.shields.io/badge/license-MIT-555?style=flat)
 
-[Docs](./docs/index.mdx) | [API](./docs/reference/package-surface.mdx) | [한국어](./README.ko.md)
+[한국어](./README.ko.md)
 
 - Create plain or reducer state once, then bind it to your framework.
 - Subscribe to slices using one shared shallow-equality contract.
@@ -56,16 +56,8 @@ timer commits; undo/redo cancel pending timers and replay through validation.
 Timer controls are `store.debounce` and `store.throttle` (`flush`, `cancel`, `pending`).
 Declare `debounce()` before `persist()`.
 Persistence requires `key`, a storage factory, and `decode`, with explicit async
-`rehydrate()` and `flush()`. Its breaking patch migration is documented below.
+`rehydrate()` and `flush()`.
 Call `dispose(store)` to release middleware resources; await `flush()` first if saving.
-
-## Further reading
-
-- [Vanilla state, reducers, binding, and ownership](./docs/reference/vanilla.mdx)
-- [Selector semantics and framework snapshots](./docs/advanced/selector-semantics.mdx)
-- [Pipe composition, capabilities, and ordering](./docs/utility/pipe.mdx)
-- [Persistence migration, conflicts, and saving guarantees](./docs/advanced/persist-migrations.mdx)
-- [Framework creation helpers and adapter guides](./docs/reference/create.mdx)
 
 <details>
 <summary>Middleware examples</summary>
@@ -200,17 +192,6 @@ counterStore.increment();
 counterStore.getState().count;
 ```
 
-### Framework bindings
-
-Each adapter documents its lifecycle and return shape:
-[React](./docs/integrations/react.mdx), [Vue](./docs/integrations/vue.mdx),
-[Angular](./docs/integrations/angular.mdx), [Svelte](./docs/integrations/svelte.mdx),
-and [Solid](./docs/integrations/solid.mdx).
-
-For reducer identity and direct Store writes, read
-[reducer state](./docs/guides/reducer-state.mdx). For stable selectors and one-level
-comparison, read [selector semantics](./docs/advanced/selector-semantics.mdx).
-
 </details>
 
 <details>
@@ -227,21 +208,13 @@ pnpm test
 pnpm test:typecheck
 pnpm test:browser
 pnpm test:tooling
-pnpm docs:publication:verify
-pnpm docs:typecheck
-pnpm docs:build
-pnpm docs:test
 ```
 
-Build output goes to `dist/`. After building the private documentation site,
-`pnpm docs:start` serves it locally. Canonical bilingual content lives in `docs/`;
-`website/` owns the renderer.
-
-Keep immutable publication archives and migration history intact.
+Build output goes to `dist/`.
 
 Pull requests run Verify CI. Main merges create or update a Changesets release PR; merging
 that PR publishes only the exact successful Verify artifact through GitHub Actions. Enable
 `Allow GitHub Actions to create and approve pull requests` and configure `NPM_TOKEN` in the
-`Production` environment before rollout. Never publish locally or deploy documentation.
+`Production` environment before rollout. Never publish locally.
 
 </details>

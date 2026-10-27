@@ -1,7 +1,7 @@
 import '@angular/compiler';
 import { createElement, StrictMode } from 'react';
-import { hydrateRoot, createRoot } from '../../../website/node_modules/react-dom/client.js';
-import { flushSync as flushReact } from '../../../website/node_modules/react-dom/index.js';
+import { hydrateRoot, createRoot } from 'react-dom/client';
+import { flushSync as flushReact } from 'react-dom';
 import { createSSRApp, createApp, nextTick } from 'vue';
 import { hydrate as hydrateSvelte, mount, unmount, flushSync as flushSvelte } from 'svelte';
 import { hydrate as hydrateSolid, render as renderSolid, getNextElement, insert } from 'solid-js/web';

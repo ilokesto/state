@@ -1,9 +1,0 @@
-{
-  "title": "Advanced",
-  "defaultOpen": true,
-  "pages": [
-    "migration",
-    "selector-semantics",
-    "persist-migrations"
-  ]
-}
