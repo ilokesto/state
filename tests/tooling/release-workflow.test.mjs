@@ -19,6 +19,26 @@ const releasePr = {
   head: { ref: 'changeset-release/main', repo: { full_name: policy.repository } },
 };
 
+test('quality commands: aggregate verification -> builds once and runs every suite exactly once', async () => {
+  const manifest = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
+  const ci = parse(await readFile(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
+  const checks = ci.jobs.quality.steps.flatMap(step =>
+    typeof step.run === 'string'
+      ? step.run.split('\n').map(line => line.trim()).filter(line => /^pnpm (build|typecheck|test)(?:[: ]|$)/.test(line))
+      : [],
+  );
+
+  assert.deepEqual(checks, ['pnpm typecheck', 'pnpm test']);
+  assert.equal(manifest.scripts.pretest, undefined);
+  assert.deepEqual(manifest.scripts.test.split(' && '), [
+    'pnpm build', 'pnpm test:unit', 'pnpm test:types', 'pnpm test:tooling', 'pnpm test:browser',
+  ]);
+  assert.equal(manifest.scripts['test:unit'], 'bun test tests/unit/');
+  assert.equal(manifest.scripts['test:types'], 'tsc --noEmit -p tests/tsconfig.json');
+  assert.equal(manifest.scripts['test:tooling'], 'node --test --test-concurrency=2 tests/tooling/*.test.mjs');
+  assert.equal(manifest.scripts['test:browser'], 'node --test tests/browser/*.browser.mjs');
+});
+
 test('publish workflow: verification completion -> only successful main runs enter release selection', () => {
   const github = {
     event_name: 'workflow_run', repository: policy.repository,

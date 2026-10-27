@@ -1,6 +1,6 @@
 packages:
   - .
-  - e2e/fixtures/ssr
+  - tests/fixtures/browser/ssr
 
 linkWorkspacePackages: false
 

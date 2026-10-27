@@ -202,13 +202,21 @@ Use Node 24.22.1 and pnpm 10.17.1. Run these commands from this repository root.
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm build
+pnpm exec playwright install chromium
 pnpm typecheck
 pnpm test
-pnpm test:typecheck
-pnpm test:browser
-pnpm test:tooling
 ```
+
+`pnpm typecheck` checks library source. `pnpm test` builds once, then runs Bun unit,
+type, tooling, and browser suites once each. For a focused check, run `pnpm build`
+after source changes, then `pnpm test:unit`, `pnpm test:types`, `pnpm test:tooling`,
+or `pnpm test:browser`; these commands reuse `dist/`.
+
+Tests live in `tests/unit/`, `tests/browser/`, and `tests/tooling/`. Compiler inputs,
+browser/SSR apps, and helpers live in `tests/fixtures/`; intentionally invalid inputs
+are compiled only by their runtime regression tests.
+Executable test helpers live in `tests/tooling/`; shared release tools and benchmarks
+remain in `scripts/`.
 
 Build output goes to `dist/`.
 
