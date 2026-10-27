@@ -27,15 +27,10 @@ pnpm add @ilokesto/state
 ```tsx
 import { create } from '@ilokesto/state/react';
 
-type CounterState = {
-  count: number;
-};
-
-const useCounter = create<CounterState>({ count: 0 });
-const selectCount = (state: Readonly<CounterState>) => state.count;
+const useCounter = create({ count: 0 });
 
 export function Counter() {
-  const [count, setCounter] = useCounter(selectCount);
+  const [count, setCounter] = useCounter(state => state.count);
 
   return (
     <button
@@ -47,7 +42,8 @@ export function Counter() {
 }
 ```
 
-Selector는 순수하고 참조가 안정적이어야 합니다. 객체는 깊은 비교가 아닌 shallow 비교를
+Selector는 순수해야 하며 안정적인 함수 참조가 필요하면 컴포넌트 밖에 선언하세요.
+객체는 깊은 비교가 아닌 shallow 비교를
 사용하므로 중첩 값을 변경할 때도 새 불변 상태를 반환하세요. React의 서버 스냅샷은
 초기 상태에서 값을 선택합니다. 다른 어댑터도 각 프레임워크의 생명주기 요구사항을 따릅니다.
 

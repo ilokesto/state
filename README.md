@@ -27,15 +27,10 @@ Create a shared React hook outside the component with `create()`:
 ```tsx
 import { create } from '@ilokesto/state/react';
 
-type CounterState = {
-  count: number;
-};
-
-const useCounter = create<CounterState>({ count: 0 });
-const selectCount = (state: Readonly<CounterState>) => state.count;
+const useCounter = create({ count: 0 });
 
 export function Counter() {
-  const [count, setCounter] = useCounter(selectCount);
+  const [count, setCounter] = useCounter(state => state.count);
 
   return (
     <button
@@ -47,7 +42,8 @@ export function Counter() {
 }
 ```
 
-Keep selectors pure and stable. Objects are shallow-compared, not deeply compared;
+Keep selectors pure. Hoist selectors when you need a stable function reference.
+Objects are shallow-compared, not deeply compared;
 return fresh immutable state when updating nested values. React server snapshots
 select from initial state. Other adapters retain their own lifecycle requirements.
 
