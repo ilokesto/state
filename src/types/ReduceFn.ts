@@ -2,6 +2,7 @@
  * A discriminated action object with a string `type` field.
  */
 export type ReducerAction = {
+  /** String discriminator identifying the action handled by the reducer. */
   readonly type: string;
 };
 

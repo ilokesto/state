@@ -35,7 +35,8 @@ test('quality commands: aggregate verification -> builds once and runs every sui
   ]);
   assert.equal(manifest.scripts['test:unit'], 'bun test tests/unit/');
   assert.equal(manifest.scripts['test:types'], 'tsc --noEmit -p tests/tsconfig.json');
-  assert.equal(manifest.scripts['test:tooling'], 'node --test --test-concurrency=2 tests/tooling/*.test.mjs');
+  assert.equal(manifest.scripts['test:tooling'], 'pnpm lint:jsdoc && node --test --test-concurrency=2 tests/tooling/*.test.mjs');
+  assert.equal(manifest.scripts['lint:jsdoc'], 'node scripts/check-jsdoc.mjs');
   assert.equal(manifest.scripts['test:browser'], 'node --test tests/browser/*.browser.mjs');
 });
 

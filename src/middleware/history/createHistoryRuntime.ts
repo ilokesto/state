@@ -7,34 +7,55 @@ import { cancelStoreTimers, runWithTimerReplay } from '../../lib/timerReplay.js'
 import type { HistoryControls, HistoryStatus, HistoryStrategy } from '../history.js';
 
 type HistoryStep<Selection> = {
+  /** Reverses this step against the current selection. */
   readonly undo: (current: Selection) => Selection;
+  /** Reapplies this step against the current selection. */
   readonly redo: (current: Selection) => Selection;
 };
 type HistoryEntry<Selection> = {
+  /** Steps in commit order; undo applies them in reverse order. */
   readonly steps: HistoryStep<Selection>[];
+  /** Identity shared by entries recorded within the same synchronous group. */
   readonly group: object | undefined;
 };
 type Replay<State, Selection> = {
+  /** Store action that restores the replayed selection into the actual state. */
   readonly action: (current: State) => State;
+  /** History entry this replay attempts to consume. */
   readonly entry: HistoryEntry<Selection>;
+  /** Stack from which the entry is consumed. */
   readonly source: HistoryEntry<Selection>[];
+  /** Stack receiving the corresponding replay entry. */
   readonly target: HistoryEntry<Selection>[];
+  /** Direction in which the entry's steps are applied. */
   readonly direction: 'undo' | 'redo';
+  /** First commit sequence eligible to belong to this replay, once its action runs. */
   firstSequence: number | undefined;
+  /** Whether middleware has associated a commit sequence with this replay. */
   scheduled: boolean;
+  /** Whether a commit has already handled this replay request. */
   consumed: boolean;
 };
 type DispatchContext<State, Selection> = {
+  /** Replay associated with this dispatch, if it is a history action. */
   readonly replay: Replay<State, Selection> | undefined;
+  /** Group identity captured while this dispatch is on the stack. */
   readonly group: object | undefined;
+  /** Recording pause state captured at dispatch time. */
   readonly paused: boolean;
 };
 type RuntimeOptions<State, Selection, Patch> = {
+  /** Maximum entries retained per stack; zero disables entry retention. */
   readonly limit: number;
+  /** Extracts the portion of committed state tracked by history. */
   readonly select: (state: Readonly<State>) => Selection;
+  /** Merges a replayed selection into the current full state. */
   readonly restore: (current: Readonly<State>, selection: Selection) => State;
+  /** Accepts changed commits for recording; undefined accepts all changed commits. */
   readonly filter: ((previous: Readonly<State>, next: Readonly<State>) => boolean) | undefined;
+  /** Compares selections to determine whether a commit changes tracked state. */
   readonly isEqual: (previous: Selection, next: Selection) => boolean;
+  /** Patch operations, or undefined to retain previous and next selections directly. */
   readonly strategy: HistoryStrategy<Selection, Patch> | undefined;
 };
 
@@ -43,6 +64,77 @@ export const initialHistoryStatus: HistoryStatus = Object.freeze({
   isPaused: false, isGrouping: false, disposed: false,
 });
 
+/**
+ * @description Installs commit-based undo and redo tracking on a store and returns
+ * controls for replay, synchronous grouping, recording pauses, and status observation.
+ * Tracks selected state using snapshots or reversible patches. Changed ordinary
+ * commits invalidate redo even when paused or filtered out. Restore-source commits
+ * clear the timeline. Replay cancels pending store timers and is forbidden inside
+ * a group; reentrant replay requests wait for outstanding commits.
+ * Recording-hook failures clear history before propagating the error.
+ * Store cleanup disposes tracking, clears history, and publishes terminal status.
+ * @param {Store<State>} store - Store whose committed state changes are tracked.
+ * @param {RuntimeOptions<State, Selection, Patch>} options - Selection, recording,
+ * and replay configuration; hooks should be pure.
+ * @param {number} options.limit - Maximum entries per undo or redo stack; use a
+ * nonnegative integer, with zero retaining no entries.
+ * @param {(state: Readonly<State>) => Selection} options.select - Extracts the
+ * tracked selection from each committed state and the current replay state.
+ * @param {(current: Readonly<State>, selection: Selection) => State} options.restore -
+ * Produces the full replay state by merging the restored selection into current state.
+ * @param {((previous: Readonly<State>, next: Readonly<State>) => boolean) | undefined} options.filter -
+ * Determines whether a changed ordinary commit is recorded; undefined accepts all.
+ * @param {(previous: Selection, next: Selection) => boolean} options.isEqual -
+ * Returns true when two selections are equivalent and need no history step.
+ * @param {HistoryStrategy<Selection, Patch> | undefined} options.strategy -
+ * Reversible patch strategy, or undefined to store selection snapshots.
+ * @param {(previous: Selection, next: Selection) => import("../history.js").HistoryDiff<Patch>} options.strategy.diff -
+ * Computes forward and inverse patches between selections.
+ * @param {(current: Selection, patch: Patch) => Selection} options.strategy.apply -
+ * Applies a recorded patch to the current selection.
+ * @returns {HistoryControls} Controls bound to this store's history runtime.
+ * - undo `() => void` - Replays the newest undo entry; cancels pending timers even
+ * without an entry, does nothing after disposal, and throws inside a live group.
+ * - redo `() => void` - Replays the newest redo entry with the same replay restrictions.
+ * - canUndo `() => boolean` - Reports whether the undo stack contains an entry.
+ * - canRedo `() => boolean` - Reports whether the redo stack contains an entry.
+ * - clearHistory `() => void` - Clears both stacks and pending replay bookkeeping,
+ * establishes a new commit baseline, and publishes status unless disposed.
+ * - group `<T>(action: () => T) => T` - Runs an action synchronously and returns its
+ * result, combining recorded changes under one group identity. Nested groups share
+ * that identity. Throws for thenable results while live; does not roll back writes.
+ * - pauseHistory `() => void` - Pauses recording of ordinary changes without
+ * preventing replay; changed commits still invalidate redo.
+ * - resumeHistory `() => void` - Resumes recording unless disposed.
+ * - getHistoryStatus `() => HistoryStatus` - Returns the current immutable status snapshot.
+ * - subscribeHistory `(listener: (status: HistoryStatus) => void) => () => void` - Subscribes to subsequent status commits and returns an unsubscribe function.
+ * Existing listeners receive terminal disposal status; subscriptions after disposal
+ * return a no-op unsubscribe function.
+ * @example
+ * ```ts
+ * const store = new Store({ count: 0, title: 'Counter' });
+ * const history = createHistoryRuntime(store, {
+ *   limit: 50,
+ *   select: (state) => state.count,
+ *   restore: (current, count) => ({ ...current, count }),
+ *   filter: undefined,
+ *   isEqual: Object.is,
+ *   strategy: undefined,
+ * });
+ *
+ * history.group(() => {
+ *   store.setState((state) => ({ ...state, count: 1 }));
+ *   store.setState((state) => ({ ...state, count: 2 }));
+ * });
+ * history.undo(); // Restores count to 0 in one operation.
+ * history.redo(); // Restores count to 2.
+ * const stop = history.subscribeHistory((status) => {
+ *   console.log(status.canUndo, status.redoDepth);
+ * });
+ * history.clearHistory();
+ * stop();
+ * ```
+ */
 export function createHistoryRuntime<State, Selection, Patch>(
   store: Store<State>,
   options: RuntimeOptions<State, Selection, Patch>,

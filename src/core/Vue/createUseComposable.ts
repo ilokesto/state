@@ -30,6 +30,36 @@ function createSelection<T, S>(store: ReadableStore<T>, selector: Selector<T, S>
   return computed(() => snapshot.value as S);
 }
 
+/**
+ * @description Creates a Vue composable that subscribes to a selected readonly
+ * snapshot of the store. Calling the composable requires setup() or an active
+ * effectScope(); its subscription is removed when that scope is disposed.
+ * Selection equality defaults to shallow comparison. Reducer mode exposes
+ * dispatch; otherwise the result exposes the store's bound setState method.
+ * The attached readOnly and writeOnly helpers do not require a Vue scope.
+ * @param {StoreApi<T>} store - Store to observe and update.
+ * @param {boolean} isReduce - Whether to expose dispatch instead of setState.
+ * @param {(action: Action) => void} [dispatch] - Reducer-mode dispatcher;
+ * defaults to createDispatch(store).
+ * @returns {(<S = T>(selector?: Selector<T, S>, equality?: EqualityFn<S>) => { readonly state: import('vue').ComputedRef<S>; readonly dispatch: (action: Action) => void; readonly setState?: undefined } | { readonly state: import('vue').ComputedRef<S>; readonly setState: (nextState: import('@ilokesto/store').SetStateAction<T>) => void; readonly dispatch?: undefined }) & { writeOnly: () => ((action: Action) => void) | ((nextState: import('@ilokesto/store').SetStateAction<T>) => void); readOnly: <S = T>(selector?: Selector<T, S>) => S }} Callable composable returning a computed selection and the mode-specific writer.
+ * - writeOnly `() => ((action: Action) => void) | ((nextState: import('@ilokesto/store').SetStateAction<T>) => void)` - Returns dispatch in reducer mode or the bound setState method otherwise, without subscribing.
+ * - readOnly `<S = T>(selector?: Selector<T, S>) => S` - Synchronously selects from the current readonly snapshot without subscribing; omitting the selector returns that snapshot.
+ * @example
+ * ```ts
+ * import { effectScope } from 'vue';
+ *
+ * // counterStore is an existing StoreApi<{ count: number }>.
+ * const useCounter = createUseComposable(counterStore, false);
+ * const scope = effectScope();
+ * scope.run(() => {
+ *   const counter = useCounter(state => state.count);
+ *   console.log(counter.state.value);
+ *   counter.setState?.({ count: 1 });
+ * });
+ * console.log(useCounter.readOnly(state => state.count));
+ * scope.stop();
+ * ```
+ */
 export function createUseComposable<T, Action extends ReducerAction>(store: StoreApi<T>, isReduce: boolean, dispatch = createDispatch<T, Action>(store)) {
   const write = store.setState.bind(store);
 
@@ -60,6 +90,30 @@ export function createUseComposable<T, Action extends ReducerAction>(store: Stor
   );
 }
 
+/**
+ * @description Creates a read-only Vue composable returning a computed selection
+ * of the store's readonly snapshot. Calling it requires setup() or an active
+ * effectScope(); the subscription is removed when that scope is disposed.
+ * The optional selector defaults to the whole snapshot, and selection equality
+ * defaults to shallow comparison. No write operation is exposed.
+ * @param {ReadableStore<T>} store - Readable store supplying snapshots and selection subscriptions.
+ * @returns {UseReadonlyState<T>} Callable composable returning a computed state selection, with a synchronous read helper.
+ * - readOnly `<S = ReadonlySnapshot<T>>(selector?: Selector<T, S>) => S` - Reads the current readonly snapshot, optionally selecting a value, without subscribing or requiring a Vue scope.
+ * @example
+ * ```ts
+ * import { effectScope } from 'vue';
+ *
+ * // counterStore is an existing ReadableStore<{ count: number }>.
+ * const useCounter = createReadonlyComposable(counterStore);
+ * console.log(useCounter.readOnly(state => state.count));
+ * const scope = effectScope();
+ * scope.run(() => {
+ *   const { state: count } = useCounter(state => state.count);
+ *   console.log(count.value);
+ * });
+ * scope.stop();
+ * ```
+ */
 export function createReadonlyComposable<T>(store: ReadableStore<T>): UseReadonlyState<T> {
   return Object.assign(
     <S = ReadonlySnapshot<T>>(selector?: Selector<T, S>, equality?: EqualityFn<S>) => {

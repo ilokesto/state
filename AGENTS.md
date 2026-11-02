@@ -18,6 +18,9 @@ Use Node 24.22.1 and pnpm 10.17.1. Run commands from this root.
   `pnpm test:types`, `pnpm test:tooling`, or `pnpm test:browser`. These commands reuse
   `dist/`; browser tests require installed Playwright Chromium.
 - Consumer-facing changes need a root Changeset.
+- Follow [JSDOC.md](./JSDOC.md) for English semantic API documentation on every
+  exported runtime callable, class, constructor and own public member, including
+  internal exported modules. Run `pnpm lint:jsdoc`; `test:tooling` enforces it.
 - `release:verify --sha <full-SHA>` is read-only. Main merges maintain the Changesets release PR; merging
   it publishes only the exact successful Verify artifact through GitHub Actions with the
   latest dist-tag. Never publish locally.

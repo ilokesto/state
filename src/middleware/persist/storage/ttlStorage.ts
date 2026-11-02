@@ -1,18 +1,42 @@
 import type { PersistStorageFactory } from './PersistStorage.js';
 
-/** Explicit expiry policy, in milliseconds since the injected clock's epoch.
+/** Explicit lifetime policy, in milliseconds.
  * @example
  * ttlStorage(storage, { ttlMs: 60_000 });
  */
 export type TTLStorageOptions = {
+  /** Positive, finite lifetime in milliseconds, measured from each write. */
   readonly ttlMs: number;
+  /** Clock returning a finite timestamp in milliseconds; defaults to Date.now. */
   readonly now?: () => number;
 };
 
-/** Wraps storage with an explicit, tagged TTL format; unwrapped legacy entries reject.
- * Expired reads return null without deleting a possibly newer concurrent write.
+/**
+ * @description Wraps storage with an explicit, tagged TTL format; unwrapped legacy
+ * entries reject. Each write stores the original state and version with an
+ * expiration calculated from the clock and TTL. Reads restore the original
+ * envelope, or return null when absent or at or past expiration. Expired reads
+ * do not delete a possibly newer concurrent write. Subscription and disposal
+ * support are forwarded to the underlying adapter.
+ * @param {PersistStorageFactory} storage - Factory creating the underlying storage adapter.
+ * @param {TTLStorageOptions} options - Expiration duration and optional clock.
+ * @param {number} options.ttlMs - Positive, finite lifetime in milliseconds from each write.
+ * @param {() => number} [options.now] - Clock returning finite millisecond timestamps;
+ * defaults to Date.now. Use a consistent epoch for writes and reads.
+ * @returns {PersistStorageFactory} Factory creating a TTL-wrapped adapter.
+ * @throws {RangeError} If the TTL is not positive and finite, a clock reading is
+ * nonfinite, or a calculated expiration is nonfinite.
+ * @throws {TypeError} If a stored entry has an invalid envelope or lacks valid,
+ * explicitly tagged TTL metadata.
  * @example
+ * ```ts
  * const storage = ttlStorage(jsonStorage(() => localStorage), { ttlMs: 60_000 });
+ * const adapter = storage();
+ * await adapter.setItem('session', { state: { signedIn: true }, version: 1 });
+ * const session = await adapter.getItem('session');
+ * // Within the TTL: { state: { signedIn: true }, version: 1 }.
+ * // At or after expiration: null.
+ * ```
  */
 export function ttlStorage(
   storage: PersistStorageFactory,

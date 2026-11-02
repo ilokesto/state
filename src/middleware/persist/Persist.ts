@@ -34,6 +34,7 @@ export type PersistDecoderStateValidation<DecodedState, StoreState> = [StoreStat
   : PersistDecoderStateDiagnostic<DecodedState, StoreState>;
 
 export type MigrationFn = {
+  /** Bivariant migration signature used to accept steps with different input and output types. */
   bivarianceHack(state: unknown): unknown;
 }['bivarianceHack'];
 
@@ -48,8 +49,11 @@ type MigrationTupleValidation<
     ? [PreviousOutput] extends [NextInput]
       ? MigrationTupleValidation<Rest, NextOutput>
       : {
+          /** Diagnostic marker indicating incompatible consecutive migration steps. */
           readonly __persistMigrationChainError: '__persistMigrationChainError';
+          /** Output type of the preceding migration, which the next step cannot accept. */
           readonly previous: PreviousOutput;
+          /** Input type required by the next migration step. */
           readonly next: NextInput;
         }
     : never
@@ -73,9 +77,22 @@ export type PersistRehydrateOptions = {
   readonly conflict?: PersistConflictPolicy;
 };
 
-/** Lifecycle failure with the original thrown value in `cause`.
+/**
+ * @description Lifecycle failure with the original thrown value in `cause`.
+ * The code identifies the failure category, while operation identifies the
+ * persistence action that failed.
  * @example
- * if (error instanceof PersistError && error.code === 'CONFLICT') showChoice();
+ * ```ts
+ * try {
+ *   await store.persist.rehydrate();
+ * } catch (error) {
+ *   if (error instanceof PersistError && error.code === 'CONFLICT') {
+ *     await store.persist.rehydrate({ conflict: 'keep-current' });
+ *   } else {
+ *     throw error;
+ *   }
+ * }
+ * ```
  */
 export class PersistError extends Error {
   /** Stable identifier for programmatic recovery. */
@@ -84,6 +101,26 @@ export class PersistError extends Error {
   /** Operation that failed, independent of hydration and write status. */
   readonly operation: 'hydrate' | 'sync' | 'write' | 'clear' | 'notify' | 'dispose';
 
+  /**
+   * @description Creates a persistence failure with a stable recovery code,
+   * the failed operation, and an optional original cause. Sets the error name
+   * to `PersistError`.
+   * @param {PersistError['operation']} operation - Persistence operation that failed.
+   * @param {PersistError['code']} code - Failure category for programmatic recovery.
+   * @param {string} message - Human-readable explanation of the failure.
+   * @param {unknown} [cause] - Original thrown value, retained as the error cause.
+   * @example
+   * ```ts
+   * const cause = new Error('Storage quota exceeded');
+   * const error = new PersistError(
+   *   'write',
+   *   'STORAGE',
+   *   'Could not save the editor draft.',
+   *   cause,
+   * );
+   * console.error(error.operation, error.code, error.cause);
+   * ```
+   */
   constructor(
     operation: PersistError['operation'],
     code: PersistError['code'],

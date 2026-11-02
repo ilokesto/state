@@ -19,8 +19,11 @@ export type PipeMiddlewareConflictDiagnostic<
   Middleware extends string = string,
   Conflict extends string = string,
 > = {
+  /** Marker identifying a middleware conflict diagnostic. */
   readonly __pipeMiddlewareConflictError: '__pipeMiddlewareConflictError';
+  /** Identifier of a conflicting middleware present in the chain. */
   readonly conflict: Conflict;
+  /** Identifier of the middleware declaring the conflict. */
   readonly middleware: Middleware;
 };
 
@@ -54,12 +57,19 @@ type PipeConflictIds<Metadata extends PipeMiddlewareMetadata> = Extract<
 >[number];
 
 type PipeMetadataSignature<Metadata extends PipeMiddlewareMetadata> = {
+  /** Union of capability identifiers provided by the middleware. */
   readonly adds: PipeCapabilityIds<Metadata, 'adds'>;
+  /** Union of literal middleware identifiers that must precede this middleware. */
   readonly after: PipeRelationshipIds<Metadata, 'after'>;
+  /** Union of literal middleware identifiers that must follow this middleware. */
   readonly before: PipeRelationshipIds<Metadata, 'before'>;
+  /** Union of middleware identifiers declared incompatible with this middleware. */
   readonly conflicts: PipeConflictIds<Metadata>;
+  /** Duplicate policy, defaulting to 'reject' when not explicitly declared. */
   readonly duplicate: PipeDuplicateValue<Metadata>;
+  /** Identifier used to match middleware entries when checking duplicates. */
   readonly id: PipeMetadataId<Metadata>;
+  /** Union of capability identifiers required by the middleware. */
   readonly requires: PipeCapabilityIds<Metadata, 'requires'>;
 };
 

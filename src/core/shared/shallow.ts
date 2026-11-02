@@ -47,6 +47,29 @@ const compareIterables = (
   return !!nextA.done && !!nextB.done;
 };
 
+/**
+ * @description Compares two values without recursively comparing nested values.
+ * Identical values pass Object.is; otherwise both values must be non-null objects
+ * with the same prototype. Dates compare timestamps, and regular expressions
+ * compare source and flags. Iterables with entries compare key/value mappings
+ * without regard to entry order, using Map key equality and Object.is for values.
+ * Other iterables compare their yielded values in order using Object.is.
+ * Remaining objects compare own enumerable string-keyed properties using
+ * Object.is for values; symbol and non-enumerable properties are ignored.
+ * When both remaining objects have no such properties, only plain objects
+ * (including null-prototype objects) compare equal.
+ * @param {T} valueA - First value to compare.
+ * @param {T} valueB - Second value to compare.
+ * @returns {boolean} Whether the values are equal under these shallow comparison rules.
+ * @example
+ * ```ts
+ * const profile = { name: 'Ada' };
+ * shallow({ profile }, { profile }); // true: shared nested reference
+ * shallow({ profile: { name: 'Ada' } }, { profile: { name: 'Ada' } }); // false
+ * shallow(new Set([1, 2]), new Set([2, 1])); // true: entry order is ignored
+ * shallow(new Date('2025-01-01'), new Date('2025-01-01')); // true
+ * ```
+ */
 export function shallow<T>(valueA: T, valueB: T): boolean {
   if (Object.is(valueA, valueB)) {
     return true;

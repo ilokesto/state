@@ -61,6 +61,36 @@ function useStoreSelection<T, S>(
   return value;
 }
 
+/**
+ * @description Creates a React hook that subscribes to a store's readonly
+ * snapshot or a selected value. The hook returns the selected value and a
+ * writer: the supplied dispatch in reducer mode, or the bound store setter
+ * otherwise. Selectors receive readonly snapshots; selection equality defaults
+ * to shallow comparison. Server rendering reads the store's initial state.
+ * @param {StoreApi<T>} store - Store to read, subscribe to, and update.
+ * @param {boolean} isReduce - Whether the hook returns a reducer dispatch
+ * instead of the store setter.
+ * @param {(action: Action) => void} [dispatch] - Dispatch returned in reducer
+ * mode; defaults to a dispatch created from the store. Ignored outside reducer mode.
+ * @returns {UseState<T> | UseReducer<T, Action>} A selection hook returning a
+ * readonly pair of the selected snapshot and writer, with imperative controls.
+ * - writeOnly `(UseState<T> | UseReducer<T, Action>)['writeOnly']` - Returns the
+ * bound store setter or reducer dispatch without subscribing to state changes.
+ * - readOnly `(UseState<T> | UseReducer<T, Action>)['readOnly']` - Reads the
+ * current readonly snapshot, or applies a selector to it, without subscribing.
+ * @example
+ * ```tsx
+ * // counterStore is an existing StoreApi<{ count: number }>.
+ * const useCounter = createUseState(counterStore, false);
+ *
+ * function Count() {
+ *   const [count] = useCounter((state) => state.count);
+ *   return <span>{count}</span>;
+ * }
+ *
+ * const currentCount = useCounter.readOnly((state) => state.count);
+ * ```
+ */
 export function createUseState<T, Action extends ReducerAction>(
   store: StoreApi<T>,
   isReduce: boolean,
@@ -101,6 +131,30 @@ export function createUseState<T, Action extends ReducerAction>(
   }) satisfies UseState<T>;
 }
 
+/**
+ * @description Creates a read-only React hook that subscribes to the full store
+ * snapshot or a selected value. Selectors receive readonly snapshots, and
+ * selection equality defaults to shallow comparison. Server rendering reads
+ * the store's initial state. No writer is exposed.
+ * @param {ReadableStore<T>} store - Store supplying snapshots and selection
+ * subscriptions.
+ * @returns {UseReadonlyState<T>} A hook returning the readonly snapshot or
+ * selected value, with an imperative read control.
+ * - readOnly `UseReadonlyState<T>['readOnly']` - Reads the current readonly
+ * snapshot, or applies a selector to it, without subscribing to changes.
+ * @example
+ * ```tsx
+ * // counterStore is an existing ReadableStore<{ count: number }>.
+ * const useCount = createReadonlyState(counterStore);
+ *
+ * function Count() {
+ *   const count = useCount((state) => state.count);
+ *   return <span>{count}</span>;
+ * }
+ *
+ * const currentCount = useCount.readOnly((state) => state.count);
+ * ```
+ */
 export function createReadonlyState<T>(store: ReadableStore<T>): UseReadonlyState<T> {
   function useSelectedState(): ReadonlySnapshot<T>;
   function useSelectedState<S>(selector: Selector<T, S>, equality?: EqualityFn<S>): S;

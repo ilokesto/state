@@ -41,11 +41,37 @@ function readCookie(key: string): string | null {
 }
 
 /**
- * Creates a lazy JSON cookie adapter factory with legacy encoding support.
- * No document access occurs until an adapter operation is invoked.
- * @param options - Cookie attributes; use the same path/domain to read and delete.
+ * @description Creates a lazy cookie storage adapter factory with legacy encoding
+ * support. Values use JSON by default or the supplied codec. No document access
+ * occurs until an adapter operation is invoked. Reads return null for missing
+ * cookies and reject decoded null envelopes. Writes and deletions are checked
+ * by reading the cookie back and reject if the browser did not apply them.
+ * @param {CookieStorageOptions} [options] - Serialization and cookie attributes;
+ * use consistent path/domain settings when writing and deleting. Reads use
+ * cookies visible to the current document.
+ * @param {PersistCodec} [options.codec] - Envelope codec; omit to retain the
+ * existing JSON format.
+ * @param {(value: import('./PersistStorage.js').PersistedValue) => string} [options.codec.serialize] - Serializes
+ * an envelope before URI encoding it for a cookie write.
+ * @param {(text: string) => unknown} [options.codec.deserialize] - Decodes stored
+ * text after legacy-compatible URI decoding; errors propagate to the caller.
+ * @param {string} [options.path] - Cookie path for writes and deletions; defaults to `/`.
+ * @param {string} [options.domain] - Cookie domain; omit for a host-only cookie.
+ * @param {number} [options.maxAge] - Write lifetime in seconds; omit for a session
+ * cookie. Deletion always uses a zero lifetime.
+ * @param {'Strict' | 'Lax' | 'None'} [options.sameSite] - Cross-site delivery
+ * policy; the browser's default applies when omitted.
+ * @param {boolean} [options.secure] - Adds the Secure attribute when true,
+ * restricting delivery to secure connections.
+ * @returns {PersistStorageFactory} Factory producing an asynchronous cookie
+ * storage adapter using these options.
  * @example
- * persist({ key: 'preferences', storage: cookieStorage({ path: '/' }), decode });
+ * ```ts
+ * const createStorage = cookieStorage({ path: '/', sameSite: 'Lax', secure: true });
+ * const storage = createStorage();
+ * const saved = await storage.getItem('preferences');
+ * await storage.removeItem('preferences');
+ * ```
  */
 export function cookieStorage(options: CookieStorageOptions = {}): PersistStorageFactory {
   const attributes = `; path=${options.path ?? '/'}`

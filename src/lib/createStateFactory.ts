@@ -8,7 +8,9 @@ export type StateFactoryOptions<State, Instance extends StoreApi<State>> = {
 };
 
 export type StateFactory<State, Instance extends StoreApi<State>> = {
+  /** Validate and decode JSON-compatible input, then construct a fresh store from a cloned initial state. */
   create(input: unknown): Instance;
+  /** Validate a version-one transfer envelope and construct a fresh store, rejecting decoder changes to its state. */
   hydrate(serialized: string): Instance;
   /** Transfer the initial snapshot, not subsequent writes or persistence state. */
   serialize(store: ReadableStore<State>): string;
@@ -83,14 +85,96 @@ function parseJson(serialized: string): unknown {
 }
 
 /**
- * Define stateless construction and transfer once; create a fresh store per request.
+ * @description Define stateless construction and transfer once; create a fresh
+ * store per request. Without a custom constructor, use createStore.
  *
  * Only plain JSON data is transferred. The decoder runs on server input and client
  * payloads; framework hydration and persistence rehydration remain separate.
+ * Input is validated and JSON-cloned before decoding; decoded state is validated
+ * and cloned again before construction so cached decoder objects cannot leak
+ * between requests. Custom constructors must preserve the supplied initial state;
+ * returning a store previously constructed by this factory throws.
+ *
+ * Transfers reject cycles, non-plain objects, unsupported properties, sparse
+ * arrays, non-finite numbers and negative zero. Validation limits depth to 64,
+ * visited values to 100,000 and JSON strings to 1,000,000 UTF-16 code units.
+ * Hydration requires an envelope containing exactly version: 1 and state, and
+ * rejects decoding that changes the serialized transferred state. Serialization
+ * escapes HTML-sensitive characters and Unicode line separators, then checks
+ * the length limit again. Validation, JSON parsing and decoder errors propagate.
+ *
+ * @param {StateFactoryOptions<State, Instance> | { readonly decode: (input: unknown) => State }} options - Decoder configuration, with a custom constructor in the custom-store overload.
+ * @param {(input: unknown) => State} options.decode - Validate domain fields, throw on invalid input and return canonical JSON-compatible state; hydration requires its serialized representation to remain unchanged.
+ * @param {(initialState: State) => Instance} options.create - Construct a fresh store without changing the supplied initial state; provided only in the custom-store overload.
+ * @returns {StateFactory<State, Instance> | StateFactory<State, Store<State>>} Stateless construction and transfer operations for custom stores or default stores.
+ * - create `(input: unknown) => Instance | Store<State>` - Validate and decode input, clone the decoded initial state and construct a fresh store.
+ * - hydrate `(serialized: string) => Instance | Store<State>` - Parse and validate a version-one envelope, require the decoder to preserve its serialized state and construct a fresh store.
+ * - serialize `(store: ReadableStore<State>) => string` - Encode the store's initial snapshot in an escaped version-one JSON envelope, excluding subsequent writes and persistence state.
+ * @example
+ * ```ts
+ * const counterFactory = createStateFactory({
+ *   decode(input: unknown): number {
+ *     if (typeof input !== 'number' || !Number.isSafeInteger(input)) {
+ *       throw new TypeError('Expected a safe integer counter');
+ *     }
+ *     return input;
+ *   },
+ * });
+ *
+ * const serverStore = counterFactory.create(3);
+ * const payload = counterFactory.serialize(serverStore);
+ * // payload is '{"version":1,"state":3}'
+ * const clientStore = counterFactory.hydrate(payload);
+ * // clientStore is a fresh store whose initial state is 3.
+ * ```
  */
 export function createStateFactory<State, Instance extends StoreApi<State>>(
   options: StateFactoryOptions<State, Instance>,
 ): StateFactory<State, Instance>;
+/**
+ * @description Define stateless construction and transfer once; create a fresh
+ * store per request. Without a custom constructor, use createStore.
+ *
+ * Only plain JSON data is transferred. The decoder runs on server input and client
+ * payloads; framework hydration and persistence rehydration remain separate.
+ * Input is validated and JSON-cloned before decoding; decoded state is validated
+ * and cloned again before construction so cached decoder objects cannot leak
+ * between requests. Custom constructors must preserve the supplied initial state;
+ * returning a store previously constructed by this factory throws.
+ *
+ * Transfers reject cycles, non-plain objects, unsupported properties, sparse
+ * arrays, non-finite numbers and negative zero. Validation limits depth to 64,
+ * visited values to 100,000 and JSON strings to 1,000,000 UTF-16 code units.
+ * Hydration requires an envelope containing exactly version: 1 and state, and
+ * rejects decoding that changes the serialized transferred state. Serialization
+ * escapes HTML-sensitive characters and Unicode line separators, then checks
+ * the length limit again. Validation, JSON parsing and decoder errors propagate.
+ *
+ * @param {StateFactoryOptions<State, Instance> | { readonly decode: (input: unknown) => State }} options - Decoder configuration, with a custom constructor in the custom-store overload.
+ * @param {(input: unknown) => State} options.decode - Validate domain fields, throw on invalid input and return canonical JSON-compatible state; hydration requires its serialized representation to remain unchanged.
+ * @param {(initialState: State) => Instance} options.create - Construct a fresh store without changing the supplied initial state; provided only in the custom-store overload.
+ * @returns {StateFactory<State, Instance> | StateFactory<State, Store<State>>} Stateless construction and transfer operations for custom stores or default stores.
+ * - create `(input: unknown) => Instance | Store<State>` - Validate and decode input, clone the decoded initial state and construct a fresh store.
+ * - hydrate `(serialized: string) => Instance | Store<State>` - Parse and validate a version-one envelope, require the decoder to preserve its serialized state and construct a fresh store.
+ * - serialize `(store: ReadableStore<State>) => string` - Encode the store's initial snapshot in an escaped version-one JSON envelope, excluding subsequent writes and persistence state.
+ * @example
+ * ```ts
+ * const counterFactory = createStateFactory({
+ *   decode(input: unknown): number {
+ *     if (typeof input !== 'number' || !Number.isSafeInteger(input)) {
+ *       throw new TypeError('Expected a safe integer counter');
+ *     }
+ *     return input;
+ *   },
+ * });
+ *
+ * const serverStore = counterFactory.create(3);
+ * const payload = counterFactory.serialize(serverStore);
+ * // payload is '{"version":1,"state":3}'
+ * const clientStore = counterFactory.hydrate(payload);
+ * // clientStore is a fresh store whose initial state is 3.
+ * ```
+ */
 export function createStateFactory<State>(
   options: { readonly decode: (input: unknown) => State },
 ): StateFactory<State, Store<State>>;

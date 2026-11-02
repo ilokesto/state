@@ -7,13 +7,23 @@ import type {
 import type { PipeableMiddleware } from './pipeable-types.js';
 import type { PipeAnyMiddleware, PipeMiddleware } from './types.js';
 
+/**
+ * Immutable, validated metadata captured when a middleware function is registered.
+ */
 export type PipeMetadataSnapshot = {
+  /** IDs of capabilities provided by the middleware, in declaration order. */
   readonly adds: readonly string[];
+  /** Middleware IDs that this middleware must run after. */
   readonly after: readonly string[];
+  /** Middleware IDs that this middleware must run before. */
   readonly before: readonly string[];
+  /** Middleware IDs that cannot coexist with this middleware. */
   readonly conflicts: readonly string[];
+  /** Duplicate-registration policy, defaulting to 'reject' when omitted. */
   readonly duplicate: PipeDuplicatePolicy;
+  /** Nonblank identifier used to identify the middleware in a pipe. */
   readonly id: string;
+  /** IDs of capabilities required by the middleware, in declaration order. */
   readonly requires: readonly string[];
 };
 
@@ -110,6 +120,30 @@ function metadataMatches(left: PipeMetadataSnapshot, right: PipeMetadataSnapshot
   );
 }
 
+/**
+ * @description Retrieves the frozen metadata associated with a registered
+ * middleware function or a captured middleware entry. Other values, including
+ * unregistered objects and functions, return undefined.
+ * @param {unknown} value - Middleware function, captured entry, or other value to inspect.
+ * @returns {PipeMetadataSnapshot | undefined} Registered metadata, or undefined if none exists.
+ * - adds `readonly string[]` - Capability IDs provided by the middleware.
+ * - after `readonly string[]` - Middleware IDs that must precede this middleware.
+ * - before `readonly string[]` - Middleware IDs that must follow this middleware.
+ * - conflicts `readonly string[]` - Middleware IDs incompatible with this middleware.
+ * - duplicate `PipeDuplicatePolicy` - Effective duplicate policy, including the default 'reject'.
+ * - id `string` - Registered middleware identifier.
+ * - requires `readonly string[]` - Capability IDs required by the middleware.
+ * @example
+ * ```ts
+ * const middleware = definePipeableMiddleware(
+ *   (store) => store,
+ *   { id: '@my-app/logging' },
+ * );
+ * const metadata = getPipeableMiddlewareMetadata(middleware);
+ * console.log(metadata?.id); // '@my-app/logging'
+ * console.log(getPipeableMiddlewareMetadata(null)); // undefined
+ * ```
+ */
 export function getPipeableMiddlewareMetadata(value: unknown): PipeMetadataSnapshot | undefined {
   if ((typeof value !== 'object' && typeof value !== 'function') || value === null) {
     return undefined;
@@ -118,6 +152,24 @@ export function getPipeableMiddlewareMetadata(value: unknown): PipeMetadataSnaps
   return capturedPipeMetadata.get(value) ?? pipeMiddlewareMetadata.get(value);
 }
 
+/**
+ * @description Creates a fresh, frozen opaque entry associated with a registered
+ * middleware function and its existing immutable metadata snapshot. Does not
+ * invoke the middleware. Throws PipeConfigurationError with code
+ * INVALID_METADATA if the argument is not a function or has no registered metadata.
+ * @param {object} middleware - Function previously registered with definePipeableMiddleware.
+ * @returns {object} A new opaque entry that can be resolved back to the middleware and inspected for metadata.
+ * @example
+ * ```ts
+ * const middleware = definePipeableMiddleware(
+ *   (store) => store,
+ *   { id: '@my-app/logging' },
+ * );
+ * const entry = capturePipeableMiddleware(middleware);
+ * console.log(getCapturedPipeMiddleware(entry) === middleware); // true
+ * console.log(getPipeableMiddlewareMetadata(entry)?.id); // '@my-app/logging'
+ * ```
+ */
 export function capturePipeableMiddleware(middleware: object): object {
   if (typeof middleware !== 'function') {
     invalidMetadata('Pipe middleware must be a function', []);
@@ -134,21 +186,66 @@ export function capturePipeableMiddleware(middleware: object): object {
   return entry;
 }
 
+/**
+ * @description Resolves an entry created by capturePipeableMiddleware to its
+ * original middleware function. Returns an unrecognized object unchanged.
+ * @param {object} entry - Captured middleware entry or object to pass through unchanged.
+ * @returns {object} The captured middleware function, or entry itself if it is not a captured entry.
+ * @example
+ * ```ts
+ * const middleware = definePipeableMiddleware(
+ *   (store) => store,
+ *   { id: '@my-app/logging' },
+ * );
+ * const entry = capturePipeableMiddleware(middleware);
+ * console.log(getCapturedPipeMiddleware(entry) === middleware); // true
+ *
+ * const other = {};
+ * console.log(getCapturedPipeMiddleware(other) === other); // true
+ * ```
+ */
 export function getCapturedPipeMiddleware(entry: object): object {
   return capturedPipeMiddleware.get(entry) ?? entry;
 }
 
 /**
- * Register metadata on a pipe middleware function.
+ * @description Registers an immutable metadata snapshot for a pipe middleware
+ * function and returns that same function with its pipeable type information.
  *
  * Every middleware passed to `pipe.use(...)` must be registered with this
  * helper. The metadata declares the middleware's ID, capability requirements,
  * conflicts, and ordering constraints that the pipe builder validates.
  *
- * @param middleware - The middleware function to tag.
- * @param metadata - Pipe metadata describing ID, capabilities, conflicts, and ordering.
- * @returns The same middleware function, now tagged with metadata.
+ * Registration validates nonblank identifiers, stable capability IDs, duplicate
+ * IDs within each list, and self-references in relationship lists. Omitted lists
+ * become empty snapshots and the duplicate policy defaults to 'reject'.
+ * Registering the same function again is allowed only when the normalized
+ * metadata matches, including list order. Invalid metadata, conflicting
+ * registration, or a nonfunction middleware throws PipeConfigurationError with
+ * code INVALID_METADATA. Metadata is stored externally rather than added as
+ * runtime properties to the function.
  *
+ * @typedef {PipeMiddlewareMetadata<Id, Requires, Adds, Duplicate, Conflicts, Before, After>} MiddlewareMetadata
+ * @typedef {PipeableMiddleware<PipeAnyMiddleware<Requires, Adds>, MiddlewareMetadata> | PipeableMiddleware<PipeMiddleware<State, Requires, Adds>, MiddlewareMetadata>} RegisteredMiddleware
+ * @param {PipeAnyMiddleware<Requires, Adds> | PipeMiddleware<State, Requires, Adds>} middleware - Middleware function to register, either state-independent or specialized for State.
+ * @param {MiddlewareMetadata} metadata - Middleware identity, capabilities, duplicate policy, and ordering constraints.
+ * @param {Adds | undefined} [metadata.adds] - Capabilities provided by the middleware; omitted means none.
+ * @param {After | undefined} [metadata.after] - Middleware IDs that this middleware must run after; must be unique and cannot reference its own ID.
+ * @param {Before | undefined} [metadata.before] - Middleware IDs that this middleware must run before; must be unique and cannot reference its own ID.
+ * @param {Conflicts | undefined} [metadata.conflicts] - Incompatible middleware IDs; must be unique and cannot reference its own ID.
+ * @param {Duplicate | undefined} [metadata.duplicate] - Duplicate policy applied by the pipe builder; defaults to 'reject'.
+ * @param {Id} metadata.id - Nonblank identifier for this middleware.
+ * @param {Requires | undefined} [metadata.requires] - Capabilities required by the middleware; omitted means none.
+ * @returns {RegisteredMiddleware} The original function with compile-time pipe metadata and state-compatibility brands.
+ * - pipeMiddlewareMetadataBrand `RegisteredMiddleware[typeof pipeMiddlewareMetadataBrand]` - Compile-time metadata brand; not installed as a runtime property.
+ * : pipeMiddlewareMetadataBrand.adds `Adds | undefined` - Declared provided capabilities.
+ * : pipeMiddlewareMetadataBrand.after `After | undefined` - Declared predecessor IDs.
+ * : pipeMiddlewareMetadataBrand.before `Before | undefined` - Declared successor IDs.
+ * : pipeMiddlewareMetadataBrand.conflicts `Conflicts` - Conflict IDs retained by the pipeable metadata brand.
+ * : pipeMiddlewareMetadataBrand.duplicate `Duplicate | undefined` - Declared duplicate policy.
+ * : pipeMiddlewareMetadataBrand.id `Id` - Declared middleware identifier.
+ * : pipeMiddlewareMetadataBrand.requires `Requires | undefined` - Declared required capabilities.
+ * - pipeStateMismatchKindBrand `RegisteredMiddleware[typeof pipeStateMismatchKindBrand]` - Compile-time state-compatibility marker; not installed as a runtime property.
  * @example
  * ```ts
  * import { definePipeableMiddleware } from '@ilokesto/state/utils';
@@ -175,16 +272,43 @@ export function definePipeableMiddleware<
   PipeMiddlewareMetadata<Id, Requires, Adds, Duplicate, Conflicts, Before, After>
 >;
 /**
- * Register metadata on a pipe middleware function.
+ * @description Registers an immutable metadata snapshot for a pipe middleware
+ * function and returns that same function with its pipeable type information.
  *
  * Every middleware passed to `pipe.use(...)` must be registered with this
  * helper. The metadata declares the middleware's ID, capability requirements,
  * conflicts, and ordering constraints that the pipe builder validates.
  *
- * @param middleware - The middleware function to tag.
- * @param metadata - Pipe metadata describing ID, capabilities, conflicts, and ordering.
- * @returns The same middleware function, now tagged with metadata.
+ * Registration validates nonblank identifiers, stable capability IDs, duplicate
+ * IDs within each list, and self-references in relationship lists. Omitted lists
+ * become empty snapshots and the duplicate policy defaults to 'reject'.
+ * Registering the same function again is allowed only when the normalized
+ * metadata matches, including list order. Invalid metadata, conflicting
+ * registration, or a nonfunction middleware throws PipeConfigurationError with
+ * code INVALID_METADATA. Metadata is stored externally rather than added as
+ * runtime properties to the function.
  *
+ * @typedef {PipeMiddlewareMetadata<Id, Requires, Adds, Duplicate, Conflicts, Before, After>} MiddlewareMetadata
+ * @typedef {PipeableMiddleware<PipeAnyMiddleware<Requires, Adds>, MiddlewareMetadata> | PipeableMiddleware<PipeMiddleware<State, Requires, Adds>, MiddlewareMetadata>} RegisteredMiddleware
+ * @param {PipeAnyMiddleware<Requires, Adds> | PipeMiddleware<State, Requires, Adds>} middleware - Middleware function to register, either state-independent or specialized for State.
+ * @param {MiddlewareMetadata} metadata - Middleware identity, capabilities, duplicate policy, and ordering constraints.
+ * @param {Adds | undefined} [metadata.adds] - Capabilities provided by the middleware; omitted means none.
+ * @param {After | undefined} [metadata.after] - Middleware IDs that this middleware must run after; must be unique and cannot reference its own ID.
+ * @param {Before | undefined} [metadata.before] - Middleware IDs that this middleware must run before; must be unique and cannot reference its own ID.
+ * @param {Conflicts | undefined} [metadata.conflicts] - Incompatible middleware IDs; must be unique and cannot reference its own ID.
+ * @param {Duplicate | undefined} [metadata.duplicate] - Duplicate policy applied by the pipe builder; defaults to 'reject'.
+ * @param {Id} metadata.id - Nonblank identifier for this middleware.
+ * @param {Requires | undefined} [metadata.requires] - Capabilities required by the middleware; omitted means none.
+ * @returns {RegisteredMiddleware} The original function with compile-time pipe metadata and state-compatibility brands.
+ * - pipeMiddlewareMetadataBrand `RegisteredMiddleware[typeof pipeMiddlewareMetadataBrand]` - Compile-time metadata brand; not installed as a runtime property.
+ * : pipeMiddlewareMetadataBrand.adds `Adds | undefined` - Declared provided capabilities.
+ * : pipeMiddlewareMetadataBrand.after `After | undefined` - Declared predecessor IDs.
+ * : pipeMiddlewareMetadataBrand.before `Before | undefined` - Declared successor IDs.
+ * : pipeMiddlewareMetadataBrand.conflicts `Conflicts` - Conflict IDs retained by the pipeable metadata brand.
+ * : pipeMiddlewareMetadataBrand.duplicate `Duplicate | undefined` - Declared duplicate policy.
+ * : pipeMiddlewareMetadataBrand.id `Id` - Declared middleware identifier.
+ * : pipeMiddlewareMetadataBrand.requires `Requires | undefined` - Declared required capabilities.
+ * - pipeStateMismatchKindBrand `RegisteredMiddleware[typeof pipeStateMismatchKindBrand]` - Compile-time state-compatibility marker; not installed as a runtime property.
  * @example
  * ```ts
  * import { definePipeableMiddleware } from '@ilokesto/state/utils';

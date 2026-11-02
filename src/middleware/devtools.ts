@@ -16,15 +16,23 @@ type CurriedDevtools = PipeableMiddleware<
 >;
 
 /** An extension action: legacy labels or a reducer action including its payload. */
-export type DevtoolsAction = string | { readonly type: string; readonly [key: string]: unknown };
+export type DevtoolsAction = string | {
+  /** Action label displayed by the extension. */
+  readonly type: string;
+  /** Additional reducer action fields, including any payload. */
+  readonly [key: string]: unknown;
+};
 
 /** Serialization settings forwarded to Redux DevTools, not to persistence. */
 export type DevtoolsSerializeOptions = boolean | {
+  /** Enable extended serialization globally or for selected value categories. */
   readonly options?: boolean | Readonly<Partial<Record<
     'date' | 'regex' | 'undefined' | 'nan' | 'infinity' | 'error' | 'symbol' | 'map' | 'set',
     boolean
   >>>;
+  /** Transform values during extension serialization. */
   readonly replacer?: (key: string, value: unknown) => unknown;
+  /** Revive serialized values; also used by the default replay decoder. */
   readonly reviver?: (key: string, value: unknown) => unknown;
 };
 
@@ -32,27 +40,42 @@ export type DevtoolsSerializeOptions = boolean | {
 export type DevtoolsOptions = {
   /** Defaults to false in production and true elsewhere. */
   readonly enabled?: boolean;
+  /** Transform a detached state snapshot before sending it to the extension. */
   readonly stateSanitizer?: (state: unknown) => unknown;
+  /** Transform a detached action before sending it to the extension. */
   readonly actionSanitizer?: (action: DevtoolsAction) => DevtoolsAction;
+  /** Configure extension serialization without changing persistence serialization. */
   readonly serialize?: DevtoolsSerializeOptions;
   /** Decode extension state for replay. Defaults to JSON.parse with serialize.reviver. */
   readonly deserializeState?: (state: string) => unknown;
 };
 
 type DevtoolsConnection = {
+  /** Initialize or reset the extension's displayed state baseline. */
   init: (state: unknown) => void;
+  /** Listen for extension messages, optionally returning a subscription cleanup. */
   subscribe: (listener: (message: unknown) => void) => (() => void) | undefined;
+  /** Stop listening when subscribe does not provide its own cleanup. */
   unsubscribe?: () => void;
+  /** Report a committed action and its resulting state to the extension. */
   send: (action: DevtoolsAction, state: unknown) => void;
 };
 
 type DevtoolsObservation = {
+  /** Action associated with a commit; undefined when action preparation failed. */
   readonly action: DevtoolsAction | undefined;
+  /** Whether this observation belongs to an extension-driven dispatch. */
   readonly suppressed: boolean;
 };
 
 type ReduxDevtoolsExtension = {
-  connect: (options: { name: string; serialize?: DevtoolsSerializeOptions }) => DevtoolsConnection;
+  /** Open an extension connection with a display name and serialization settings. */
+  connect: (options: {
+    /** Store label displayed by Redux DevTools. */
+    name: string;
+    /** Serialization settings forwarded to the extension. */
+    serialize?: DevtoolsSerializeOptions;
+  }) => DevtoolsConnection;
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -246,25 +269,142 @@ const applyDevtools = <T>(initialState: T | Store<T>, name: string, options: Dev
 };
 
 /**
- * Create a pipe middleware that connects the store to the Redux DevTools
- * browser extension.
+ * @description Creates pipe middleware connecting a store to the Redux DevTools
+ * browser extension. Accepts either a name with optional settings or a settings
+ * object containing the name. Returns the store unchanged when disabled or when
+ * the extension is unavailable.
  *
  * Supports `RESET`, `COMMIT`, `ROLLBACK`, `JUMP_TO_STATE`, and `JUMP_TO_ACTION`.
  * Disabled in production unless explicitly enabled. Jumps validate the incoming
  * state, replace it immediately, and clear the local undo/redo baseline.
+ * Committed changes are reported with action metadata when available.
+ * Extension-driven updates are not echoed back as ordinary actions.
+ * Store cleanup stops observation and releases the extension subscription.
+ * Sanitization and sending failures are logged; malformed replay messages or
+ * asynchronous deserialization results throw.
  *
- * @param name - Label shown in the DevTools extension.
- * @returns Pipe middleware registered with `@ilokesto/state/devtools` metadata.
- *
+ * @param {string} name - Label shown in the DevTools extension for the string overload.
+ * @param {DevtoolsOptions & { readonly name?: string }} [options] - Optional settings
+ * after a string name, or the required named settings object in the object overload.
+ * @param {boolean | undefined} [options.enabled] - Override the default of enabled
+ * outside production and disabled in production.
+ * @param {((state: unknown) => unknown) | undefined} [options.stateSanitizer] -
+ * Transform a detached state snapshot before extension initialization or reporting.
+ * @param {((action: DevtoolsAction) => DevtoolsAction) | undefined} [options.actionSanitizer] -
+ * Transform a detached action before reporting it to the extension.
+ * @param {DevtoolsSerializeOptions | undefined} [options.serialize] - Extension
+ * serialization settings, independent of persistence; specifying this also causes
+ * outgoing states and actions to be cloned before processing.
+ * @param {boolean | Readonly<Partial<Record<'date' | 'regex' | 'undefined' | 'nan' | 'infinity' | 'error' | 'symbol' | 'map' | 'set', boolean>>> | undefined} [options.serialize.options] -
+ * Enable extended serialization globally or for selected categories when serialize is an object.
+ * @param {((key: string, value: unknown) => unknown) | undefined} [options.serialize.replacer] -
+ * Transform values during extension serialization when serialize is an object.
+ * @param {((key: string, value: unknown) => unknown) | undefined} [options.serialize.reviver] -
+ * Revive serialized values; also passed to JSON.parse by the default replay decoder.
+ * @param {((state: string) => unknown) | undefined} [options.deserializeState] -
+ * Synchronously decode replay state instead of using JSON.parse with the configured
+ * reviver. Returning a Promise is rejected.
+ * @param {string} options.name - Required display name in the object overload;
+ * the string overload uses its separate name argument instead.
+ * @returns {CurriedDevtools} Middleware registered with
+ * `@ilokesto/state/devtools` metadata. In the member types below, Metadata means
+ * `PipeMiddlewareMetadata<'@ilokesto/state/devtools', readonly [], readonly [], 'reject', readonly []>`;
+ * MetadataBrand and StateMismatchBrand denote the corresponding unique-symbol
+ * keys of CurriedDevtools.
+ * - pipeMiddlewareMetadataBrand `CurriedDevtools[MetadataBrand]` - Static middleware composition metadata.
+ * : pipeMiddlewareMetadataBrand.adds `readonly []` - Adds no declared capabilities.
+ * : pipeMiddlewareMetadataBrand.after `Metadata['after']` - Declares no explicit after-order constraints.
+ * : pipeMiddlewareMetadataBrand.before `Metadata['before']` - Declares no explicit before-order constraints.
+ * : pipeMiddlewareMetadataBrand.conflicts `readonly []` - Declares no conflicting middleware identifiers.
+ * : pipeMiddlewareMetadataBrand.duplicate `'reject'` - Rejects duplicate registration.
+ * : pipeMiddlewareMetadataBrand.id `'@ilokesto/state/devtools'` - Stable middleware identifier.
+ * : pipeMiddlewareMetadataBrand.requires `readonly []` - Requires no declared capabilities.
+ * - pipeStateMismatchKindBrand `CurriedDevtools[StateMismatchBrand]` - Type-level state-compatibility marker for pipe composition.
  * @example
  * ```ts
  * import { devtools } from '@ilokesto/state/middleware';
  * import { pipe } from '@ilokesto/state/utils';
  *
  * const store = pipe.use(devtools('counter')).create({ count: 0 });
+ * store.setState({ count: 1 });
+ *
+ * const inspectedStore = pipe.use(devtools({
+ *   name: 'debug counter',
+ *   enabled: true,
+ *   stateSanitizer: (state) => ({ count: (state as { count: number }).count }),
+ * })).create({ count: 0 });
+ * inspectedStore.setState({ count: 2 });
  * ```
  */
 export function devtools(name: string, options?: DevtoolsOptions): CurriedDevtools;
+/**
+ * @description Creates pipe middleware connecting a store to the Redux DevTools
+ * browser extension. Accepts either a name with optional settings or a settings
+ * object containing the name. Returns the store unchanged when disabled or when
+ * the extension is unavailable.
+ *
+ * Supports `RESET`, `COMMIT`, `ROLLBACK`, `JUMP_TO_STATE`, and `JUMP_TO_ACTION`.
+ * Disabled in production unless explicitly enabled. Jumps validate the incoming
+ * state, replace it immediately, and clear the local undo/redo baseline.
+ * Committed changes are reported with action metadata when available.
+ * Extension-driven updates are not echoed back as ordinary actions.
+ * Store cleanup stops observation and releases the extension subscription.
+ * Sanitization and sending failures are logged; malformed replay messages or
+ * asynchronous deserialization results throw.
+ *
+ * @param {string} name - Label shown in the DevTools extension for the string overload.
+ * @param {DevtoolsOptions & { readonly name?: string }} [options] - Optional settings
+ * after a string name, or the required named settings object in the object overload.
+ * @param {boolean | undefined} [options.enabled] - Override the default of enabled
+ * outside production and disabled in production.
+ * @param {((state: unknown) => unknown) | undefined} [options.stateSanitizer] -
+ * Transform a detached state snapshot before extension initialization or reporting.
+ * @param {((action: DevtoolsAction) => DevtoolsAction) | undefined} [options.actionSanitizer] -
+ * Transform a detached action before reporting it to the extension.
+ * @param {DevtoolsSerializeOptions | undefined} [options.serialize] - Extension
+ * serialization settings, independent of persistence; specifying this also causes
+ * outgoing states and actions to be cloned before processing.
+ * @param {boolean | Readonly<Partial<Record<'date' | 'regex' | 'undefined' | 'nan' | 'infinity' | 'error' | 'symbol' | 'map' | 'set', boolean>>> | undefined} [options.serialize.options] -
+ * Enable extended serialization globally or for selected categories when serialize is an object.
+ * @param {((key: string, value: unknown) => unknown) | undefined} [options.serialize.replacer] -
+ * Transform values during extension serialization when serialize is an object.
+ * @param {((key: string, value: unknown) => unknown) | undefined} [options.serialize.reviver] -
+ * Revive serialized values; also passed to JSON.parse by the default replay decoder.
+ * @param {((state: string) => unknown) | undefined} [options.deserializeState] -
+ * Synchronously decode replay state instead of using JSON.parse with the configured
+ * reviver. Returning a Promise is rejected.
+ * @param {string} options.name - Required display name in the object overload;
+ * the string overload uses its separate name argument instead.
+ * @returns {CurriedDevtools} Middleware registered with
+ * `@ilokesto/state/devtools` metadata. In the member types below, Metadata means
+ * `PipeMiddlewareMetadata<'@ilokesto/state/devtools', readonly [], readonly [], 'reject', readonly []>`;
+ * MetadataBrand and StateMismatchBrand denote the corresponding unique-symbol
+ * keys of CurriedDevtools.
+ * - pipeMiddlewareMetadataBrand `CurriedDevtools[MetadataBrand]` - Static middleware composition metadata.
+ * : pipeMiddlewareMetadataBrand.adds `readonly []` - Adds no declared capabilities.
+ * : pipeMiddlewareMetadataBrand.after `Metadata['after']` - Declares no explicit after-order constraints.
+ * : pipeMiddlewareMetadataBrand.before `Metadata['before']` - Declares no explicit before-order constraints.
+ * : pipeMiddlewareMetadataBrand.conflicts `readonly []` - Declares no conflicting middleware identifiers.
+ * : pipeMiddlewareMetadataBrand.duplicate `'reject'` - Rejects duplicate registration.
+ * : pipeMiddlewareMetadataBrand.id `'@ilokesto/state/devtools'` - Stable middleware identifier.
+ * : pipeMiddlewareMetadataBrand.requires `readonly []` - Requires no declared capabilities.
+ * - pipeStateMismatchKindBrand `CurriedDevtools[StateMismatchBrand]` - Type-level state-compatibility marker for pipe composition.
+ * @example
+ * ```ts
+ * import { devtools } from '@ilokesto/state/middleware';
+ * import { pipe } from '@ilokesto/state/utils';
+ *
+ * const store = pipe.use(devtools('counter')).create({ count: 0 });
+ * store.setState({ count: 1 });
+ *
+ * const inspectedStore = pipe.use(devtools({
+ *   name: 'debug counter',
+ *   enabled: true,
+ *   stateSanitizer: (state) => ({ count: (state as { count: number }).count }),
+ * })).create({ count: 0 });
+ * inspectedStore.setState({ count: 2 });
+ * ```
+ */
 export function devtools(options: DevtoolsOptions & { readonly name: string }): CurriedDevtools;
 export function devtools(
   nameOrOptions: string | (DevtoolsOptions & { readonly name: string }),
