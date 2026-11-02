@@ -8,16 +8,31 @@ import { dispose } from './storeCleanup.js';
 
 /** An application-assigned, globally unique idempotency key and its immutable operation. */
 export type OutboxRecord<Operation> = {
+  /** Non-empty operation ID; must not be reused, even after acknowledgement. */
   readonly id: string;
+  /** Structured-cloneable payload accepted by the configured decoder. */
   readonly operation: Operation;
 };
 
 /** The transport must validate its backend response before returning this protocol. */
 export type OutboxResponse<Conflict = unknown> =
-  | { readonly status: 'ack'; readonly id: string }
-  | { readonly status: 'conflict'; readonly id: string; readonly conflict: Conflict };
+  | {
+    /** Confirms successful processing of the exact operation ID. */
+    readonly status: 'ack';
+    /** ID of the operation acknowledged by the backend. */
+    readonly id: string
+  }
+  | {
+    /** Reports a conflict requiring explicit resolution. */
+    readonly status: 'conflict';
+    /** ID of the operation that encountered the conflict. */
+    readonly id: string;
+    /** Backend conflict details supplied to the resolver. */
+    readonly conflict: Conflict
+  };
 
 export type OutboxContext = {
+  /** Delivery cancellation signal; transport and resolver should honor it. */
   readonly signal: AbortSignal;
   /** Fixed for this instance, including after an account change elsewhere. */
   readonly key: string;
@@ -25,19 +40,33 @@ export type OutboxContext = {
 
 /** No implicit last-write-wins: replacement is a new operation with a fresh ID. */
 export type OutboxResolution<Operation> =
-  | { readonly action: 'keep' }
-  | { readonly action: 'discard' }
-  | { readonly action: 'replace'; readonly record: OutboxRecord<Operation> };
+  | {
+    /** Retains the operation and stops the flush with a CONFLICT error. */
+    readonly action: 'keep'
+  }
+  | {
+    /** Durably removes the conflicted operation without replacing it. */
+    readonly action: 'discard'
+  }
+  | {
+    /** Durably substitutes a new operation, delivered by a later flush. */
+    readonly action: 'replace';
+    /** Valid replacement with a fresh, previously unused ID. */
+    readonly record: OutboxRecord<Operation>
+  };
 
 export type OutboxOptions<Operation, Conflict = unknown> = {
   /** Required, outbox-only storage key; use a separate key for each account. */
   readonly key: string;
+  /** Storage factory used to restore and durably save the queue. */
   readonly storage: PersistStorageFactory;
   /** Validate a structured-cloneable operation at enqueue and restoration. */
   readonly decode: (value: unknown) => Operation | null;
+  /** Sends a cloned record and returns a validated response matching its ID. */
   readonly transport: (
     record: OutboxRecord<Operation>, context: OutboxContext,
   ) => OutboxResponse<Conflict> | PromiseLike<OutboxResponse<Conflict>>;
+  /** Explicit conflict policy; omission retains the record and stops delivery. */
   readonly resolve?: (
     record: OutboxRecord<Operation>, conflict: Conflict, context: OutboxContext,
   ) => OutboxResolution<Operation> | PromiseLike<OutboxResolution<Operation>>;
@@ -45,6 +74,7 @@ export type OutboxOptions<Operation, Conflict = unknown> = {
   readonly online?: boolean;
   /** Only transport throws/rejections retry; omitted means one attempt per flush. */
   readonly retry?: {
+    /** Positive safe-integer attempt limit per record in each flush, including the initial attempt. */
     readonly maxAttempts: number;
     /** Failed attempt is one-based. Defaults to zero; never an unbounded policy. */
     readonly delayMs?: number | ((attempt: number, error: unknown) => number);
@@ -52,22 +82,31 @@ export type OutboxOptions<Operation, Conflict = unknown> = {
 };
 
 export type OutboxEntry<Operation> = OutboxRecord<Operation> & {
+  /** Whether the retained record is awaiting delivery, being sent, or has failed. */
   readonly status: 'pending' | 'inflight' | 'error';
   /** Attempts in this instance, reset on restart. */
   readonly attempts: number;
+  /** Most recent delivery failure for this record, or null when none is recorded. */
   readonly error: unknown | null;
 };
 
 export type OutboxState<Operation> = {
+  /** Restoration lifecycle; mutations and delivery require the ready state. */
   readonly hydration: 'idle' | 'hydrating' | 'ready' | 'error';
+  /** Explicit delivery permission, independent of browser network detection. */
   readonly online: boolean;
+  /** Whether terminal cleanup has begun. */
   readonly disposed: boolean;
+  /** Retained records in delivery order, with in-memory delivery metadata. */
   readonly entries: ReadonlyArray<OutboxEntry<Operation>>;
+  /** Most recently published queue or delivery failure, or null when cleared. */
   readonly error: unknown | null;
 };
 
 export type Outbox<Operation> = {
+  /** Read-only observable queue state, including restoration and delivery status. */
   readonly store: ReadableStore<OutboxState<Operation>>;
+  /** Restores durable records; concurrent calls share restoration and failures may be retried. */
   readonly rehydrate: () => Promise<void>;
   /** Resolves only after the validated record has been durably saved. Does not send. */
   readonly enqueue: (record: OutboxRecord<Operation>) => Promise<void>;
@@ -81,9 +120,39 @@ export type Outbox<Operation> = {
   readonly dispose: () => void;
 };
 
-/** Protocol/lifecycle failure; storage failures retain their original PersistError. */
+/**
+ * @description Identifies an outbox protocol or lifecycle failure by code.
+ * Storage failures retain their original PersistError rather than being wrapped.
+ * @example
+ * ```ts
+ * try {
+ *   await outbox.enqueue({ id: 'invoice:42:submit', operation });
+ * } catch (error) {
+ *   if (error instanceof OutboxError && error.code === 'NOT_READY') {
+ *     await outbox.rehydrate();
+ *   } else {
+ *     throw error;
+ *   }
+ * }
+ * ```
+ */
 export class OutboxError extends Error {
+  /**
+   * @description Creates a coded outbox failure with a message and optional error cause.
+   * @param {'CONFLICT' | 'DISPOSED' | 'INVALID_RECORD' | 'DUPLICATE_ID' | 'NOT_READY' | 'OFFLINE' | 'INVALID_RESPONSE'} code - Protocol or lifecycle failure category.
+   * @param {string} message - Human-readable explanation of the failure.
+   * @param {ErrorOptions} [options] - Standard error options, including an underlying cause.
+   * @example
+   * ```ts
+   * const error = new OutboxError(
+   *   'INVALID_RESPONSE',
+   *   'Transport returned an acknowledgement for a different operation',
+   *   { cause: response },
+   * );
+   * ```
+   */
   constructor(
+    /** Stable category for distinguishing protocol and lifecycle failures. */
     readonly code: 'INVALID_RECORD' | 'DUPLICATE_ID' | 'NOT_READY' | 'DISPOSED' |
       'OFFLINE' | 'INVALID_RESPONSE' | 'CONFLICT',
     message: string,
@@ -102,13 +171,45 @@ function validateDelay(delay: number): number {
 }
 
 /**
- * Own a durable, opt-in, at-least-once outbox. Server-side idempotency is required.
+ * @description Own a durable, opt-in, at-least-once outbox. Server-side idempotency is required.
  * One active owner per storage key is required; no cross-tab locking is installed.
+ * Rehydrate before enqueueing or flushing. Enqueues validate and clone operations,
+ * then save them without sending. Flush processes a finite snapshot sequentially;
+ * concurrent flushes share a run, and later enqueues or conflict replacements wait
+ * for another flush. Acknowledged or discarded records are removed only after
+ * durable storage succeeds. A failure stops the current run.
+ * Cancellation retains unacknowledged operations; disposal is terminal and does
+ * not delete durable records. Neither going online nor enqueueing starts delivery.
+ * @param {OutboxOptions<Operation, Conflict>} options - Persistence, delivery, and explicit conflict policy.
+ * @param {string} options.key - Non-empty, outbox-only storage key fixed for this instance; use a distinct key per account.
+ * @param {PersistStorageFactory} options.storage - Factory providing durable storage for the queue.
+ * @param {(value: unknown) => Operation | null} options.decode - Validates cloned operations during enqueue and restoration; returns null to reject them.
+ * @param {(record: OutboxRecord<Operation>, context: OutboxContext) => OutboxResponse<Conflict> | PromiseLike<OutboxResponse<Conflict>>} options.transport - Sends a cloned operation with its idempotency ID and cancellation context; must validate the backend response and return a matching ID.
+ * @param {(record: OutboxRecord<Operation>, conflict: Conflict, context: OutboxContext) => OutboxResolution<Operation> | PromiseLike<OutboxResolution<Operation>>} [options.resolve] - Explicitly keeps, discards, or replaces a conflicted operation. Omission behaves as keep, stopping the flush with a CONFLICT error.
+ * @param {boolean} [options.online] - Initial delivery permission, defaulting to true; no network listeners are installed.
+ * @param {OutboxOptions<Operation, Conflict>['retry']} [options.retry] - Bounded retry policy for transport throws and rejections only; omission allows one attempt per record per flush.
+ * @param {number} [options.retry.maxAttempts] - Required when retry is supplied: positive safe-integer attempt limit including the initial attempt.
+ * @param {number | ((attempt: number, error: unknown) => number)} [options.retry.delayMs] - Delay before retrying, defaulting to zero; the callback receives the one-based failed attempt and its error. Delays must be finite and between zero and 2147483647 milliseconds.
+ * @returns {Outbox<Operation>} Queue controls and observable state for this storage key.
+ * - store `ReadableStore<OutboxState<Operation>>` - Read-only observable hydration, online, disposal, queue, and failure state.
+ * - rehydrate `() => Promise<void>` - Restores and validates saved records; concurrent calls share restoration, ready calls do nothing, and failed restoration can be retried.
+ * - enqueue `(record: OutboxRecord<Operation>) => Promise<void>` - Requires readiness, validates a fresh ID and cloneable operation, and resolves after durable saving without sending.
+ * - flush `() => Promise<ResourceResult<void>>` - Delivers a finite snapshot and resolves with success, error, or cancellation; offline or disposed calls are cancelled and unhydrated calls report an error.
+ * - cancel `(reason?: unknown) => void` - Aborts active delivery and backoff with the supplied reason, defaulting to an AbortError, while retaining unacknowledged records.
+ * - setOnline `(online: boolean) => void` - Updates delivery permission; false cancels delivery, true requires an explicit flush, and calls after disposal throw.
+ * - dispose `() => void` - Idempotently stops delivery and releases owned resources without deleting durable operations.
  * @example
+ * ```ts
+ * // storage, decode, and transport are the application's configured adapters.
  * const outbox = createOutbox({ key: 'account:42:outbox', storage, decode, transport });
  * await outbox.rehydrate();
  * await outbox.enqueue({ id: crypto.randomUUID(), operation });
  * const result = await outbox.flush();
+ * if (result.status === 'error') {
+ *   console.error('Delivery stopped; retained operations can be retried', result.error);
+ * }
+ * outbox.dispose();
+ * ```
  */
 export function createOutbox<Operation, Conflict = unknown>(
   options: OutboxOptions<Operation, Conflict>,

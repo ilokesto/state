@@ -13,6 +13,8 @@ Shared TypeScript state and middleware with thin React, Vue, Angular, Svelte, an
 
 ## Installation
 
+Contributors: follow the English API contract in [JSDOC.md](./JSDOC.md) and run `pnpm lint:jsdoc`. The full `pnpm test` gate enforces it.
+
 ```sh
 pnpm add @ilokesto/state
 ```

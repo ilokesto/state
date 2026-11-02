@@ -13,6 +13,8 @@
 
 ## 설치
 
+기여자는 [JSDOC.md](./JSDOC.md)의 영어 API 문서 계약을 따르고 `pnpm lint:jsdoc`를 실행하세요. 전체 `pnpm test`에서도 같은 계약을 검사합니다.
+
 ```sh
 pnpm add @ilokesto/state
 ```

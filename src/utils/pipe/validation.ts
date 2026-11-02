@@ -4,7 +4,9 @@ import type { PipeMetadataSnapshot } from './metadata.js';
 import { pipeRelationshipKeys } from './types.js';
 
 type MiddlewareEdge = {
+  /** Identifier of the middleware that must precede the destination. */
   readonly from: string;
+  /** Identifier of the middleware that must follow the source. */
   readonly to: string;
 };
 
@@ -219,6 +221,28 @@ function validateRelationshipOrder(metadata: readonly PipeMetadataSnapshot[]): v
   }
 }
 
+/**
+ * @description Validates registered middleware metadata and the supplied execution
+ * order without modifying or reordering the chain. Checks duplicate middleware
+ * policies and metadata consistency, conflicts, capability availability and
+ * uniqueness, relationship cycles, and before/after ordering. Required capabilities
+ * must be provided by earlier middleware. Relationships to absent middleware are
+ * ignored; when an identifier occurs multiple times, every occurrence must satisfy
+ * its ordering relationships. An empty chain is valid.
+ * @param {readonly object[]} chain - Middleware objects in execution order, each
+ * with registered pipe metadata.
+ * @throws {PipeConfigurationError} If metadata is missing, duplicates are not
+ * permitted or have inconsistent metadata, middleware conflict, capabilities are
+ * missing or added repeatedly, or relationships contain a cycle or violate order.
+ * @example
+ * ```ts
+ * import { authenticationMiddleware, auditMiddleware } from './app-middlewares.js';
+ *
+ * // These application middleware objects already have registered pipe metadata.
+ * // Authentication provides the capability required by auditing.
+ * validatePipeMiddlewareChain([authenticationMiddleware, auditMiddleware]);
+ * ```
+ */
 export function validatePipeMiddlewareChain(chain: readonly object[]): void {
   const metadata = readMetadata(chain);
   validateDuplicateMetadata(metadata);
@@ -235,6 +259,30 @@ export function validatePipeMiddlewareChain(chain: readonly object[]): void {
   validateRelationshipOrder(metadata);
 }
 
+/**
+ * @description Validates the complete chain that would result from appending
+ * next, without modifying chain or registering metadata. Revalidates existing
+ * middleware as well as the proposed addition, applying the same metadata,
+ * duplicate, conflict, capability, cycle, and ordering checks as
+ * validatePipeMiddlewareChain.
+ * @param {readonly object[]} chain - Existing middleware objects in execution
+ * order, each with registered pipe metadata.
+ * @param {object} next - Middleware object with registered pipe metadata to
+ * validate as the final entry.
+ * @throws {PipeConfigurationError} If the resulting chain has missing metadata,
+ * invalid duplicates, conflicts, missing or duplicate capabilities, cyclic
+ * relationships, or invalid relationship order.
+ * @example
+ * ```ts
+ * import { authenticationMiddleware, auditMiddleware } from './app-middlewares.js';
+ *
+ * // Both objects already have registered pipe metadata.
+ * const chain = [authenticationMiddleware];
+ * validatePipeMiddlewareAppend(chain, auditMiddleware);
+ * // Validation does not append the object; append only after it succeeds.
+ * chain.push(auditMiddleware);
+ * ```
+ */
 export function validatePipeMiddlewareAppend(
   chain: readonly object[],
   next: object,

@@ -76,6 +76,27 @@ function createBuilderCreate(chain: readonly object[]): unknown {
   };
 }
 
+/**
+ * @description Creates a frozen builder from a frozen shallow copy of the
+ * middleware chain. Calling `use` captures and validates another middleware and
+ * returns a new builder without changing this one. Calling `create` rejects a
+ * Store as initial state, validates the complete chain, creates a store, and
+ * applies middleware in chain order. Each middleware must have registered
+ * metadata and return a Store; invalid configuration throws PipeConfigurationError.
+ * @param {readonly object[]} [chain] - Previously captured middleware to include
+ * in the builder, in application order. Defaults to an empty chain.
+ * @returns {PipeBuilder<State, Capabilities, MetadataChain, StateMismatchKind>}
+ * A frozen builder for extending the chain or creating a store.
+ * - create `PipeBuilder<State, Capabilities, MetadataChain, StateMismatchKind>['create']` - Creates a store from plain initial state and applies the validated middleware chain.
+ * - use `PipeBuilder<State, Capabilities, MetadataChain, StateMismatchKind>['use']` - Captures and validates an appended middleware and returns a new builder.
+ * @example
+ * ```ts
+ * const builder = createPipeBuilder<{ count: number }>();
+ * const firstStore = builder.create({ count: 0 });
+ * const secondStore = builder.create({ count: 10 });
+ * // Each call creates a separate store using the same middleware chain.
+ * ```
+ */
 export function createPipeBuilder<
   State = unknown,
   Capabilities extends readonly PipeCapability[] = readonly [],
@@ -103,7 +124,7 @@ function createRootUse(): unknown {
 /**
  * Create a pipe builder for composing middleware into a store.
  *
- * Start with `pipe.use(...)`, chain more `.use(...)` calls in outer-to-inner
+ * Start with `pipe.use(...)`, chain more `.use(...)` calls in middleware application
  * order, then call `.create(initialState)` to materialize the store.
  *
  * @example

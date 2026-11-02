@@ -10,6 +10,78 @@ import { PersistWriter } from './PersistWriter.js';
 import { decodePersisted } from './persistUtils.js';
 import type { PersistStorage } from './storage/PersistStorage.js';
 
+/**
+ * @description Attaches persistence to a store and returns controls for explicit
+ * hydration, saving and external synchronization. Local commits are queued for
+ * saving; writes are enabled after successful hydration. Restores are decoded,
+ * migrated and validated before application, and restore commits do not echo
+ * back to storage. Storage is created lazily. Store cleanup releases subscriptions,
+ * cancels outstanding hydration and synchronization, and disposes the writer
+ * and storage adapter.
+ * @param {Store<State>} store - Store whose commits are persisted and whose state
+ * receives validated restores.
+ * @param {ProjectedPersistConfig<State, Persisted, readonly MigrationFn[]>} options -
+ * Storage, serialization and restoration configuration.
+ * @param {string} options.key - Storage key used for reads, writes and removal.
+ * @param {import("./storage/PersistStorage.js").PersistStorageFactory} options.storage -
+ * Factory that lazily creates the storage adapter. Automatic synchronization
+ * requires the adapter to implement subscribe.
+ * @param {import("./Persist.js").PersistDecoder<Persisted>} options.decode -
+ * Decoder used to validate the persisted state after any required migrations.
+ * @param {readonly MigrationFn[]} [options.migrate] - Ordered migrations for older
+ * persisted versions. The array length determines the current persisted version.
+ * @param {number} [options.saveDebounceMs] - Save debounce delay in milliseconds;
+ * defaults to zero.
+ * @param {PersistRehydrateOptions} [options.sync] - Enables storage-change
+ * subscriptions during hydration and supplies conflict resolution for automatic
+ * synchronization. Omitting this leaves synchronization manual.
+ * @param {PersistRehydrateOptions["conflict"]} [options.sync.conflict] - Policy for
+ * resolving local edits against external state during automatic synchronization.
+ * Without an explicit policy, conflicting edits cause synchronization to reject.
+ * @param {(state: State) => Persisted} options.project - Selects the persisted
+ * representation of a local state snapshot.
+ * @param {(persisted: Persisted, current: State) => State} options.restore -
+ * Combines decoded persisted data with the current state; the result is validated
+ * before replacing store state.
+ * @returns {PersistControls} Controls for this store's persistence lifecycle.
+ * - rehydrate `PersistControls["rehydrate"]` - Starts hydration, sharing an
+ * ongoing attempt and doing nothing once hydrated. Rejects on read, decoding,
+ * validation or unresolved edit conflicts; an optional resolution selects the
+ * conflict policy. Successful hydration enables saving.
+ * - sync `PersistControls["sync"]` - Reads external state after hydration,
+ * applying an optional conflict policy. A newer synchronization supersedes the
+ * previous attempt. External deletion retains in-memory state, and applied
+ * external restores are not written back.
+ * - flush `PersistControls["flush"]` - Flushes queued saves; rejects before
+ * hydration or after disposal.
+ * - pause `PersistControls["pause"]` - Pauses the writer without detaching commit
+ * tracking; throws after disposal.
+ * - resume `PersistControls["resume"]` - Resumes the writer; throws after disposal.
+ * - retry `PersistControls["retry"]` - Alias of flush for retrying pending saves.
+ * - clearStorage `PersistControls["clearStorage"]` - Clears persisted storage
+ * through the writer and invalidates outstanding hydration and synchronization
+ * without replacing in-memory state.
+ * - getStatus `PersistControls["getStatus"]` - Returns the current frozen
+ * persistence status snapshot.
+ * - subscribe `PersistControls["subscribe"]` - Registers a status listener and
+ * returns its unsubscribe function. Does not immediately emit a snapshot;
+ * subscribing after disposal returns a no-op unsubscribe function.
+ * @example
+ * ```ts
+ * // Given an application store and its projected persistence configuration:
+ * const persistence = createPersistRuntime(store, options);
+ * const unsubscribe = persistence.subscribe((status) => {
+ *   if (status.error) console.error(status.error);
+ * });
+ *
+ * await persistence.rehydrate();
+ * // After local edits, wait for queued writes before leaving the page.
+ * await persistence.flush();
+ * // Explicitly refresh from storage when automatic sync is not configured.
+ * await persistence.sync();
+ * unsubscribe();
+ * ```
+ */
 export function createPersistRuntime<State, Persisted>(
   store: Store<State>,
   options: ProjectedPersistConfig<State, Persisted, readonly MigrationFn[]>,

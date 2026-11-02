@@ -8,8 +8,11 @@ import type { PipeAnyMiddleware, PipeMiddlewareMetadata } from '../utils/pipe/ty
 type StoreSetStateAction<T> = Parameters<Store<T>['setState']>[0];
 
 type LoggerOptions = {
+  /** Whether to collapse each console group. Defaults to false. */
   collapsed?: boolean;
+  /** Whether to log changes using JSON comparisons of top-level values. Defaults to false. */
   diff?: boolean;
+  /** Whether to log a separate time entry; group titles always include the time. Defaults to true. */
   timestamp?: boolean;
 };
 
@@ -89,23 +92,40 @@ const applyLogger = <T>(initialState: T | Store<T>, options: LoggerOptions) => {
 };
 
 /**
- * Create a pipe middleware that logs state updates to the console.
+ * @description Creates pipe middleware that logs state updates to the console.
+ * Logs the action type (or "anonymous action"), previous state, and next state
+ * in a group whose title includes the local time. Logging is disabled when
+ * `NODE_ENV === 'production'`; state updates still proceed normally.
  *
- * Logs the action type, previous state, and next state on each update.
- * Automatically disabled in production (`NODE_ENV === 'production'`).
+ * Optional diffs compare JSON representations of top-level object values.
+ * Non-object states are compared directly. Diff calculation failures are
+ * reported in the console rather than propagated.
  *
- * @param options - Logging configuration.
- * @param options.collapsed - Use `console.groupCollapsed` instead of `console.group`. Defaults to `false`.
- * @param options.diff - Log a per-key diff between previous and next state. Defaults to `false`.
- * @param options.timestamp - Include a timestamp in the log. Defaults to `true`.
- * @returns Pipe middleware registered with `@ilokesto/state/logger` metadata.
- *
+ * @param {LoggerOptions} [options] - Logging configuration.
+ * @param {boolean} [options.collapsed] - Use `console.groupCollapsed` instead of `console.group`. Defaults to false.
+ * @param {boolean} [options.diff] - Log changed top-level keys or a changed non-object value. Defaults to false.
+ * @param {boolean} [options.timestamp] - Include a separate time entry. Defaults to true; the group title always includes the time.
+ * @returns {LoggerPipeMiddleware} Middleware that installs logging and returns the resolved store.
+ * - pipeMiddlewareMetadataBrand `PipeMiddlewareMetadata<'@ilokesto/state/logger', readonly [], readonly [], 'reject', readonly []>` - Branded metadata used by pipe composition.
+ * : pipeMiddlewareMetadataBrand.adds `readonly []` - No capabilities are added.
+ * : pipeMiddlewareMetadataBrand.after `readonly []` - No middleware must precede this middleware.
+ * : pipeMiddlewareMetadataBrand.before `readonly []` - No middleware must follow this middleware.
+ * : pipeMiddlewareMetadataBrand.conflicts `readonly []` - No conflicting middleware identifiers are declared.
+ * : pipeMiddlewareMetadataBrand.duplicate `'reject'` - Duplicate logger registrations are rejected.
+ * : pipeMiddlewareMetadataBrand.id `'@ilokesto/state/logger'` - Identifier used for composition validation.
+ * : pipeMiddlewareMetadataBrand.requires `readonly []` - No capabilities are required.
+ * - pipeStateMismatchKindBrand `LoggerPipeMiddleware[typeof pipeStateMismatchKindBrand]` - Type-level state compatibility marker, not a logging option or runtime control.
  * @example
  * ```ts
  * import { logger } from '@ilokesto/state/middleware';
  * import { pipe } from '@ilokesto/state/utils';
  *
- * const store = pipe.use(logger({ diff: true })).create({ count: 0 });
+ * const store = pipe
+ *   .use(logger({ collapsed: true, diff: true }))
+ *   .create({ count: 0 });
+ *
+ * store.setState({ count: 1 });
+ * // Outside production, logs the previous state, next state, and count change.
  * ```
  */
 export function logger(options?: LoggerOptions): LoggerPipeMiddleware {

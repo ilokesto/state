@@ -23,15 +23,38 @@ export type StoreTestHarness<State> = {
 };
 
 /**
- * Records store notifications and waits on exact state conditions.
- * Register waits before triggering work, await persist.flush/rehydrate for I/O,
- * and dispose the harness in finally. The harness owns middleware cleanup.
+ * @description Records the initial state and subsequent store notifications,
+ * retaining state references rather than deep copies. Waits check the current
+ * state immediately, then check future notifications without polling or timer
+ * advancement. Register waits before triggering work, await persist.flush/rehydrate
+ * for I/O, and dispose the harness in finally. The harness owns middleware cleanup.
+ * @param {StoreApi<State>} store - Store to observe and whose middleware is cleaned
+ * up when the harness is disposed.
+ * @returns {StoreTestHarness<State>} An owned subscription with state history,
+ * condition-based waiting and explicit cleanup.
+ * - states `ReadonlyArray<Readonly<State>>` - A fresh array containing the initial
+ *   and notified state references; reading it does not mutate the store.
+ * - waitFor `(predicate: (state: Readonly<State>) => boolean, options?: StoreWaitOptions) => Promise<Readonly<State>>` - Resolves with the first matching current or notified state.
+ *   Rejects if the predicate throws, the deadline expires, the signal aborts or
+ *   the harness is disposed. The deadline defaults to 1000 ms and must be an
+ *   integer from 0 through 2147483647; invalid values reject with RangeError.
+ *   Aborting rejects with the signal's reason. Each settled wait removes its
+ *   timer, abort listener and notification check.
+ * - dispose `() => void` - Idempotently unsubscribes, rejects pending waits and
+ *   disposes the store's middleware. Subsequent waits reject.
  * @example
+ * ```ts
  * const harness = createStoreTestHarness(store);
- * const completed = harness.waitFor(state => state.count === 1);
- * store.set({ count: 1 });
- * await completed;
- * harness.dispose();
+ * try {
+ *   const completed = harness.waitFor(state => state.count === 1, {
+ *     timeoutMs: 500,
+ *   });
+ *   store.set({ count: 1 });
+ *   await completed;
+ * } finally {
+ *   harness.dispose();
+ * }
+ * ```
  */
 export function createStoreTestHarness<State>(store: StoreApi<State>): StoreTestHarness<State> {
   const states: Array<Readonly<State>> = [store.getState()];

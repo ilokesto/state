@@ -15,14 +15,28 @@ export type IndexedDBStorageOptions = {
 };
 
 /**
- * Creates a factory for independently owned native IndexedDB connections.
- * Values use structured clone, preserving Blob, File, Map, Set and binary data.
- * Operations resolve on transaction completion, not request success.
- * @param options - Database configuration captured without browser access.
+ * @description Creates a factory for independently owned native IndexedDB connections.
+ * Configuration is captured without browser access; each adapter opens its connection
+ * lazily on its first operation. Values use structured clone, preserving Blob, File,
+ * Map, Set and binary data. Operations resolve on transaction completion, not request
+ * success. Reads return null for missing keys and reject stored null or undefined.
+ * Disposing an adapter cancels pending opening, aborts active transactions, closes its
+ * connection and prevents further operations.
+ * @param {IndexedDBStorageOptions} options - Database configuration captured by the factory.
+ * @param {string} options.database - Application-owned IndexedDB database name.
+ * @param {string | undefined} [options.store] - Object store name, defaulting to `state`.
+ * Missing stores are created during a schema upgrade.
+ * @param {number | undefined} [options.version] - IndexedDB schema version, defaulting
+ * to `1`; increment when adding a store to an existing database. This is independent
+ * of persist's data migration version.
+ * @returns {PersistStorageFactory} Factory creating a fresh, independently disposable
+ * storage adapter on each call.
  * @example
+ * ```ts
  * const storage = indexedDBStorage({ database: 'editor-state' });
  * const editor = pipe.use(persist({ key: 'draft', storage, decode })).create(initial);
  * await editor.persist.rehydrate();
+ * ```
  */
 export function indexedDBStorage(options: IndexedDBStorageOptions): PersistStorageFactory {
   const { database, store: storeName = 'state', version = 1 } = options;
