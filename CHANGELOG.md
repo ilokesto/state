@@ -1,5 +1,11 @@
 # @ilokesto/state
 
+## 2.1.1
+
+### Patch Changes
+
+- a55e97a: Document runtime APIs, owned options and return controls in emitted TypeScript declarations.
+
 ## 2.1.0
 
 ### Minor Changes
