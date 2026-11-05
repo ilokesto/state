@@ -95,6 +95,8 @@ const applyValidate = <T>(
     const result = schema['~standard'].validate(resolvedState);
 
     if (isPromiseLike(result)) {
+      // Observe unsupported async failures before onError can throw synchronously.
+      void Promise.resolve(result).catch(() => undefined);
       const issues = [{ message: 'Async Standard Schema is not supported in validate middleware.' }];
       onError(issues);
       return { issues };
@@ -129,7 +131,8 @@ const applyValidate = <T>(
  *
  * Only synchronous schemas are supported. Validation failures and promise
  * results call `onError` and drop the update, preserving the previous state.
- * Promise results produce a synthetic validation issue. The default handler
+ * Promise results produce a synthetic validation issue; their eventual rejection
+ * is observed without applying state or calling `onError` again. The default handler
  * logs issues with `console.error`; throwing from a handler propagates the
  * exception and aborts the surrounding `setState` call.
  *

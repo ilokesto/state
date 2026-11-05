@@ -106,6 +106,70 @@ test('Given pipe validate middleware with custom onError, when an async schema i
   expect(store.getState()).toEqual({ count: 1 });
 });
 
+for (const rejects of [false, true]) {
+  for (const throws of [false, true]) {
+    test(`validate: async schema ${rejects ? 'rejects' : 'resolves'} and onError ${throws ? 'throws' : 'returns'} -> rejects synchronously and observes settlement`, async () => {
+      const deferred = Promise.withResolvers<{ value: CounterState }>();
+      const rejection = { reason: 'async schema failed' };
+      const handlerFailure = { reason: 'onError failed' };
+      const receivedIssues: unknown[] = [];
+      const store = pipe.use(validate({
+        '~standard': {
+          version: 1,
+          vendor: 'test',
+          validate: async () => deferred.promise,
+        },
+      }, {
+        onError: issues => {
+          receivedIssues.push(issues);
+          if (throws) throw handlerFailure;
+        },
+      })).create({ count: 1 });
+      const initial = store.getState();
+      let thrown: unknown;
+
+      try {
+        store.setState({ count: 2 });
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(thrown).toBe(throws ? handlerFailure : undefined);
+      expect(receivedIssues).toEqual([[
+        { message: 'Async Standard Schema is not supported in validate middleware.' },
+      ]]);
+      expect(store.getState()).toBe(initial);
+      if (rejects) deferred.reject(rejection);
+      else deferred.resolve({ value: { count: 2 } });
+      await new Promise<void>(resolve => setImmediate(resolve));
+      expect(receivedIssues).toHaveLength(1);
+      expect(store.getState()).toBe(initial);
+    });
+  }
+}
+
+test('validate: synchronous schema throws a value -> preserves thrown-value identity and state', () => {
+  const failure = { reason: 'sync schema failed' };
+  const store = pipe.use(validate({
+    '~standard': {
+      version: 1,
+      vendor: 'test',
+      validate: (_value: unknown): { value: CounterState } => { throw failure; },
+    },
+  })).create({ count: 1 });
+  const initial = store.getState();
+  let thrown: unknown;
+
+  try {
+    store.setState({ count: 2 });
+  } catch (error) {
+    thrown = error;
+  }
+
+  expect(thrown).toBe(failure);
+  expect(store.getState()).toBe(initial);
+});
+
 test('Given curried validate middleware, when it is appended twice, then it rejects the duplicate before Store creation', () => {
   // Given
   const builder = pipe.use(validate(counterSchema));
