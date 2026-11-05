@@ -116,6 +116,83 @@ describe('Svelte selector subscriptions', () => {
 });
 
 for (const readonly of [false, true]) {
+  for (const selected of [false, true]) {
+    test(`Svelte ${readonly ? 'readonly' : 'writable'} ${selected ? 'select' : 'root'}: initial subscriber throws -> preserves the thrown value and removes later notifications`, () => {
+      const store = new TrackingStore(initialState);
+      const adapter = readonly ? bindReadonly(store) : bind(store);
+      const readable = selected ? adapter.select(state => state.count) : adapter;
+      const failure = { reason: 'initial subscriber failed' };
+      let calls = 0;
+      let thrown: unknown;
+
+      try {
+        readable.subscribe(() => {
+          calls += 1;
+          throw failure;
+        });
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(thrown).toBe(failure);
+      expect(store.activeSelectorSubscriptions).toBe(0);
+      expect(() => store.setState({ ...initialState, count: 2 })).not.toThrow();
+      expect(calls).toBe(1);
+      expect(store.selectorNotifications).toBe(0);
+    });
+
+    test(`Svelte ${readonly ? 'readonly' : 'writable'} ${selected ? 'select' : 'root'}: initial subscriber and cleanup throw -> preserves the original thrown value`, () => {
+      const store = new TrackingStore(initialState);
+      const failure = { reason: 'initial subscriber failed' };
+      const cleanupFailure = { reason: 'cleanup failed' };
+      const subscribeSelector = store.subscribeSelector.bind(store);
+      store.subscribeSelector = (selector, listener, equality) => {
+        const stop = subscribeSelector(selector, listener, equality);
+        return () => {
+          stop();
+          throw cleanupFailure;
+        };
+      };
+      const adapter = readonly ? bindReadonly(store) : bind(store);
+      const readable = selected ? adapter.select(state => state.count) : adapter;
+      let calls = 0;
+      let thrown: unknown;
+
+      try {
+        readable.subscribe(() => {
+          calls += 1;
+          throw failure;
+        });
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(thrown).toBe(failure);
+      expect(store.activeSelectorSubscriptions).toBe(0);
+      expect(() => store.setState({ ...initialState, count: 2 })).not.toThrow();
+      expect(calls).toBe(1);
+    });
+
+    test(`Svelte ${readonly ? 'readonly' : 'writable'} ${selected ? 'select' : 'root'}: initial subscriber writes -> observes the reentrant update before unsubscribe`, () => {
+      const store = new TrackingStore(initialState);
+      const adapter = readonly ? bindReadonly(store) : bind(store);
+      const readable = selected ? adapter.select(state => state.count) : adapter;
+      const values: number[] = [];
+
+      const unsubscribe = readable.subscribe(value => {
+        values.push(typeof value === 'number' ? value : value.count);
+        if (values.length === 1) store.setState({ ...initialState, count: 2 });
+      });
+
+      expect(values).toEqual([1, 2]);
+      expect(store.activeSelectorSubscriptions).toBe(1);
+      unsubscribe();
+      store.setState({ ...initialState, count: 3 });
+      expect(values).toEqual([1, 2]);
+      expect(store.activeSelectorSubscriptions).toBe(0);
+    });
+  }
+
   test('custom equality: '+ (readonly ? 'readable' : 'writable') + ' binding -> nested equal updates retain selection and cleanup subscriptions', () => {
     const { source, backing } = readableSource();
     const adapter = readonly ? bindReadonly(source) : bind(backing);
