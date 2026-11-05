@@ -104,6 +104,71 @@ afterEach(async () => {
   await context?.close();
 });
 
+for (const rejects of [false, true]) {
+  for (const throws of [false, true]) {
+    test(`validate: native promise ${rejects ? 'rejects' : 'resolves'} and onError ${throws ? 'throws' : 'returns'} -> preserves synchronous rejection without unhandled events`, { timeout: 15_000 }, async () => {
+      const errors = [];
+      page.on('pageerror', error => errors.push(error));
+      const result = await page.evaluate(async ({ rejects, throws }) => {
+        const deferred = signal();
+        const handlerFailure = { reason: 'onError failed' };
+        const rejection = { reason: 'async schema failed' };
+        const issues = [];
+        const unhandled = [];
+        const capture = event => unhandled.push(event.reason);
+        window.addEventListener('unhandledrejection', capture);
+        const store = api.pipe.use(api.validate({
+          '~standard': { version: 1, vendor: 'browser', validate: () => deferred.promise },
+        }, {
+          onError: value => {
+            issues.push(value);
+            if (throws) throw handlerFailure;
+          },
+        })).create({ count: 1 });
+        const initial = store.getState();
+        let thrown;
+        try {
+          store.setState({ count: 2 });
+        } catch (error) {
+          thrown = error;
+        }
+        const immediateIssueCount = issues.length;
+        if (rejects) deferred.reject(rejection);
+        else deferred.resolve({ value: { count: 2 } });
+
+        // A native task follows the microtask checkpoint that reports unhandled rejections.
+        await bounded(new Promise(resolve => {
+          const channel = new MessageChannel();
+          channel.port1.onmessage = () => {
+            channel.port1.close();
+            channel.port2.close();
+            resolve();
+          };
+          channel.port2.postMessage(null);
+        }));
+
+        window.removeEventListener('unhandledrejection', capture);
+        return {
+          sameThrownValue: thrown === (throws ? handlerFailure : undefined),
+          immediateIssueCount,
+          issues,
+          unhandledCount: unhandled.length,
+          stateUnchanged: store.getState() === initial,
+        };
+      }, { rejects, throws });
+
+      assert.deepEqual(result, {
+        sameThrownValue: true,
+        immediateIssueCount: 1,
+        issues: [[{ message: 'Async Standard Schema is not supported in validate middleware.' }]],
+        unhandledCount: 0,
+        stateUnchanged: true,
+      });
+      assert.deepEqual(errors, []);
+    });
+  }
+}
+
 test('timers/history/persist: explicit timer flush and replay -> save only actual commits and cancel pending callbacks', { timeout: 15_000 }, async () => {
   await page.clock.install();
   const result = await page.evaluate(async () => {
