@@ -1,5 +1,13 @@
 # @ilokesto/state
 
+## 2.1.2
+
+### Patch Changes
+
+- 0324cdc: Restore callable initial state on DevTools RESET without invoking it as an updater.
+- 6785d34: Observe rejected async schema results while retaining synchronous validation rejection and the original error-handler exception.
+- ec45383: Release Svelte root and selected subscriptions when initial delivery throws, while preserving synchronous updates made during initial delivery.
+
 ## 2.1.1
 
 ### Patch Changes
