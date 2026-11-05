@@ -181,7 +181,7 @@ const applyDevtools = <T>(initialState: T | Store<T>, name: string, options: Dev
 
     switch (message.payload.type) {
       case 'RESET':
-        runDispatchAction(() => { store.setState(store.getInitialState()); });
+        runDispatchAction(() => { store.setState(() => store.getInitialState()); });
         initialize();
         break;
       case 'COMMIT':
