@@ -138,6 +138,38 @@ const equalCount = (previous, next) => previous.nested.count === next.nested.cou
 const equalLabel = (previous, next) => previous.label === next.label;
 const writers = value => ['set', 'update', 'setState', 'dispatch', 'writeOnly'].filter(key => key in value);
 
+export function svelteInitialSubscription(readonly, selected) {
+  const input = source();
+  const adapter = readonly ? svelte.bindReadonly(input.readable) : svelte.bind(input.writable);
+  const readable = selected ? adapter.select(state => state.count) : adapter;
+  const failure = { reason: 'initial subscriber failed' };
+  let failedCalls = 0;
+  let thrown;
+  try {
+    readable.subscribe(() => {
+      failedCalls++;
+      throw failure;
+    });
+  } catch (error) {
+    thrown = error;
+  }
+  const failedActive = input.active();
+  input.backing.setState(state => ({ ...state, count: 2 }));
+  const failedNotifications = input.notifications();
+  const values = [];
+  const unsubscribe = readable.subscribe(value => {
+    values.push(typeof value === 'number' ? value : value.count);
+    if (values.length === 1) input.backing.setState(state => ({ ...state, count: 3 }));
+  });
+  const connected = input.active();
+  unsubscribe();
+  input.backing.setState(state => ({ ...state, count: 4 }));
+  return {
+    sameThrownValue: thrown === failure, failedCalls, failedActive, failedNotifications,
+    values, connected, remaining: input.active(), notifications: input.notifications(),
+  };
+}
+
 export function scoped(framework) {
   const input = source();
   let value;

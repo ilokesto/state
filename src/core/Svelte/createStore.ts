@@ -19,7 +19,15 @@ function createReadable<T, S>(store: ReadableStore<T>, selector: Selector<T, S>,
         equality,
       );
 
-      run(initialSelection);
+      try {
+        run(initialSelection);
+      } catch (error) {
+        try {
+          unsubscribe();
+        } finally {
+          throw error;
+        }
+      }
       return unsubscribe;
     },
   };
@@ -30,6 +38,8 @@ function createReadable<T, S>(store: ReadableStore<T>, selector: Selector<T, S>,
  * or direct state writes. Subscriptions emit the current readonly snapshot
  * immediately, then emit changes using shallow equality. Selected subscriptions
  * default to shallow equality; readOnly reads a snapshot without subscribing.
+ * The source is subscribed before initial delivery. If that delivery throws,
+ * source cleanup is attempted and the original thrown value is propagated.
  * @param {StoreApi<T>} store - Store supplying state, subscriptions, and writes.
  * @param {boolean} isReduce - Whether to expose reducer dispatch instead of direct state writes.
  * @param {(action: Action) => void} [dispatch] - Reducer dispatcher; defaults to a dispatcher created for the store.
@@ -56,17 +66,7 @@ function createReadable<T, S>(store: ReadableStore<T>, selector: Selector<T, S>,
  */
 export function createStore<T, Action extends ReducerAction>(store: StoreApi<T>, isReduce: boolean, dispatch = createDispatch<T, Action>(store)) {
   const write = store.setState.bind(store);
-  const subscribe = (run: Subscriber<ReadonlySnapshot<T>>): Unsubscriber => {
-    const initialState = readonlySnapshot(store.getState());
-    const unsubscribe = store.subscribeSelector(
-      (state) => readonlySnapshot(state),
-      run,
-      shallow,
-    );
-
-    run(initialState);
-    return unsubscribe;
-  };
+  const subscribe = createReadable(store, identity<ReadonlySnapshot<T>>).subscribe;
   const select = <S>(selector: Selector<T, S>, equality?: EqualityFn<S>) => createReadable(store, selector, equality);
   const readOnly = <S = T>(selector?: Selector<T, S>): S => {
     const currentSelector = (selector ?? identity<ReadonlySnapshot<T>>) as Selector<T, S>;
@@ -99,6 +99,8 @@ export function createStore<T, Action extends ReducerAction>(store: StoreApi<T>,
  * Subscriptions immediately deliver the current readonly snapshot and then
  * shallowly distinct snapshots. Selected subscriptions also default to shallow
  * equality. Imperative reads do not establish subscriptions.
+ * The source is subscribed before initial delivery. If that delivery throws,
+ * source cleanup is attempted and the original thrown value is propagated.
  * @param {ReadableStore<T>} store - Store supplying current state and selector subscriptions.
  * @returns {UseReadonlyState<T>} A readonly adapter for subscriptions, selections, and immediate snapshot reads.
  * - select `<S>(selector: Selector<T, S>, equality?: EqualityFn<S>) => Readable<S>` - Creates a readable selection that immediately emits its current value and uses the supplied equality function, or shallow equality, for subsequent changes.

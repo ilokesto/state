@@ -43,6 +43,31 @@ after(async () => {
   if (directory) await rm(directory, { recursive: true, force: true });
 });
 
+for (const readonly of [false, true]) {
+  for (const selected of [false, true]) {
+    test(`Svelte ${readonly ? 'readonly' : 'writable'} ${selected ? 'select' : 'root'}: initial failure -> releases the observer and retains subscribe-first delivery`, { timeout: 15000 }, async () => {
+      const page = await browser.newPage();
+      const errors = [];
+      page.on('pageerror', error => errors.push(error.message));
+      try {
+        await page.goto(origin);
+        const result = await page.evaluate(async ({ readonly, selected }) => {
+          const fixture = await import('/selectors.js');
+          return fixture.svelteInitialSubscription(readonly, selected);
+        }, { readonly, selected });
+
+        assert.deepEqual(result, {
+          sameThrownValue: true, failedCalls: 1, failedActive: 0, failedNotifications: 0,
+          values: [2, 3], connected: 1, remaining: 0, notifications: 1,
+        });
+        assert.deepEqual(errors, []);
+      } finally {
+        await page.close();
+      }
+    });
+  }
+}
+
 for (const framework of ['vue', 'angular', 'solid', 'svelte']) {
   test(framework + ': readable custom equality -> stable values and lifecycle cleanup in Chromium', { timeout: 15000 }, async () => {
     const page = await browser.newPage();
