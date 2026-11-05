@@ -50,6 +50,80 @@ after(async () => {
   }
 });
 
+test('devtools: browser RESET message with callable state -> restores the original function without executing it', { timeout: 15_000 }, async () => {
+  const context = await browser.newContext();
+  try {
+    const page = await context.newPage();
+    await page.goto(origin);
+    const result = await page.evaluate(async () => {
+      const { devtools, dispose } = await import('/state/dist/middleware/index.js');
+      const { pipe } = await import('/state/dist/utils/index.js');
+      const inits = [];
+      const sends = [];
+      let listener;
+      let initialCalls = 0;
+      let replacementCalls = 0;
+      const initial = value => { initialCalls += 1; return value + 1; };
+      const replacement = value => { replacementCalls += 1; return value + 2; };
+      window.__REDUX_DEVTOOLS_EXTENSION__ = {
+        connect: () => ({
+          init: state => { inits.push(state); },
+          send: (action, state) => { sends.push({ action, state }); },
+          subscribe: callback => { listener = callback; return () => {}; },
+        }),
+      };
+      const store = pipe.use(devtools('callable-browser')).create(initial);
+      store.set(replacement);
+      sends.length = 0;
+      const channel = new MessageChannel();
+      try {
+        const reset = new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => reject(new Error('RESET response missing')), 5_000);
+          channel.port1.onmessage = event => {
+            try {
+              listener(event.data);
+              channel.port1.postMessage({ ok: true });
+            } catch (error) {
+              channel.port1.postMessage({ ok: false, name: error.name });
+            }
+          };
+          channel.port2.onmessage = event => {
+            clearTimeout(timeout);
+            resolve(event.data);
+          };
+          channel.port2.postMessage({ type: 'DISPATCH', payload: { type: 'RESET' } });
+        });
+
+        const response = await reset;
+
+        return {
+          response,
+          restored: store.getState() === initial,
+          initialCalls,
+          replacementCalls,
+          initializedWithInitial: inits.map(state => state === initial),
+          sendCount: sends.length,
+        };
+      } finally {
+        channel.port1.close();
+        channel.port2.close();
+        dispose(store);
+      }
+    });
+
+    assert.deepEqual(result, {
+      response: { ok: true },
+      restored: true,
+      initialCalls: 0,
+      replacementCalls: 0,
+      initializedWithInitial: [true, true],
+      sendCount: 0,
+    });
+  } finally {
+    await context.close();
+  }
+});
+
 test('devtools: browser extension messages -> validated jumps, detached payloads, and disposal remain coherent', { timeout: 15_000 }, async () => {
   const context = await browser.newContext();
   try {

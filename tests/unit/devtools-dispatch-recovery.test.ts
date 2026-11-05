@@ -29,6 +29,27 @@ const createRejectFirstStateWrite = (failure: Error) => {
   );
 };
 
+test('Given DevTools RESET and callable state, when RESET runs, then it restores the initial function without invoking it', () => {
+  withBrowserFakes<(value: number) => number>((_, connections) => {
+    let initialCalls = 0;
+    const initial = (value: number) => {
+      initialCalls += 1;
+      return value + 1;
+    };
+    const replacement = (value: number) => value + 2;
+    const store = pipe.use(devtools('callable-reset')).create(initial);
+    store.set(replacement);
+    const connection = connections[0];
+    connection.sends.length = 0;
+
+    connection.listener?.({ payload: { type: 'RESET' }, type: 'DISPATCH' });
+
+    expect(store.getState()).toBe(initial);
+    expect(initialCalls).toBe(0);
+    expect(connection.sends).toEqual([]);
+  });
+});
+
 test('Given DevTools RESET and a once-throwing downstream middleware, when RESET fails then a later update succeeds, then DevTools sends the later update', () => {
   // Given
   withBrowserFakes<CounterState>((_, connections) => {
